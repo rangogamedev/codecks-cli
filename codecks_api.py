@@ -40,12 +40,15 @@ Commands:
   gdd                     - Show parsed GDD task tree from Google Doc
     --refresh               Force re-fetch from Google (ignore cache)
     --file <path>           Use a local markdown file (use "-" for stdin)
+    --save-cache            Save fetched content to .gdd_cache.md for offline use
   gdd-sync                - Sync GDD tasks to Codecks cards
     --project <name>        (required) Target project for card placement
     --section <name>        Sync only one GDD section
     --apply                 Actually create cards (dry-run without this)
     --refresh               Force re-fetch GDD before syncing
     --file <path>           Use a local markdown file (use "-" for stdin)
+    --save-cache            Save fetched content to .gdd_cache.md for offline use
+  gdd-url                 - Print the GDD export URL (for browser-based extraction)
   generate-token          - Generate a new Report Token using the Access Key
     --label <text>          Label for the token (default: claude-code)
   dispatch <path> <json>  - Raw dispatch call (uses session token)
@@ -618,18 +621,25 @@ def _extract_google_doc_id(url):
     return None
 
 
-def fetch_gdd(force_refresh=False, local_file=None):
+def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
     """Fetch GDD content. Priority: local_file/stdin > Google Doc > cache.
-    Use --file - to read from stdin (for piping from AI agent)."""
+    Use --file - to read from stdin (for piping from AI agent).
+    Use save_cache=True to save stdin/file content to .gdd_cache.md."""
     # 1. Local file override (or stdin with "-")
     if local_file:
         if local_file == "-":
-            return sys.stdin.read()
-        if not os.path.exists(local_file):
+            content = sys.stdin.read()
+        elif not os.path.exists(local_file):
             print(f"[ERROR] File not found: {local_file}", file=sys.stderr)
             sys.exit(1)
-        with open(local_file, "r", encoding="utf-8") as f:
-            return f.read()
+        else:
+            with open(local_file, "r", encoding="utf-8") as f:
+                content = f.read()
+        if save_cache and content.strip():
+            with open(GDD_CACHE_PATH, "w", encoding="utf-8") as f:
+                f.write(content)
+            print(f"[INFO] GDD cached to {GDD_CACHE_PATH}", file=sys.stderr)
+        return content
 
     # 2. Google Doc fetch (with cache)
     if GDD_DOC_URL:
@@ -664,9 +674,14 @@ def fetch_gdd(force_refresh=False, local_file=None):
             with open(GDD_CACHE_PATH, "r", encoding="utf-8") as f:
                 return f.read()
 
-    # 3. No source configured
-    print("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL in .env "
-          "or use --file <path>.", file=sys.stderr)
+    # 3. Cache-only fallback (for browser extraction workflow)
+    if os.path.exists(GDD_CACHE_PATH):
+        with open(GDD_CACHE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+
+    # 4. No source configured
+    print("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL in .env, "
+          "use --file <path>, or write to .gdd_cache.md.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -1352,23 +1367,26 @@ def main():
         print("Full token saved to .env as CODECKS_REPORT_TOKEN")
 
     elif cmd == "gdd":
-        flags, _ = parse_flags(args, ["file"], bool_flag_names=["refresh"])
+        flags, _ = parse_flags(args, ["file"],
+                               bool_flag_names=["refresh", "save-cache"])
         content = fetch_gdd(
             force_refresh=flags.get("refresh", False),
             local_file=flags.get("file"),
+            save_cache=flags.get("save-cache", False),
         )
         sections = parse_gdd(content)
         output(sections, _format_gdd_table, fmt)
 
     elif cmd == "gdd-sync":
         flags, _ = parse_flags(args, ["project", "section", "file"],
-                               bool_flag_names=["apply", "refresh"])
+                               bool_flag_names=["apply", "refresh", "save-cache"])
         if not flags.get("project"):
             print("[ERROR] --project is required for gdd-sync.", file=sys.stderr)
             sys.exit(1)
         content = fetch_gdd(
             force_refresh=flags.get("refresh", False),
             local_file=flags.get("file"),
+            save_cache=flags.get("save-cache", False),
         )
         sections = parse_gdd(content)
         report = sync_gdd(
@@ -1377,6 +1395,14 @@ def main():
             apply=flags.get("apply", False),
         )
         output(report, _format_sync_report, fmt)
+
+    elif cmd == "gdd-url":
+        doc_id = _extract_google_doc_id(GDD_DOC_URL) if GDD_DOC_URL else None
+        if not doc_id:
+            print("[ERROR] No GDD doc configured. Set GDD_GOOGLE_DOC_URL "
+                  "in .env.", file=sys.stderr)
+            sys.exit(1)
+        print(f"https://docs.google.com/document/d/{doc_id}/export?format=md")
 
     elif cmd == "dispatch":
         if len(args) < 2:

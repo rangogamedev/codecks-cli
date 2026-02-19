@@ -22,7 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GDD markdown convention: `## Heading` → deck, `- bullet` → card, indented bullets → description
 - Combined tag support: `[P:a E:8]` in a single bracket pair
 - Local `.gdd_cache.md` cache for offline/faster access
-- Three options for private Google Docs: local file, stdin piping, link-only sharing
+- `gdd-url` command to print the export URL (for browser-based extraction of private docs)
+- `--save-cache` flag on `gdd` and `gdd-sync` to cache stdin/file content for offline use
+- Browser extraction workflow for private Google Docs (via Claude in Chrome)
+- Four options for private Google Docs: browser extraction, local file, stdin piping, link-only sharing
 
 ## [0.1.0] - 2026-02-19
 

@@ -270,11 +270,12 @@ py codecks_api.py gdd-sync --project "My Project" --section "Core Gameplay" --ap
 
 ### Private Google Docs
 
-If you don't want to make your GDD public, you have three options:
+If you don't want to make your GDD public, you have four options:
 
-1. **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
-2. **AI agent piping**: If your AI agent has Google Docs access (e.g. via MCP), it can read the doc and pipe the content: `--file -` reads from stdin
-3. **Public with obscurity**: Use "Anyone with the link" sharing — the doc isn't indexed or discoverable, only accessible to those who have the URL
+1. **Browser extraction (recommended for AI agents)**: If your AI agent has browser access (e.g. Claude in Chrome), it can fetch the private doc using your authenticated browser session. Set `GDD_GOOGLE_DOC_URL` in `.env`, then the agent runs `gdd-url` to get the export URL, fetches it via the browser's `fetch()` API (which carries your Google cookies), writes the result to `.gdd_cache.md`, and runs `gdd` or `gdd-sync` normally from cache. No public sharing needed.
+2. **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
+3. **AI agent piping**: If your AI agent has Google Docs access (e.g. via MCP), it can read the doc and pipe the content: `--file -` reads from stdin. Add `--save-cache` to save it for offline use.
+4. **Public with obscurity**: Use "Anyone with the link" sharing — the doc isn't indexed or discoverable, only accessible to those who have the URL
 
 ## Output formats
 
