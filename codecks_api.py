@@ -1,5 +1,5 @@
 """
-Codecks API Helper for Claude Code
+codecks-cli — CLI tool for managing Codecks.io cards, decks, and projects
 Usage: py codecks_api.py <command> [args...]
 
 Global flags:

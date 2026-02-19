@@ -1,6 +1,11 @@
-# CoDecks for Hafu
+# codecks-cli
+
+![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/License-MIT-green)
 
 A command-line tool for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Built as an AI agent helper for [Claude Code](https://claude.ai/claude-code), but works just as well from a regular terminal.
+
+> **Experimental** — This tool was built with AI-assisted code generation (vibe-coded with Claude). It works reliably but the command set may evolve. Not affiliated with Codecks. Use at your own risk.
 
 ## Why this exists
 
@@ -19,13 +24,19 @@ No external dependencies. Uses only Python standard library (`urllib`, `json`, `
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/rangogamedev/CoDecksForHafu.git
-cd CoDecksForHafu
+git clone https://github.com/rangogamedev/codecks-cli.git
+cd codecks-cli
 ```
 
 ### 2. Create a `.env` file
 
-Create a file called `.env` in the project root (it's gitignored, so your tokens stay safe):
+Copy the example and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with your credentials:
 
 ```env
 CODECKS_ACCOUNT=your-account-name
@@ -78,7 +89,7 @@ py codecks_api.py account
 py codecks_api.py cards
 
 # Filter cards
-py codecks_api.py cards --deck "Coding"
+py codecks_api.py cards --deck "Backlog"
 py codecks_api.py cards --status started
 py codecks_api.py cards --project "My Project"
 py codecks_api.py cards --search "inventory"
@@ -109,10 +120,10 @@ py codecks_api.py create "Fix login bug"
 py codecks_api.py create "Server crash on startup" --content "Happens after the latest deploy" --severity critical
 
 # Create directly into a specific deck
-py codecks_api.py create "Refactor save system" --deck "Coding"
+py codecks_api.py create "Refactor save system" --deck "Backlog"
 
 # Create into the first deck of a project
-py codecks_api.py create "New tea recipe" --project "Tea Shop"
+py codecks_api.py create "New feature idea" --project "My Project"
 ```
 
 Severity levels: `critical`, `high`, `low`, or `null`.
@@ -139,7 +150,7 @@ py codecks_api.py update <id> --title "Better name for this card"
 py codecks_api.py update <id> --content "Updated description here"
 
 # Assign to a milestone (must be mapped in .env)
-py codecks_api.py update <id> --milestone "MVP"
+py codecks_api.py update <id> --milestone "Sprint 1"
 
 # Clear milestone
 py codecks_api.py update <id> --milestone none
@@ -224,14 +235,14 @@ py codecks_api.py card <id> --format table
 ```
 Status         Pri   Eff  Deck                 Title                                    ID
 ------------------------------------------------------------------------------------------------------------------------
-not_started    a     8    Core Systems         Day/Night & Season Cycle                 839c6c81-033d-...
-started        b     3    Tasks                Fix inventory drag & drop syst…          3e770f44-0658-...
-done           a     5    Craftable Items      Planks                                   839c6c93-033d-...
+not_started    a     8    Core Systems         Implement save/load system               abc12345-0000-...
+started        b     3    Tasks                Fix inventory drag & drop syst…          def67890-0000-...
+done           a     5    Backlog              Database migration                       ghi24680-0000-...
 
 Total: 3 cards
 ```
 
-Long titles and deck names are truncated with `…` so the table stays readable.
+Long titles and deck names are truncated with `...` so the table stays readable.
 
 ### Example stats output
 
@@ -251,7 +262,7 @@ By Priority:
   none               3
 
 By Deck:
-  Core Systems       4
+  Backlog            4
   Tasks              6
   ...
 ```
@@ -317,13 +328,26 @@ The script is optimized to minimize context window usage for AI agents:
 ## File structure
 
 ```
-CoDecksForHafu/
+codecks-cli/
   codecks_api.py    # The script (all commands)
   .env              # Your tokens and config (gitignored)
+  .env.example      # Template showing required env vars
   .gitignore        # Protects .env from commits
   README.md         # This file
+  LICENSE           # MIT license
+  CONTRIBUTING.md   # How to contribute
+  SECURITY.md       # Vulnerability reporting
+  CHANGELOG.md      # Version history
 ```
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for responsible disclosure.
 
 ## License
 
-Private project. Not for redistribution.
+MIT License — see [LICENSE](LICENSE) for details.
