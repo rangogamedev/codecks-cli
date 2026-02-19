@@ -17,6 +17,7 @@ Commands:
     --project <name>        Filter by project (e.g. --project "Tea Shop")
     --milestone <name>      Filter by milestone (e.g. --milestone MVP)
     --search <text>         Search cards by title/content
+    --sort <field>          Sort by: status, priority, effort, deck, title
     --stats                 Show card count summary instead of card list
   card <id>               - Get details for a specific card
   decks                   - List all decks
@@ -119,6 +120,7 @@ BASE_URL = "https://api.codecks.io"
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
+VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title"}
 GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
 GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gdd_cache.md")
 
@@ -1909,11 +1911,18 @@ def main():
 
     elif cmd == "cards":
         flags, _ = parse_flags(args,
-                               ["deck", "status", "project", "search", "milestone"],
+                               ["deck", "status", "project", "search",
+                                "milestone", "sort"],
                                bool_flag_names=["stats"])
         if flags.get("status") and flags["status"] not in VALID_STATUSES:
             print(f"[ERROR] Invalid status '{flags['status']}'. "
                   f"Use: {', '.join(sorted(VALID_STATUSES))}",
+                  file=sys.stderr)
+            sys.exit(1)
+        sort_field = flags.get("sort")
+        if sort_field and sort_field not in VALID_SORT_FIELDS:
+            print(f"[ERROR] Invalid sort field '{sort_field}'. "
+                  f"Use: {', '.join(sorted(VALID_SORT_FIELDS))}",
                   file=sys.stderr)
             sys.exit(1)
         result = list_cards(
@@ -1925,6 +1934,26 @@ def main():
         )
         # Enrich cards with deck/milestone names
         result["card"] = _enrich_cards(result.get("card", {}))
+
+        # Sort cards if requested
+        if sort_field and result.get("card"):
+            sort_key_map = {
+                "status": "status",
+                "priority": "priority",
+                "effort": "effort",
+                "deck": "deck_name",
+                "title": "title",
+            }
+            field = sort_key_map[sort_field]
+            def _sort_val(item):
+                v = item[1].get(field)
+                if v is None or v == "":
+                    return (1, "")  # Blanks sort last
+                if isinstance(v, (int, float)):
+                    return (0, v)
+                return (0, str(v).lower())
+            sorted_items = sorted(result["card"].items(), key=_sort_val)
+            result["card"] = dict(sorted_items)
 
         if flags.get("stats"):
             stats = _compute_card_stats(result.get("card", {}))
