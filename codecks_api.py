@@ -625,7 +625,10 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
 
     q = {"_root": [{"account": [{f"cards({json.dumps(card_query)})": card_fields}]}]}
     result = query(q)
-    warn_if_empty(result, "card")
+    # Only warn about token expiry when no server-side filters are applied —
+    # a filtered query returning 0 results is normal (e.g. no "started" cards).
+    if not status_filter and not deck_filter:
+        warn_if_empty(result, "card")
 
     # Client-side project filter (cards don't have projectId directly)
     if project_filter:
