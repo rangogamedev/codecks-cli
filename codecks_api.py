@@ -4,14 +4,17 @@ Usage: py codecks_api.py <command> [args...]
 
 Global flags:
   --format table          Output as readable text instead of JSON (default: json)
+  --format csv            Output cards as CSV (cards command only)
+  --version               Show version number
 
 Commands:
   query <json>            - Run a raw query against the API (uses session token)
   account                 - Show account info
   cards                   - List all cards
-    --deck <name>           Filter by deck
-    --status <s>            Filter by status (started, not_started, done, blocked)
-    --project <name>        Filter cards to a specific project
+    --deck <name>           Filter by deck name (e.g. --deck Features)
+    --status <s>            Filter: not_started, started, done, blocked
+    --project <name>        Filter by project (e.g. --project "Tea Shop")
+    --milestone <name>      Filter by milestone (e.g. --milestone MVP)
     --search <text>         Search cards by title/content
     --stats                 Show card count summary instead of card list
   card <id>               - Get details for a specific card
@@ -45,6 +48,7 @@ Commands:
     --project <name>        (required) Target project for card placement
     --section <name>        Sync only one GDD section
     --apply                 Actually create cards (dry-run without this)
+    --quiet                 Show summary only (suppress per-card listing)
     --refresh               Force re-fetch GDD before syncing
     --file <path>           Use a local markdown file (use "-" for stdin)
     --save-cache            Save fetched content to .gdd_cache.md for offline use
@@ -55,7 +59,9 @@ Commands:
   dispatch <path> <json>  - Raw dispatch call (uses session token)
 """
 
+import csv
 import http.server
+import io
 import json
 import os
 import re
@@ -101,12 +107,17 @@ def save_env_value(key, value):
         f.writelines(lines)
 
 
+VERSION = "0.3.1"
+
 env = load_env()
 SESSION_TOKEN = env.get("CODECKS_TOKEN", "")
 ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
 REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
 BASE_URL = "https://api.codecks.io"
+VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
+VALID_PRIORITIES = {"a", "b", "c", "null"}
+PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
 GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
 GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gdd_cache.md")
 
@@ -600,7 +611,7 @@ def list_decks():
 
 
 def list_cards(deck_filter=None, status_filter=None, project_filter=None,
-               search_filter=None):
+               search_filter=None, milestone_filter=None):
     card_fields = ["title", "status", "priority", "deckId", "effort",
                    "createdAt", "milestoneId"]
     if search_filter:
@@ -635,7 +646,10 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         decks_result = list_decks()
         project_deck_ids = _get_project_deck_ids(decks_result, project_filter)
         if project_deck_ids is None:
-            print(f"[ERROR] Project '{project_filter}' not found.", file=sys.stderr)
+            available = [n for n in _load_project_names().values()]
+            hint = f" Available: {', '.join(available)}" if available else ""
+            print(f"[ERROR] Project '{project_filter}' not found.{hint}",
+                  file=sys.stderr)
             sys.exit(1)
         filtered_cards = {}
         for key, card in result.get("card", {}).items():
@@ -652,6 +666,16 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             title = (card.get("title", "") or "").lower()
             content = (card.get("content", "") or "").lower()
             if search_lower in title or search_lower in content:
+                filtered_cards[key] = card
+        result["card"] = filtered_cards
+
+    # Client-side milestone filter
+    if milestone_filter:
+        milestone_id = _resolve_milestone_id(milestone_filter)
+        filtered_cards = {}
+        for key, card in result.get("card", {}).items():
+            mid = card.get("milestone_id") or card.get("milestoneId")
+            if mid == milestone_id:
                 filtered_cards[key] = card
         result["card"] = filtered_cards
 
@@ -861,10 +885,14 @@ def dispatch(path, data):
 def _resolve_deck_id(deck_name):
     """Resolve deck name to ID."""
     decks_result = list_decks()
+    available = []
     for key, deck in decks_result.get("deck", {}).items():
-        if deck.get("title", "").lower() == deck_name.lower():
+        title = deck.get("title", "")
+        if title.lower() == deck_name.lower():
             return deck.get("id")
-    print(f"[ERROR] Deck '{deck_name}' not found.", file=sys.stderr)
+        available.append(title)
+    hint = f" Available: {', '.join(available)}" if available else ""
+    print(f"[ERROR] Deck '{deck_name}' not found.{hint}", file=sys.stderr)
     sys.exit(1)
 
 
@@ -874,8 +902,10 @@ def _resolve_milestone_id(milestone_name):
     for mid, name in milestone_names.items():
         if name.lower() == milestone_name.lower():
             return mid
-    print(f"[ERROR] Milestone '{milestone_name}' not found in CODECKS_MILESTONES. "
-          "Add it to .env: CODECKS_MILESTONES=<id>=<name>", file=sys.stderr)
+    available = list(milestone_names.values())
+    hint = f" Available: {', '.join(available)}" if available else ""
+    print(f"[ERROR] Milestone '{milestone_name}' not found.{hint} "
+          "Add milestones to .env: CODECKS_MILESTONES=<id>=<name>", file=sys.stderr)
     sys.exit(1)
 
 
@@ -1054,7 +1084,8 @@ def _fuzzy_match(needle, haystack_set):
     return None
 
 
-def sync_gdd(sections, project_name, target_section=None, apply=False):
+def sync_gdd(sections, project_name, target_section=None, apply=False,
+             quiet=False):
     """Compare GDD tasks against Codecks cards. Optionally create missing ones.
 
     Returns sync report dict.
@@ -1084,6 +1115,7 @@ def sync_gdd(sections, project_name, target_section=None, apply=False):
         "errors": [],
         "total_gdd": 0,
         "applied": apply,
+        "quiet": quiet,
     }
 
     for section in sections:
@@ -1154,10 +1186,12 @@ def pretty_print(data):
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def output(data, formatter=None, fmt="json"):
+def output(data, formatter=None, fmt="json", csv_formatter=None):
     """Output data in requested format."""
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    if fmt == "table" and formatter:
+    if fmt == "csv" and csv_formatter:
+        print(csv_formatter(data))
+    elif fmt == "table" and formatter:
         print(formatter(data))
     else:
         print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -1189,6 +1223,15 @@ def _trunc(s, maxlen):
 
 # --- Table formatters ---
 
+def _format_account_table(result):
+    """Format account info as readable text."""
+    acc = result.get("account", {})
+    if not acc:
+        return "No account data."
+    for key, info in acc.items():
+        return f"Account: {info.get('name', '?')}\nID:      {key}"
+
+
 def _format_cards_table(result):
     """Format cards as a readable table."""
     cards = result.get("card", {})
@@ -1198,9 +1241,8 @@ def _format_cards_table(result):
     lines.append(f"{'Status':<14} {'Pri':<5} {'Eff':<4} {'Deck':<20} {'Title':<40} {'ID'}")
     lines.append("-" * 120)
     for key, card in cards.items():
-        cid = key[:12]
         status = card.get("status", "")
-        pri = card.get("priority") or "-"
+        pri = PRI_LABELS.get(card.get("priority"), "-")
         effort = str(card.get("effort") or "-")
         deck = _trunc(card.get("deck_name") or card.get("deck_id", ""), 20)
         title = _trunc(card.get("title", ""), 40)
@@ -1219,7 +1261,9 @@ def _format_card_detail(result):
         lines.append(f"Card:      {key}")
         lines.append(f"Title:     {card.get('title', '')}")
         lines.append(f"Status:    {card.get('status', '')}")
-        lines.append(f"Priority:  {card.get('priority') or 'none'}")
+        pri_raw = card.get("priority")
+        pri_display = f"{pri_raw} ({PRI_LABELS[pri_raw]})" if pri_raw in PRI_LABELS else "none"
+        lines.append(f"Priority:  {pri_display}")
         lines.append(f"Effort:    {card.get('effort') or '-'}")
         lines.append(f"Deck:      {card.get('deck_name', card.get('deck_id', ''))}")
         ms = card.get("milestone_name", card.get("milestone_id"))
@@ -1339,6 +1383,7 @@ def _format_sync_report(report):
     lines = []
     project = report.get("project", "?")
     applied = report.get("applied", False)
+    quiet = report.get("quiet", False)
 
     lines.append(f"GDD Sync Report for \"{project}\"")
     lines.append("=" * 50)
@@ -1350,25 +1395,33 @@ def _format_sync_report(report):
 
     if applied and created_items:
         lines.append(f"\nCREATED ({len(created_items)}):")
-        for t in created_items:
-            pri = f"[{t['priority']}]" if t.get("priority") else ""
-            eff = f" E:{t['effort']}" if t.get("effort") else ""
-            cid = t.get("card_id", "")[:12]
-            lines.append(f"  {pri}{eff} {t['title']:<40} {cid}")
+        if not quiet:
+            for t in created_items:
+                pri = f"[{t['priority']}]" if t.get("priority") else ""
+                eff = f" E:{t['effort']}" if t.get("effort") else ""
+                cid = t.get("card_id", "")[:12]
+                lines.append(f"  {pri}{eff} {t['title']:<40} {cid}")
     elif new_items:
         lines.append(f"\nNEW (will be created with --apply) ({len(new_items)}):")
-        for t in new_items:
-            pri = f"[{t['priority']}]" if t.get("priority") else ""
-            eff = f" E:{t['effort']}" if t.get("effort") else ""
-            deck = t.get("deck", "?")
-            exists = "" if t.get("deck_exists") else " (new deck)"
-            lines.append(f"  {pri}{eff} {t['title']:<40} -> {deck}{exists}")
+        if not quiet:
+            for t in new_items:
+                pri = f"[{t['priority']}]" if t.get("priority") else ""
+                eff = f" E:{t['effort']}" if t.get("effort") else ""
+                deck = t.get("deck", "?")
+                exists = "" if t.get("deck_exists") else " (new deck)"
+                lines.append(f"  {pri}{eff} {t['title']:<40} -> {deck}{exists}")
+        unmatched = sorted(set(t["deck"] for t in new_items if not t.get("deck_exists")))
+        if unmatched:
+            lines.append(f"\n  WARNING: These GDD sections don't match any deck: "
+                         f"{', '.join(unmatched)}")
+            lines.append("  Create these decks first, or use --section to sync selectively.")
 
     if existing_items:
         lines.append(f"\nALREADY TRACKED ({len(existing_items)}):")
-        for t in existing_items:
-            sym = "=" if t["match_type"] == "exact" else "\u2248"
-            lines.append(f"  {t['title']:<40} {sym} \"{t['matched_to']}\"")
+        if not quiet:
+            for t in existing_items:
+                sym = "=" if t["match_type"] == "exact" else "\u2248"
+                lines.append(f"  {t['title']:<40} {sym} \"{t['matched_to']}\"")
 
     if error_items:
         lines.append(f"\nERRORS ({len(error_items)}):")
@@ -1383,6 +1436,26 @@ def _format_sync_report(report):
     lines.append(f"Summary: {n_new} {action}, {n_existing} existing, "
                  f"{total} total in GDD")
     return "\n".join(lines)
+
+
+# --- CSV formatters ---
+
+def _format_cards_csv(result):
+    """Format cards as CSV for export."""
+    cards = result.get("card", {})
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["status", "priority", "effort", "deck", "title", "id"])
+    for key, card in cards.items():
+        writer.writerow([
+            card.get("status", ""),
+            PRI_LABELS.get(card.get("priority"), ""),
+            card.get("effort") or "",
+            card.get("deck_name") or card.get("deck_id", ""),
+            card.get("title", ""),
+            key,
+        ])
+    return buf.getvalue().rstrip()
 
 
 # ---------------------------------------------------------------------------
@@ -1425,14 +1498,23 @@ def main():
 
     # Extract global --format flag before command dispatch
     all_args = sys.argv[1:]
-    global_flags, all_args = parse_flags(all_args, ["format"])
+    global_flags, all_args = parse_flags(all_args, ["format"],
+                                         bool_flag_names=["version"])
     fmt = global_flags.get("format", "json")
+
+    if global_flags.get("version"):
+        print(f"codecks-cli {VERSION}")
+        sys.exit(0)
 
     if not all_args:
         print(__doc__)
         sys.exit(0)
 
     cmd = all_args[0].lower()
+
+    if cmd == "version":
+        print(f"codecks-cli {VERSION}")
+        sys.exit(0)
     args = all_args[1:]
 
     if cmd == "query":
@@ -1443,7 +1525,7 @@ def main():
         output(query(q), fmt=fmt)
 
     elif cmd == "account":
-        output(get_account(), fmt=fmt)
+        output(get_account(), _format_account_table, fmt)
 
     elif cmd == "decks":
         output(list_decks(), _format_decks_table, fmt)
@@ -1455,13 +1537,15 @@ def main():
         output(list_milestones(), _format_milestones_table, fmt)
 
     elif cmd == "cards":
-        flags, _ = parse_flags(args, ["deck", "status", "project", "search"],
+        flags, _ = parse_flags(args,
+                               ["deck", "status", "project", "search", "milestone"],
                                bool_flag_names=["stats"])
         result = list_cards(
             deck_filter=flags.get("deck"),
             status_filter=flags.get("status"),
             project_filter=flags.get("project"),
             search_filter=flags.get("search"),
+            milestone_filter=flags.get("milestone"),
         )
         # Enrich cards with deck/milestone names
         result["card"] = _enrich_cards(result.get("card", {}))
@@ -1470,7 +1554,8 @@ def main():
             stats = _compute_card_stats(result.get("card", {}))
             output(stats, _format_stats_table, fmt)
         else:
-            output(result, _format_cards_table, fmt)
+            output(result, _format_cards_table, fmt,
+                   csv_formatter=_format_cards_csv)
 
     elif cmd == "card":
         if not args:
@@ -1525,10 +1610,21 @@ def main():
         update_kwargs = {}
 
         if "status" in flags:
-            update_kwargs["status"] = flags["status"]
+            val = flags["status"]
+            if val not in VALID_STATUSES:
+                print(f"[ERROR] Invalid status '{val}'. "
+                      f"Use: {', '.join(sorted(VALID_STATUSES))}",
+                      file=sys.stderr)
+                sys.exit(1)
+            update_kwargs["status"] = val
 
         if "priority" in flags:
             val = flags["priority"]
+            if val not in VALID_PRIORITIES:
+                print(f"[ERROR] Invalid priority '{val}'. "
+                      "Use: a (high), b (medium), c (low), or null",
+                      file=sys.stderr)
+                sys.exit(1)
             update_kwargs["priority"] = None if val == "null" else val
 
         if "effort" in flags:
@@ -1645,9 +1741,13 @@ def main():
 
     elif cmd == "gdd-sync":
         flags, _ = parse_flags(args, ["project", "section", "file"],
-                               bool_flag_names=["apply", "refresh", "save-cache"])
+                               bool_flag_names=["apply", "refresh", "save-cache",
+                                                "quiet"])
         if not flags.get("project"):
-            print("[ERROR] --project is required for gdd-sync.", file=sys.stderr)
+            available = [n for n in _load_project_names().values()]
+            hint = f" Available: {', '.join(available)}" if available else ""
+            print(f"[ERROR] --project is required for gdd-sync.{hint}",
+                  file=sys.stderr)
             sys.exit(1)
         content = fetch_gdd(
             force_refresh=flags.get("refresh", False),
@@ -1659,6 +1759,7 @@ def main():
             sections, flags["project"],
             target_section=flags.get("section"),
             apply=flags.get("apply", False),
+            quiet=flags.get("quiet", False),
         )
         output(report, _format_sync_report, fmt)
 
