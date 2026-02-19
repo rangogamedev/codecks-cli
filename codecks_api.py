@@ -30,9 +30,9 @@ Commands:
     --content <text>        Update card description
     --milestone <name>      Assign to milestone (use "none" to clear)
     --hero <parent_id>      Make this a sub-card of a hero card (use "none" to detach)
-  archive <id>            - Archive a card (reversible, uses session token)
-  unarchive <id>          - Unarchive a card (uses session token)
-  delete <id>             - PERMANENTLY delete a card (cannot be recovered!)
+  archive <id>            - Remove a card (reversible, this is the standard way)
+  unarchive <id>          - Restore an archived card
+  delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
   done <id> [id...]       - Mark one or more cards as done
   start <id> [id...]      - Mark one or more cards as started
   generate-token          - Generate a new Report Token using the Access Key
@@ -931,10 +931,17 @@ def main():
 
     elif cmd == "delete":
         if not args:
-            print("Usage: py codecks_api.py delete <card_id>", file=sys.stderr)
+            print("Usage: py codecks_api.py delete <card_id> --confirm", file=sys.stderr)
             sys.exit(1)
-        result = delete_card(args[0])
-        _mutation_response("Deleted", args[0], data=result, fmt=fmt)
+        flags, remaining = parse_flags(args, [], bool_flag_names=["confirm"])
+        card_id = remaining[0] if remaining else args[0]
+        if not flags.get("confirm"):
+            print("Permanent deletion requires --confirm flag.", file=sys.stderr)
+            print(f"Did you mean: py codecks_api.py archive {card_id}",
+                  file=sys.stderr)
+            sys.exit(1)
+        result = delete_card(card_id)
+        _mutation_response("Deleted", card_id, data=result, fmt=fmt)
 
     elif cmd == "done":
         if not args:
