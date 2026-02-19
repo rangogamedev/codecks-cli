@@ -43,6 +43,7 @@ Commands:
 import json
 import os
 import re
+import socket
 import sys
 import urllib.request
 import urllib.error
@@ -135,8 +136,13 @@ def session_request(path="/", data=None, method="POST"):
     body = json.dumps(data).encode("utf-8") if data else None
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                return json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""
         if e.code in (401, 403):
@@ -147,6 +153,13 @@ def session_request(path="/", data=None, method="POST"):
             sys.exit(2)
         print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -168,8 +181,13 @@ def report_request(content, severity=None, email=None):
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                return json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""
         if e.code == 401:
@@ -178,6 +196,13 @@ def report_request(content, severity=None, email=None):
             sys.exit(1)
         print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -192,8 +217,13 @@ def generate_report_token(label="claude-code"):
     body = json.dumps({"label": label}).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                result = json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
             if result.get("ok") and result.get("token"):
                 save_env_value("CODECKS_REPORT_TOKEN", result["token"])
                 return result
@@ -203,6 +233,13 @@ def generate_report_token(label="claude-code"):
         error_body = e.read().decode("utf-8") if e.fp else ""
         print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -493,11 +530,16 @@ def unarchive_card(card_id):
 def delete_card(card_id):
     """Delete a card — archives first, then deletes (uses session token)."""
     archive_card(card_id)
-    return session_request("/dispatch/cards/bulkUpdate", {
-        "ids": [card_id],
-        "visibility": "deleted",
-        "deleteFiles": False,
-    })
+    try:
+        return session_request("/dispatch/cards/bulkUpdate", {
+            "ids": [card_id],
+            "visibility": "deleted",
+            "deleteFiles": False,
+        })
+    except SystemExit:
+        print(f"Warning: Card {card_id} was archived but delete failed. "
+              f"Use 'unarchive' to recover.", file=sys.stderr)
+        raise
 
 
 def bulk_status(card_ids, status):
