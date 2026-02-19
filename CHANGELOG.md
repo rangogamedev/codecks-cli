@@ -4,6 +4,36 @@ All notable changes to codecks-cli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0] - 2026-02-19
+
+### Added
+- `setup` command — interactive setup wizard for new and returning users
+  - Auto-discovers projects from deck data and prompts for names
+  - Auto-discovers milestones from card data with sample titles to help identify
+  - Validates session token with retry (up to 3 attempts)
+  - Auto-generates report token if access key is provided
+  - Optional GDD URL configuration
+  - Returning users get a menu: refresh mappings, update token, or full setup
+- Automatic token validation on every API command
+  - Catches expired tokens immediately with clear instructions
+  - `[SETUP_NEEDED]` prefix when no configuration found
+  - Skips check for commands that don't need the session token
+- `--version` flag to show current version
+- `--format csv` output format on card listings
+- `--milestone` filter on `cards` command
+- `--quiet` flag on `gdd-sync` to suppress per-item listings
+- Input validation for `--status` and `--priority` values with helpful error messages
+- Priority labels in table output (high/med/low instead of a/b/c)
+- Helpful error messages that list available options (decks, projects, milestones, statuses)
+- Unmatched GDD section warning in sync reports
+
+### Fixed
+- `account --format table` now shows formatted output instead of raw JSON
+- `cards --status started` no longer shows false TOKEN_EXPIRED warning when 0 cards match
+
+### Changed
+- Version bumped to 0.4.0
+
 ## [0.3.0] - 2026-02-19
 
 ### Added
