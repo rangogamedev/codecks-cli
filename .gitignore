@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.gdd_cache.md
 __pycache__/
 *.pyc
 .claude/

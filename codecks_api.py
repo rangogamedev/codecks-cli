@@ -37,6 +37,15 @@ Commands:
   delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
   done <id> [id...]       - Mark one or more cards as done
   start <id> [id...]      - Mark one or more cards as started
+  gdd                     - Show parsed GDD task tree from Google Doc
+    --refresh               Force re-fetch from Google (ignore cache)
+    --file <path>           Use a local markdown file (use "-" for stdin)
+  gdd-sync                - Sync GDD tasks to Codecks cards
+    --project <name>        (required) Target project for card placement
+    --section <name>        Sync only one GDD section
+    --apply                 Actually create cards (dry-run without this)
+    --refresh               Force re-fetch GDD before syncing
+    --file <path>           Use a local markdown file (use "-" for stdin)
   generate-token          - Generate a new Report Token using the Access Key
     --label <text>          Label for the token (default: claude-code)
   dispatch <path> <json>  - Raw dispatch call (uses session token)
@@ -90,6 +99,8 @@ ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
 REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
 BASE_URL = "https://api.codecks.io"
+GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
+GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gdd_cache.md")
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +604,267 @@ def _resolve_milestone_id(milestone_name):
 
 
 # ---------------------------------------------------------------------------
+# GDD (Game Design Document) helpers
+# ---------------------------------------------------------------------------
+
+def _extract_google_doc_id(url):
+    """Extract document ID from a Google Docs URL or bare ID."""
+    match = re.search(r'/document/d/([a-zA-Z0-9_-]+)', url)
+    if match:
+        return match.group(1)
+    # Maybe it's just the ID itself
+    if re.match(r'^[a-zA-Z0-9_-]{20,}$', url):
+        return url
+    return None
+
+
+def fetch_gdd(force_refresh=False, local_file=None):
+    """Fetch GDD content. Priority: local_file/stdin > Google Doc > cache.
+    Use --file - to read from stdin (for piping from AI agent)."""
+    # 1. Local file override (or stdin with "-")
+    if local_file:
+        if local_file == "-":
+            return sys.stdin.read()
+        if not os.path.exists(local_file):
+            print(f"[ERROR] File not found: {local_file}", file=sys.stderr)
+            sys.exit(1)
+        with open(local_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+    # 2. Google Doc fetch (with cache)
+    if GDD_DOC_URL:
+        use_cache = (not force_refresh) and os.path.exists(GDD_CACHE_PATH)
+        if not use_cache:
+            doc_id = _extract_google_doc_id(GDD_DOC_URL)
+            if not doc_id:
+                print("[ERROR] Invalid Google Doc URL in GDD_GOOGLE_DOC_URL.",
+                      file=sys.stderr)
+                sys.exit(1)
+            export_url = (f"https://docs.google.com/document/d/{doc_id}"
+                          f"/export?format=md")
+            req = urllib.request.Request(export_url)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    content = resp.read().decode("utf-8")
+                # Cache locally
+                with open(GDD_CACHE_PATH, "w", encoding="utf-8") as f:
+                    f.write(content)
+                return content
+            except (urllib.error.URLError, socket.timeout) as e:
+                if os.path.exists(GDD_CACHE_PATH):
+                    print(f"[WARN] Google Doc fetch failed ({e}), using cache.",
+                          file=sys.stderr)
+                else:
+                    print(f"[ERROR] Failed to fetch Google Doc: {e}",
+                          file=sys.stderr)
+                    sys.exit(1)
+
+        # Use cache
+        if os.path.exists(GDD_CACHE_PATH):
+            with open(GDD_CACHE_PATH, "r", encoding="utf-8") as f:
+                return f.read()
+
+    # 3. No source configured
+    print("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL in .env "
+          "or use --file <path>.", file=sys.stderr)
+    sys.exit(1)
+
+
+def parse_gdd(content):
+    """Parse GDD markdown into structured sections with tasks.
+
+    Returns list of sections:
+    [{"section": "Core Gameplay", "tasks": [
+        {"title": "...", "priority": None, "effort": None, "content": ""},
+    ]}]
+    """
+    sections = []
+    current_section = None
+    current_task = None
+    # Match [P:a], [E:5], or combined [P:a E:5]
+    tag_re = re.compile(r'\[P:([abc])\]', re.IGNORECASE)
+    effort_re = re.compile(r'\[E:(\d+)\]', re.IGNORECASE)
+    combined_re = re.compile(r'\[P:([abc])\s+E:(\d+)\]', re.IGNORECASE)
+
+    for raw_line in content.split("\n"):
+        line = raw_line.rstrip()
+
+        # ## Section heading → new section (deck)
+        if line.startswith("## "):
+            section_name = line[3:].strip()
+            if section_name:
+                current_section = {"section": section_name, "tasks": []}
+                sections.append(current_section)
+                current_task = None
+            continue
+
+        # Skip # headings (document title) and blank lines
+        if line.startswith("# ") or not line.strip():
+            current_task = None
+            continue
+
+        # Top-level bullet: - Task title [P:a E:5]
+        if re.match(r'^[-*]\s', line.lstrip()) and not re.match(r'^\s{2,}', line):
+            if not current_section:
+                # Tasks before any section go into "Uncategorized"
+                current_section = {"section": "Uncategorized", "tasks": []}
+                sections.append(current_section)
+
+            task_text = re.sub(r'^[-*]\s+', '', line.strip())
+
+            # Extract tags: [P:a E:5] (combined) or [P:a] [E:5] (separate)
+            priority = None
+            effort = None
+            combined_match = combined_re.search(task_text)
+            if combined_match:
+                priority = combined_match.group(1).lower()
+                effort = int(combined_match.group(2))
+                task_text = combined_re.sub('', task_text)
+            else:
+                p_match = tag_re.search(task_text)
+                if p_match:
+                    priority = p_match.group(1).lower()
+                    task_text = tag_re.sub('', task_text)
+                e_match = effort_re.search(task_text)
+                if e_match:
+                    effort = int(e_match.group(1))
+                    task_text = effort_re.sub('', task_text)
+
+            title = task_text.strip()
+            if title:
+                current_task = {
+                    "title": title,
+                    "priority": priority,
+                    "effort": effort,
+                    "content": "",
+                }
+                current_section["tasks"].append(current_task)
+            continue
+
+        # Indented bullet: sub-item → append to current task's content
+        if re.match(r'^\s{2,}[-*]\s', line) and current_task:
+            sub_text = re.sub(r'^\s+[-*]\s+', '', line)
+            if current_task["content"]:
+                current_task["content"] += "\n" + sub_text
+            else:
+                current_task["content"] = sub_text
+            continue
+
+        # Plain text after a task → also append as content
+        if current_task and line.strip() and not line.startswith("#"):
+            if current_task["content"]:
+                current_task["content"] += "\n" + line.strip()
+            else:
+                current_task["content"] = line.strip()
+
+    return sections
+
+
+def _fuzzy_match(needle, haystack_set):
+    """Check if needle closely matches any title in the set.
+    Returns the matching title or None. Conservative: exact or substring only."""
+    needle_lower = needle.lower().strip()
+    for existing in haystack_set:
+        if needle_lower == existing:
+            return existing
+        if len(needle_lower) > 5 and len(existing) > 5:
+            if needle_lower in existing or existing in needle_lower:
+                return existing
+    return None
+
+
+def sync_gdd(sections, project_name, target_section=None, apply=False):
+    """Compare GDD tasks against Codecks cards. Optionally create missing ones.
+
+    Returns sync report dict.
+    """
+    import time as _time
+
+    # Fetch existing cards
+    existing_result = list_cards(project_filter=project_name)
+    existing_cards = existing_result.get("card", {})
+    existing_titles = {}
+    for key, card in existing_cards.items():
+        title = (card.get("title") or "").lower().strip()
+        if title:
+            existing_titles[title] = key
+
+    # Resolve deck names → IDs for placement
+    decks_result = list_decks()
+    deck_name_to_id = {}
+    for key, deck in decks_result.get("deck", {}).items():
+        deck_name_to_id[deck.get("title", "").lower()] = deck.get("id")
+
+    report = {
+        "project": project_name,
+        "new": [],
+        "existing": [],
+        "created": [],
+        "errors": [],
+        "total_gdd": 0,
+        "applied": apply,
+    }
+
+    for section in sections:
+        if target_section and section["section"].lower() != target_section.lower():
+            continue
+
+        deck_id = deck_name_to_id.get(section["section"].lower())
+
+        for task in section["tasks"]:
+            report["total_gdd"] += 1
+            match = _fuzzy_match(task["title"], existing_titles)
+
+            if match:
+                match_type = "exact" if match == task["title"].lower().strip() else "fuzzy"
+                report["existing"].append({
+                    "title": task["title"],
+                    "matched_to": match,
+                    "match_type": match_type,
+                    "card_id": existing_titles[match],
+                })
+                continue
+
+            task_entry = {
+                "title": task["title"],
+                "section": section["section"],
+                "priority": task.get("priority"),
+                "effort": task.get("effort"),
+            }
+
+            if apply:
+                try:
+                    result = create_card(task["title"], task.get("content"))
+                    card_id = result.get("cardId", "")
+                    update_kwargs = {}
+                    if deck_id:
+                        update_kwargs["deckId"] = deck_id
+                    if task.get("priority"):
+                        update_kwargs["priority"] = task["priority"]
+                    if task.get("effort"):
+                        update_kwargs["effort"] = task["effort"]
+                    if update_kwargs:
+                        update_card(card_id, **update_kwargs)
+                    task_entry["card_id"] = card_id
+                    report["created"].append(task_entry)
+                    # Rate limit: ~10 creates before a brief pause
+                    if len(report["created"]) % 10 == 0:
+                        _time.sleep(1)
+                except Exception as e:
+                    task_entry["error"] = str(e)
+                    report["errors"].append(task_entry)
+            else:
+                task_entry["deck"] = section["section"]
+                if deck_id:
+                    task_entry["deck_exists"] = True
+                else:
+                    task_entry["deck_exists"] = False
+                report["new"].append(task_entry)
+
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Output formatting
 # ---------------------------------------------------------------------------
 
@@ -758,6 +1030,77 @@ def _format_stats_table(stats):
     lines.append("By Deck:")
     for deck, count in sorted(stats["by_deck"].items()):
         lines.append(f"  {deck:<24} {count}")
+    return "\n".join(lines)
+
+
+def _format_gdd_table(sections):
+    """Format parsed GDD sections as a readable table."""
+    if not sections:
+        return "No tasks found in GDD."
+    lines = []
+    lines.append(f"{'Section':<24} {'Pri':<5} {'Eff':<5} {'Title'}")
+    lines.append("-" * 90)
+    total_tasks = 0
+    for section in sections:
+        for task in section["tasks"]:
+            total_tasks += 1
+            sec = _trunc(section["section"], 24)
+            pri = task.get("priority") or "-"
+            eff = str(task.get("effort") or "-")
+            title = _trunc(task["title"], 50)
+            lines.append(f"{sec:<24} {pri:<5} {eff:<5} {title}")
+    lines.append(f"\nTotal: {total_tasks} tasks across {len(sections)} sections")
+    return "\n".join(lines)
+
+
+def _format_sync_report(report):
+    """Format GDD sync report as readable text."""
+    lines = []
+    project = report.get("project", "?")
+    applied = report.get("applied", False)
+
+    lines.append(f"GDD Sync Report for \"{project}\"")
+    lines.append("=" * 50)
+
+    new_items = report.get("new", [])
+    created_items = report.get("created", [])
+    existing_items = report.get("existing", [])
+    error_items = report.get("errors", [])
+
+    if applied and created_items:
+        lines.append(f"\nCREATED ({len(created_items)}):")
+        for t in created_items:
+            pri = f"[{t['priority']}]" if t.get("priority") else ""
+            eff = f" E:{t['effort']}" if t.get("effort") else ""
+            cid = t.get("card_id", "")[:12]
+            lines.append(f"  {pri}{eff} {t['title']:<40} {cid}")
+    elif new_items:
+        lines.append(f"\nNEW (will be created with --apply) ({len(new_items)}):")
+        for t in new_items:
+            pri = f"[{t['priority']}]" if t.get("priority") else ""
+            eff = f" E:{t['effort']}" if t.get("effort") else ""
+            deck = t.get("deck", "?")
+            exists = "" if t.get("deck_exists") else " (new deck)"
+            lines.append(f"  {pri}{eff} {t['title']:<40} -> {deck}{exists}")
+
+    if existing_items:
+        lines.append(f"\nALREADY TRACKED ({len(existing_items)}):")
+        for t in existing_items:
+            sym = "=" if t["match_type"] == "exact" else "\u2248"
+            lines.append(f"  {t['title']:<40} {sym} \"{t['matched_to']}\"")
+
+    if error_items:
+        lines.append(f"\nERRORS ({len(error_items)}):")
+        for t in error_items:
+            lines.append(f"  {t['title']}: {t.get('error', '?')}")
+
+    lines.append("")
+    total = report.get("total_gdd", 0)
+    n_new = len(created_items) if applied else len(new_items)
+    n_existing = len(existing_items)
+    action = "created" if applied else "to create"
+    lines.append(f"Summary: {n_new} {action}, {n_existing} existing, "
+                 f"{total} total in GDD")
     return "\n".join(lines)
 
 
@@ -1007,6 +1350,33 @@ def main():
         result = generate_report_token(label)
         print(f"Report Token created: {_mask_token(result['token'])}")
         print("Full token saved to .env as CODECKS_REPORT_TOKEN")
+
+    elif cmd == "gdd":
+        flags, _ = parse_flags(args, ["file"], bool_flag_names=["refresh"])
+        content = fetch_gdd(
+            force_refresh=flags.get("refresh", False),
+            local_file=flags.get("file"),
+        )
+        sections = parse_gdd(content)
+        output(sections, _format_gdd_table, fmt)
+
+    elif cmd == "gdd-sync":
+        flags, _ = parse_flags(args, ["project", "section", "file"],
+                               bool_flag_names=["apply", "refresh"])
+        if not flags.get("project"):
+            print("[ERROR] --project is required for gdd-sync.", file=sys.stderr)
+            sys.exit(1)
+        content = fetch_gdd(
+            force_refresh=flags.get("refresh", False),
+            local_file=flags.get("file"),
+        )
+        sections = parse_gdd(content)
+        report = sync_gdd(
+            sections, flags["project"],
+            target_section=flags.get("section"),
+            apply=flags.get("apply", False),
+        )
+        output(report, _format_sync_report, fmt)
 
     elif cmd == "dispatch":
         if len(args) < 2:

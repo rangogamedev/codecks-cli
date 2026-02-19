@@ -209,6 +209,73 @@ py codecks_api.py query '{"_root": [{"account": ["name", "id"]}]}'
 py codecks_api.py dispatch cards/update '{"id": "card-uuid", "status": "done"}'
 ```
 
+## GDD Sync (Game Design Document)
+
+Read a Game Design Document and sync tasks to Codecks. The GDD can come from a Google Doc (shared publicly), a local markdown file, or piped from stdin (for AI agents that read docs via MCP).
+
+### Setup
+
+Add your Google Doc URL to `.env` (share the doc with "Anyone with the link can view"):
+
+```env
+GDD_GOOGLE_DOC_URL=https://docs.google.com/document/d/your-doc-id/edit
+```
+
+Or use a local file with `--file`, or pipe content with `--file -`.
+
+### GDD format
+
+Use `## Headings` for sections (map to decks) and `- bullets` for tasks:
+
+```markdown
+## Core Gameplay
+- [P:a E:8] Implement day/night cycle
+- [P:a E:5] Save/load system
+  - Auto-save every 5 minutes
+  - Manual save slots
+- [P:b E:3] Inventory drag & drop
+```
+
+Tags are optional: `[P:a]` = priority (a/b/c), `[E:5]` = effort, `[P:a E:5]` = both.
+
+### Commands
+
+```bash
+# View parsed GDD tasks
+py codecks_api.py gdd --format table
+
+# Re-fetch from Google Doc (ignore cache)
+py codecks_api.py gdd --refresh --format table
+
+# Use a local file
+py codecks_api.py gdd --file "my_gdd.md" --format table
+
+# Dry-run sync (shows what would be created, no changes)
+py codecks_api.py gdd-sync --project "My Project"
+
+# Apply sync (actually creates cards)
+py codecks_api.py gdd-sync --project "My Project" --apply
+
+# Sync one section only
+py codecks_api.py gdd-sync --project "My Project" --section "Core Gameplay" --apply
+```
+
+### How sync works
+
+1. Parses GDD into sections and tasks
+2. Fetches existing cards from the target project
+3. Compares: exact title match or substring match = "already tracked"
+4. With `--apply`: creates new cards, places them in matching decks, sets priority and effort
+5. Reports what was created vs. what already existed
+
+### Private Google Docs
+
+If you don't want to make your GDD public, you have three options:
+
+1. **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
+2. **AI agent piping**: If your AI agent has Google Docs access (e.g. via MCP), it can read the doc and pipe the content: `--file -` reads from stdin
+3. **Public with obscurity**: Use "Anyone with the link" sharing — the doc isn't indexed or discoverable, only accessible to those who have the URL
+
 ## Output formats
 
 By default, all commands output JSON. Add `--format table` to any command for human-readable output:
@@ -313,6 +380,8 @@ This script is designed to be called by an AI coding agent like Claude Code. The
 7. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
 8. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
 9. Use `remove` as a natural alias for `archive`
+10. Use `gdd-sync --project "Name"` for dry-run, add `--apply` only after reviewing the report
+11. Pipe GDD content via `--file -` if the agent has its own document access (e.g. MCP)
 
 The AI agent's project memory file should include the full command reference and the project/milestone UUID mappings.
 

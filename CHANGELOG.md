@@ -4,6 +4,26 @@ All notable changes to codecks-cli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.0] - 2026-02-19
+
+### Added
+- `gdd` command — fetch and parse a Game Design Document from Google Docs or local file
+  - `--refresh` to force re-fetch from Google (ignores cache)
+  - `--file <path>` to use a local markdown file instead
+  - `--file -` to read from stdin (for AI agents piping via MCP)
+  - `--format table` for human-readable task tree
+- `gdd-sync` command — sync GDD tasks to Codecks cards
+  - `--project <name>` (required) target project for card placement
+  - `--section <name>` to sync only one GDD section
+  - `--apply` flag required to create cards (dry-run by default)
+  - Fuzzy title matching to detect already-tracked tasks
+  - Auto-resolves deck names from GDD section headings
+  - Sets priority and effort from `[P:a]` and `[E:5]` tags
+- GDD markdown convention: `## Heading` → deck, `- bullet` → card, indented bullets → description
+- Combined tag support: `[P:a E:8]` in a single bracket pair
+- Local `.gdd_cache.md` cache for offline/faster access
+- Three options for private Google Docs: local file, stdin piping, link-only sharing
+
 ## [0.1.0] - 2026-02-19
 
 Initial public release.
