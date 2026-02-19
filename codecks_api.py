@@ -17,31 +17,45 @@ Commands:
     --project <name>        Filter by project (e.g. --project "Tea Shop")
     --milestone <name>      Filter by milestone (e.g. --milestone MVP)
     --search <text>         Search cards by title/content
-    --sort <field>          Sort by: status, priority, effort, deck, title
+    --tag <name>            Filter by tag (e.g. --tag bug)
+    --owner <name>          Filter by owner (e.g. --owner Thomas)
+    --sort <field>          Sort by: status, priority, effort, deck, title,
+                            owner, updated, created
     --stats                 Show card count summary instead of card list
+    --hand                  Show only cards in your hand
+    --archived              Show archived cards instead of active ones
   card <id>               - Get details for a specific card
   decks                   - List all decks
   projects                - List all projects (derived from decks)
   milestones              - List all milestones
+  activity                - Show recent activity feed
+    --limit <n>             Number of events to show (default: 20)
   create <title>          - Create a card via Report Token (stable, no expiry)
     --deck <name>           Place card in a specific deck
     --project <name>        Place card in first deck of a project
     --content <text>        Card description/content
     --severity <level>      critical, high, low, or null
-  update <id>             - Update card properties (uses session token)
+    --doc                   Create as a doc card (no workflow states)
+  update <id> [id...]     - Update card properties (supports multiple IDs)
     --status <state>        not_started, started, done, blocked, in_review
     --priority <level>      a (high), b (medium), c (low), or null
     --effort <n>            Effort estimation (number)
     --deck <name>           Move card to a different deck
-    --title <text>          Rename the card
-    --content <text>        Update card description
+    --title <text>          Rename the card (single card only)
+    --content <text>        Update card description (single card only)
     --milestone <name>      Assign to milestone (use "none" to clear)
     --hero <parent_id>      Make this a sub-card of a hero card (use "none" to detach)
+    --owner <name>          Assign owner (use "none" to unassign)
+    --tag <tags>            Set tags (comma-separated, use "none" to clear all)
+    --doc <true|false>      Convert to/from doc card
   archive|remove <id>     - Remove a card (reversible, this is the standard way)
   unarchive <id>          - Restore an archived card
   delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
   done <id> [id...]       - Mark one or more cards as done
   start <id> [id...]      - Mark one or more cards as started
+  hand                    - List cards in your hand
+  hand <id> [id...]       - Add cards to your hand
+  unhand <id> [id...]     - Remove cards from your hand
   gdd                     - Show parsed GDD task tree from Google Doc
     --refresh               Force re-fetch from Google (ignore cache)
     --file <path>           Use a local markdown file (use "-" for stdin)
@@ -73,6 +87,7 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+import uuid
 import webbrowser
 
 # Load config from .env
@@ -116,11 +131,13 @@ SESSION_TOKEN = env.get("CODECKS_TOKEN", "")
 ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
 REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
+USER_ID = env.get("CODECKS_USER_ID", "")
 BASE_URL = "https://api.codecks.io"
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
-VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title"}
+VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title",
+                     "owner", "updated", "created"}
 GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
 GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gdd_cache.md")
 
@@ -620,6 +637,21 @@ def _load_milestone_names():
     return mapping
 
 
+def _load_users():
+    """Load user ID->name mapping from account roles. Cached per invocation."""
+    if "users" in _cache:
+        return _cache["users"]
+    result = _try_call(query, {"_root": [{"account": [
+        {"roles": ["userId", "role", {"user": ["id", "name"]}]}
+    ]}]})
+    user_map = {}
+    if result:
+        for uid, udata in result.get("user", {}).items():
+            user_map[uid] = udata.get("name", "")
+    _cache["users"] = user_map
+    return user_map
+
+
 # ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
@@ -643,12 +675,14 @@ def list_decks():
 
 
 def list_cards(deck_filter=None, status_filter=None, project_filter=None,
-               search_filter=None, milestone_filter=None):
+               search_filter=None, milestone_filter=None, tag_filter=None,
+               owner_filter=None, archived=False):
     card_fields = ["title", "status", "priority", "deckId", "effort",
-                   "createdAt", "milestoneId"]
+                   "createdAt", "milestoneId", "masterTags", "lastUpdatedAt",
+                   "isDoc", "childCardInfo", {"assignee": ["name", "id"]}]
     if search_filter:
         card_fields.append("content")
-    card_query = {"visibility": "default"}
+    card_query = {"visibility": "archived" if archived else "default"}
     if status_filter:
         card_query["status"] = status_filter
 
@@ -670,7 +704,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     result = query(q)
     # Only warn about token expiry when no server-side filters are applied —
     # a filtered query returning 0 results is normal (e.g. no "started" cards).
-    if not status_filter and not deck_filter:
+    if not status_filter and not deck_filter and not archived:
         warn_if_empty(result, "card")
 
     # Client-side project filter (cards don't have projectId directly)
@@ -711,6 +745,48 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
                 filtered_cards[key] = card
         result["card"] = filtered_cards
 
+    # Client-side tag filter
+    if tag_filter:
+        tag_lower = tag_filter.lower()
+        filtered_cards = {}
+        for key, card in result.get("card", {}).items():
+            card_tags = card.get("master_tags") or card.get("masterTags") or []
+            if any(t.lower() == tag_lower for t in card_tags):
+                filtered_cards[key] = card
+        result["card"] = filtered_cards
+
+    # Client-side owner filter
+    if owner_filter:
+        owner_lower = owner_filter.lower()
+        # Resolve owner name to user ID
+        users = result.get("user", {})
+        owner_id = None
+        for uid, udata in users.items():
+            if (udata.get("name") or "").lower() == owner_lower:
+                owner_id = uid
+                break
+        if owner_id is None:
+            # Try loading users from account roles
+            user_map = _load_users()
+            for uid, name in user_map.items():
+                if name.lower() == owner_lower:
+                    owner_id = uid
+                    break
+        if owner_id is None:
+            available = [u.get("name", "") for u in result.get("user", {}).values()]
+            if not available:
+                available = list(_load_users().values())
+            hint = f" Available: {', '.join(available)}" if available else ""
+            print(f"[ERROR] Owner '{owner_filter}' not found.{hint}",
+                  file=sys.stderr)
+            sys.exit(1)
+        filtered_cards = {}
+        for key, card in result.get("card", {}).items():
+            assignee = card.get("assignee")
+            if assignee == owner_id:
+                filtered_cards[key] = card
+        result["card"] = filtered_cards
+
     return result
 
 
@@ -747,7 +823,9 @@ def get_card(card_id):
     card_filter = json.dumps({"cardId": card_id, "visibility": "default"})
     q = {"_root": [{"account": [{f"cards({card_filter})": [
         "title", "status", "priority", "content", "deckId",
-        "effort", "createdAt", "milestoneId",
+        "effort", "createdAt", "milestoneId", "masterTags",
+        "lastUpdatedAt", "isDoc",
+        {"assignee": ["name", "id"]},
         {"childCards": ["title", "status"]},
     ]}]}]}
     return query(q)
@@ -773,6 +851,17 @@ def list_milestones():
     return output
 
 
+def list_activity(limit=20):
+    """Query recent account activity."""
+    q = {"_root": [{"account": [{"activities": [
+        "type", "createdAt", "card", "data",
+        {"changer": ["name"]},
+        {"deck": ["title"]},
+    ]}]}]}
+    result = query(q)
+    return result
+
+
 def list_projects():
     """List projects by querying decks and grouping by projectId."""
     decks_result = list_decks()
@@ -791,14 +880,22 @@ def list_projects():
 # Enrichment (resolve IDs to human-readable names)
 # ---------------------------------------------------------------------------
 
-def _enrich_cards(cards_dict):
-    """Add deck_name and milestone_name to card dicts for readability."""
+def _enrich_cards(cards_dict, user_data=None):
+    """Add deck_name, milestone_name, owner_name to card dicts."""
     decks_result = list_decks()
     deck_names = {}
     for key, deck in decks_result.get("deck", {}).items():
         deck_names[deck.get("id")] = deck.get("title", "")
 
     milestone_names = _load_milestone_names()
+
+    # Build user name map from user_data (query result) or _load_users()
+    user_names = {}
+    if user_data:
+        for uid, udata in user_data.items():
+            user_names[uid] = udata.get("name", "")
+    if not user_names:
+        user_names = _load_users()
 
     for key, card in cards_dict.items():
         did = card.get("deck_id") or card.get("deckId")
@@ -807,6 +904,17 @@ def _enrich_cards(cards_dict):
         mid = card.get("milestone_id") or card.get("milestoneId")
         if mid:
             card["milestone_name"] = milestone_names.get(mid, mid)
+        # Resolve owner name
+        assignee = card.get("assignee")
+        if assignee:
+            card["owner_name"] = user_names.get(assignee, assignee)
+        # Normalize tags field
+        tags = card.get("master_tags") or card.get("masterTags") or []
+        card["tags"] = tags
+        # Sub-card info
+        child_info = card.get("child_card_info") or card.get("childCardInfo")
+        if child_info and isinstance(child_info, dict):
+            card["sub_card_count"] = child_info.get("count", 0)
 
     return cards_dict
 
@@ -858,11 +966,10 @@ def create_card(title, content=None, severity=None):
 def update_card(card_id, **kwargs):
     """Update card properties via dispatch (uses session token).
     Supported fields: status, priority, effort, deckId, title, content,
-    milestoneId, parentCardId."""
+    milestoneId, parentCardId, assigneeId, masterTags, isDoc.
+    None values are sent as JSON null to clear fields."""
     payload = {"id": card_id}
-    for key, val in kwargs.items():
-        if val is not None:
-            payload[key] = val
+    payload.update(kwargs)
     return session_request("/dispatch/cards/update", payload)
 
 
@@ -908,6 +1015,58 @@ def bulk_status(card_ids, status):
 def dispatch(path, data):
     """Generic dispatch call for mutations (uses session token)."""
     return session_request(f"/dispatch/{path}", data)
+
+
+# ---------------------------------------------------------------------------
+# Hand helpers (personal card queue)
+# ---------------------------------------------------------------------------
+
+def _get_user_id():
+    """Return the current user's ID. Reads from .env, falls back to API."""
+    if USER_ID:
+        return USER_ID
+    # Auto-discover: query account roles, pick the first owner
+    result = query({"_root": [{"account": [
+        {"roles": ["userId", "role"]}
+    ]}]})
+    for entry in (result.get("accountRole") or {}).values():
+        if entry.get("role") == "owner":
+            return entry.get("userId") or entry.get("user_id")
+    # Fallback: first role found
+    for entry in (result.get("accountRole") or {}).values():
+        uid = entry.get("userId") or entry.get("user_id")
+        if uid:
+            return uid
+    print("[ERROR] Could not determine your user ID. "
+          "Run: py codecks_api.py setup", file=sys.stderr)
+    sys.exit(1)
+
+
+def list_hand():
+    """Query the current user's hand (queueEntries)."""
+    q = {"_root": [{"account": [{"queueEntries": [
+        "card", "sortIndex", "user"
+    ]}]}]}
+    return query(q)
+
+
+def add_to_hand(card_ids):
+    """Add cards to the current user's hand."""
+    user_id = _get_user_id()
+    return session_request("/dispatch/handQueue/setCardOrders", {
+        "sessionId": str(uuid.uuid4()),
+        "userId": user_id,
+        "cardIds": card_ids,
+        "draggedCardIds": card_ids,
+    })
+
+
+def remove_from_hand(card_ids):
+    """Remove cards from the current user's hand."""
+    return session_request("/dispatch/handQueue/removeCards", {
+        "sessionId": str(uuid.uuid4()),
+        "cardIds": card_ids,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -1043,6 +1202,57 @@ def _setup_discover_milestones():
     print(f"  Saved {len(milestone_pairs)} milestone(s) to .env\n")
 
 
+def _setup_discover_user():
+    """Discover current user ID from account roles and save to .env."""
+    global USER_ID
+    print("Discovering your user ID...")
+    result = _try_call(query, {"_root": [{"account": [
+        {"roles": ["userId", "role", {"user": ["id", "name"]}]}
+    ]}]})
+    if not result or not result.get("accountRole"):
+        print("  Could not fetch users. Skipping user ID discovery.")
+        return
+    roles = result.get("accountRole", {})
+    users = []
+    for entry in roles.values():
+        uid = entry.get("userId") or entry.get("user_id")
+        role = entry.get("role", "")
+        udata = (result.get("user") or {}).get(uid, {})
+        name = udata.get("name", "")
+        users.append({"id": uid, "name": name, "role": role})
+    if not users:
+        print("  No users found.")
+        return
+    if len(users) == 1:
+        user = users[0]
+        save_env_value("CODECKS_USER_ID", user["id"])
+        USER_ID = user["id"]
+        print(f"  Found user: {user['name']} ({user['role']})")
+        print(f"  Saved to .env\n")
+        return
+    # Multiple users — ask which one
+    print(f"  Found {len(users)} user(s):")
+    for i, u in enumerate(users, 1):
+        print(f"    {i}. {u['name']} ({u['role']})")
+    print()
+    while True:
+        choice = input(f"  Which user are you? [1]: ").strip()
+        if choice == "" or choice == "1":
+            idx = 0
+            break
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(users):
+                break
+        except ValueError:
+            pass
+        print(f"  Enter a number 1-{len(users)}")
+    user = users[idx]
+    save_env_value("CODECKS_USER_ID", user["id"])
+    USER_ID = user["id"]
+    print(f"  Saved: {user['name']} ({user['role']})\n")
+
+
 def _setup_gdd_optional():
     """Ask about GDD configuration."""
     print("OPTIONAL: Game Design Document")
@@ -1136,6 +1346,7 @@ def cmd_setup():
                 print()
                 _setup_discover_projects()
                 _setup_discover_milestones()
+                _setup_discover_user()
                 _setup_gdd_optional()
                 _setup_done()
                 return
@@ -1261,9 +1472,10 @@ def cmd_setup():
             print("  Re-run setup later to add it.")
         print()
 
-    # --- Auto-discover projects & milestones ---
+    # --- Auto-discover projects, milestones, user ---
     _setup_discover_projects()
     _setup_discover_milestones()
+    _setup_discover_user()
 
     # --- Optional GDD ---
     if full_setup and not has_config:
@@ -1601,15 +1813,22 @@ def _format_cards_table(result):
     if not cards:
         return "No cards found."
     lines = []
-    lines.append(f"{'Status':<14} {'Pri':<5} {'Eff':<4} {'Deck':<20} {'Title':<40} {'ID'}")
-    lines.append("-" * 120)
+    lines.append(f"{'Status':<14} {'Pri':<5} {'Eff':<4} {'Owner':<10} {'Deck':<18} {'Title':<36} {'Tags':<16} {'ID'}")
+    lines.append("-" * 140)
     for key, card in cards.items():
         status = card.get("status", "")
         pri = PRI_LABELS.get(card.get("priority"), "-")
         effort = str(card.get("effort") or "-")
-        deck = _trunc(card.get("deck_name") or card.get("deck_id", ""), 20)
-        title = _trunc(card.get("title", ""), 40)
-        lines.append(f"{status:<14} {pri:<5} {effort:<4} {deck:<20} {title:<40} {key}")
+        owner = _trunc(card.get("owner_name", "") or "-", 10)
+        deck = _trunc(card.get("deck_name") or card.get("deck_id", ""), 18)
+        title_text = card.get("title", "")
+        sub_count = card.get("sub_card_count")
+        if sub_count:
+            title_text = f"{title_text} [{sub_count} sub]"
+        title = _trunc(title_text, 36)
+        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+        tag_str = _trunc(", ".join(tags), 16) if tags else "-"
+        lines.append(f"{status:<14} {pri:<5} {effort:<4} {owner:<10} {deck:<18} {title:<36} {tag_str:<16} {key}")
     lines.append(f"\nTotal: {len(cards)} cards")
     return "\n".join(lines)
 
@@ -1623,15 +1842,25 @@ def _format_card_detail(result):
     for key, card in cards.items():
         lines.append(f"Card:      {key}")
         lines.append(f"Title:     {card.get('title', '')}")
+        is_doc = card.get("is_doc") or card.get("isDoc")
+        if is_doc:
+            lines.append(f"Type:      doc card")
         lines.append(f"Status:    {card.get('status', '')}")
         pri_raw = card.get("priority")
         pri_display = f"{pri_raw} ({PRI_LABELS[pri_raw]})" if pri_raw in PRI_LABELS else "none"
         lines.append(f"Priority:  {pri_display}")
         lines.append(f"Effort:    {card.get('effort') or '-'}")
         lines.append(f"Deck:      {card.get('deck_name', card.get('deck_id', ''))}")
+        lines.append(f"Owner:     {card.get('owner_name') or '-'}")
         ms = card.get("milestone_name", card.get("milestone_id"))
         lines.append(f"Milestone: {ms or '-'}")
+        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+        lines.append(f"Tags:      {', '.join(tags) if tags else '-'}")
+        lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
         lines.append(f"Created:   {card.get('createdAt', '')}")
+        updated = card.get("last_updated_at") or card.get("lastUpdatedAt") or ""
+        if updated:
+            lines.append(f"Updated:   {updated}")
         content = card.get("content", "")
         if content:
             body_lines = content.split("\n", 1)
@@ -1718,6 +1947,79 @@ def _format_stats_table(stats):
     lines.append("By Deck:")
     for deck, count in sorted(stats["by_deck"].items()):
         lines.append(f"  {deck:<24} {count}")
+    return "\n".join(lines)
+
+
+def _resolve_activity_val(field, val, ms_names, user_names):
+    """Resolve a diff value to a human-readable string."""
+    if val is None:
+        return "none"
+    if field == "priority":
+        return PRI_LABELS.get(val, val)
+    if field == "milestoneId" and ms_names:
+        return ms_names.get(val, val)
+    if field == "assigneeId" and user_names:
+        return user_names.get(val, val)
+    return val
+
+
+def _format_activity_table(result):
+    """Format activity feed as readable text."""
+    activities = result.get("activity", {})
+    if not activities:
+        return "No activity found."
+    users = result.get("user", {})
+    decks = result.get("deck", {})
+    ms_names = _load_milestone_names()
+    user_names = _load_users()
+    cards = result.get("card", {})
+    lines = []
+    lines.append(f"{'Time':<18} {'Type':<18} {'By':<12} {'Deck':<16} {'Details'}")
+    lines.append("-" * 120)
+    for key, act in activities.items():
+        ts = (act.get("createdAt") or "")[:16].replace("T", " ")
+        atype = act.get("type", "?")
+        changer_id = act.get("changer")
+        changer = users.get(changer_id, {}).get("name", "") if changer_id else ""
+        deck_id = act.get("deck")
+        deck_name = decks.get(deck_id, {}).get("title", "") if deck_id else ""
+        data = act.get("data", {})
+        diff = data.get("diff", {})
+        # Build details string
+        details = ""
+        if diff:
+            parts = []
+            for field, change in diff.items():
+                if field == "tags":
+                    continue  # Skip — masterTags is authoritative
+                if field == "masterTags":
+                    if isinstance(change, dict):
+                        added = change.get("+", [])
+                        removed = change.get("-", [])
+                        if added:
+                            parts.append(f"tags +[{', '.join(added)}]")
+                        if removed:
+                            parts.append(f"tags -[{', '.join(removed)}]")
+                    continue
+                label = field.replace("Id", "").replace("_", " ")
+                if isinstance(change, list) and len(change) == 2:
+                    old, new = change
+                    old = _resolve_activity_val(field, old, ms_names, user_names)
+                    new = _resolve_activity_val(field, new, ms_names, user_names)
+                    parts.append(f"{label}: {old} -> {new}")
+                elif isinstance(change, dict):
+                    added = change.get("+", [])
+                    removed = change.get("-", [])
+                    if added:
+                        parts.append(f"{label} +[{', '.join(str(v) for v in added)}]")
+                    if removed:
+                        parts.append(f"{label} -[{', '.join(str(v) for v in removed)}]")
+                else:
+                    parts.append(f"{label}: {change}")
+            details = "; ".join(parts)
+        details = _trunc(details, 60) if details else ""
+        lines.append(f"{ts:<18} {atype:<18} {changer:<12} {_trunc(deck_name, 16):<16} {details}")
+    lines.append(f"\nTotal: {len(activities)} events")
     return "\n".join(lines)
 
 
@@ -1808,14 +2110,18 @@ def _format_cards_csv(result):
     cards = result.get("card", {})
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["status", "priority", "effort", "deck", "title", "id"])
+    writer.writerow(["status", "priority", "effort", "deck", "owner", "title",
+                     "tags", "id"])
     for key, card in cards.items():
+        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
         writer.writerow([
             card.get("status", ""),
             PRI_LABELS.get(card.get("priority"), ""),
             card.get("effort") or "",
             card.get("deck_name") or card.get("deck_id", ""),
+            card.get("owner_name", ""),
             card.get("title", ""),
+            ", ".join(tags) if tags else "",
             key,
         ])
     return buf.getvalue().rstrip()
@@ -1855,6 +2161,7 @@ def parse_flags(args, flag_names, bool_flag_names=None):
 # ---------------------------------------------------------------------------
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(0)
@@ -1912,8 +2219,8 @@ def main():
     elif cmd == "cards":
         flags, _ = parse_flags(args,
                                ["deck", "status", "project", "search",
-                                "milestone", "sort"],
-                               bool_flag_names=["stats"])
+                                "milestone", "sort", "tag", "owner"],
+                               bool_flag_names=["stats", "hand", "archived"])
         if flags.get("status") and flags["status"] not in VALID_STATUSES:
             print(f"[ERROR] Invalid status '{flags['status']}'. "
                   f"Use: {', '.join(sorted(VALID_STATUSES))}",
@@ -1931,9 +2238,23 @@ def main():
             project_filter=flags.get("project"),
             search_filter=flags.get("search"),
             milestone_filter=flags.get("milestone"),
+            tag_filter=flags.get("tag"),
+            owner_filter=flags.get("owner"),
+            archived=flags.get("archived", False),
         )
-        # Enrich cards with deck/milestone names
-        result["card"] = _enrich_cards(result.get("card", {}))
+        # Filter to hand cards if requested
+        if flags.get("hand"):
+            hand_result = list_hand()
+            hand_card_ids = set()
+            for entry in (hand_result.get("queueEntry") or {}).values():
+                cid = entry.get("card") or entry.get("cardId")
+                if cid:
+                    hand_card_ids.add(cid)
+            result["card"] = {k: v for k, v in result.get("card", {}).items()
+                              if k in hand_card_ids}
+        # Enrich cards with deck/milestone/owner names
+        result["card"] = _enrich_cards(result.get("card", {}),
+                                       result.get("user"))
 
         # Sort cards if requested
         if sort_field and result.get("card"):
@@ -1943,16 +2264,22 @@ def main():
                 "effort": "effort",
                 "deck": "deck_name",
                 "title": "title",
+                "owner": "owner_name",
+                "updated": "lastUpdatedAt",
+                "created": "createdAt",
             }
             field = sort_key_map[sort_field]
+            # Date fields sort newest-first; others sort ascending
+            reverse = sort_field in ("updated", "created")
             def _sort_val(item):
                 v = item[1].get(field)
                 if v is None or v == "":
-                    return (1, "")  # Blanks sort last
+                    return (1, "") if not reverse else (-1, "")
                 if isinstance(v, (int, float)):
                     return (0, v)
                 return (0, str(v).lower())
-            sorted_items = sorted(result["card"].items(), key=_sort_val)
+            sorted_items = sorted(result["card"].items(), key=_sort_val,
+                                  reverse=reverse)
             result["card"] = dict(sorted_items)
 
         if flags.get("stats"):
@@ -1967,50 +2294,68 @@ def main():
             print("Usage: py codecks_api.py card <card_id>", file=sys.stderr)
             sys.exit(1)
         result = get_card(args[0])
-        result["card"] = _enrich_cards(result.get("card", {}))
+        result["card"] = _enrich_cards(result.get("card", {}),
+                                       result.get("user"))
+        # Check if this card is in hand
+        hand_result = list_hand()
+        hand_card_ids = set()
+        for entry in (hand_result.get("queueEntry") or {}).values():
+            cid = entry.get("card") or entry.get("cardId")
+            if cid:
+                hand_card_ids.add(cid)
+        for card_key, card in result.get("card", {}).items():
+            card["in_hand"] = card_key in hand_card_ids
         output(result, _format_card_detail, fmt)
 
     elif cmd == "create":
         if not args:
             print("Usage: py codecks_api.py create <title> [--deck <name>] "
-                  "[--project <name>] [--content <text>] [--severity critical|high|low]",
-                  file=sys.stderr)
+                  "[--project <name>] [--content <text>] [--severity ...] "
+                  "[--doc]", file=sys.stderr)
             sys.exit(1)
         title = args[0]
-        flags, _ = parse_flags(args[1:], ["content", "severity", "deck", "project"])
+        flags, _ = parse_flags(args[1:], ["content", "severity", "deck", "project"],
+                               bool_flag_names=["doc"])
         result = create_card(title, flags.get("content"), flags.get("severity"))
         card_id = result.get("cardId", "")
         # Optionally move to a specific deck or project's first deck
         placed_in = None
+        post_update = {}
         if flags.get("deck"):
-            deck_id = _resolve_deck_id(flags["deck"])
-            update_card(card_id, deckId=deck_id)
+            post_update["deckId"] = _resolve_deck_id(flags["deck"])
             placed_in = flags["deck"]
         elif flags.get("project"):
             decks_result = list_decks()
             project_deck_ids = _get_project_deck_ids(decks_result, flags["project"])
             if project_deck_ids:
-                update_card(card_id, deckId=next(iter(project_deck_ids)))
+                post_update["deckId"] = next(iter(project_deck_ids))
                 placed_in = flags["project"]
             else:
                 print(f"[ERROR] Project '{flags['project']}' not found.",
                       file=sys.stderr)
+        if flags.get("doc"):
+            post_update["isDoc"] = True
+        if post_update:
+            update_card(card_id, **post_update)
         detail = f"title='{title}'"
         if placed_in:
             detail += f", deck='{placed_in}'"
+        if flags.get("doc"):
+            detail += ", type=doc"
         _mutation_response("Created", card_id, detail, result, fmt)
 
     elif cmd == "update":
         if not args:
-            print("Usage: py codecks_api.py update <id> [--status ...] [--priority ...] "
-                  "[--effort ...] [--deck ...] [--title ...] [--content ...] "
-                  "[--milestone ...] [--hero ...]", file=sys.stderr)
+            print("Usage: py codecks_api.py update <id> [id...] [--status ...] "
+                  "[--priority ...] [--effort ...] [--deck ...] [--title ...] "
+                  "[--content ...] [--milestone ...] [--hero ...] [--owner ...] "
+                  "[--tag ...] [--doc true|false]", file=sys.stderr)
             sys.exit(1)
-        card_id = args[0]
-        flags, _ = parse_flags(args[1:], [
+        flags, remaining = parse_flags(args, [
             "status", "priority", "effort", "deck", "title", "content",
-            "milestone", "hero",
+            "milestone", "hero", "owner", "tag", "doc",
         ])
+        card_ids = remaining if remaining else [args[0]]
 
         update_kwargs = {}
 
@@ -2048,8 +2393,12 @@ def main():
             update_kwargs["deckId"] = _resolve_deck_id(flags["deck"])
 
         if "title" in flags:
+            if len(card_ids) > 1:
+                print("[ERROR] --title can only be used with a single card.",
+                      file=sys.stderr)
+                sys.exit(1)
             # Title = first line of content. Fetch current content, replace first line.
-            card_data = get_card(card_id)
+            card_data = get_card(card_ids[0])
             for k, c in card_data.get("card", {}).items():
                 old_content = c.get("content", "")
                 parts = old_content.split("\n", 1)
@@ -2058,6 +2407,10 @@ def main():
                 break
 
         if "content" in flags:
+            if len(card_ids) > 1:
+                print("[ERROR] --content can only be used with a single card.",
+                      file=sys.stderr)
+                sys.exit(1)
             update_kwargs["content"] = flags["content"]
 
         if "milestone" in flags:
@@ -2074,14 +2427,62 @@ def main():
             else:
                 update_kwargs["parentCardId"] = val
 
+        if "owner" in flags:
+            val = flags["owner"]
+            if val.lower() == "none":
+                update_kwargs["assigneeId"] = None
+            else:
+                user_map = _load_users()
+                owner_id = None
+                for uid, name in user_map.items():
+                    if name.lower() == val.lower():
+                        owner_id = uid
+                        break
+                if owner_id is None:
+                    available = list(user_map.values())
+                    hint = f" Available: {', '.join(available)}" if available else ""
+                    print(f"[ERROR] Owner '{val}' not found.{hint}",
+                          file=sys.stderr)
+                    sys.exit(1)
+                update_kwargs["assigneeId"] = owner_id
+
+        if "tag" in flags:
+            val = flags["tag"]
+            if val.lower() == "none":
+                update_kwargs["masterTags"] = []
+            else:
+                # Comma-separated tags: "bug,ui,feature"
+                new_tags = [t.strip() for t in val.split(",") if t.strip()]
+                update_kwargs["masterTags"] = new_tags
+
+        if "doc" in flags:
+            val = flags["doc"].lower()
+            if val in ("true", "yes", "1"):
+                update_kwargs["isDoc"] = True
+            elif val in ("false", "no", "0"):
+                update_kwargs["isDoc"] = False
+            else:
+                print(f"[ERROR] Invalid --doc value '{flags['doc']}'. Use true or false.",
+                      file=sys.stderr)
+                sys.exit(1)
+
         if not update_kwargs:
-            print("[ERROR] No update flags provided. Use --status, --priority, --effort, etc.",
+            print("[ERROR] No update flags provided. Use --status, --priority, "
+                  "--effort, --owner, --tag, --doc, etc.",
                   file=sys.stderr)
             sys.exit(1)
 
-        result = update_card(card_id, **update_kwargs)
+        # Bulk update: apply to each card
+        last_result = None
+        for cid in card_ids:
+            last_result = update_card(cid, **update_kwargs)
         detail_parts = [f"{k}={v}" for k, v in update_kwargs.items()]
-        _mutation_response("Updated", card_id, ", ".join(detail_parts), result, fmt)
+        if len(card_ids) > 1:
+            _mutation_response("Updated", details=f"{len(card_ids)} card(s), "
+                               + ", ".join(detail_parts), data=last_result, fmt=fmt)
+        else:
+            _mutation_response("Updated", card_ids[0], ", ".join(detail_parts),
+                               last_result, fmt)
 
     elif cmd in ("archive", "remove"):
         if not args:
@@ -2125,6 +2526,56 @@ def main():
         result = bulk_status(args, "started")
         _mutation_response("Marked started", details=f"{len(args)} card(s)",
                            data=result, fmt=fmt)
+
+    elif cmd == "hand":
+        if not args:
+            # No args = list hand cards
+            hand_result = list_hand()
+            hand_card_ids = set()
+            for entry in (hand_result.get("queueEntry") or {}).values():
+                cid = entry.get("card") or entry.get("cardId")
+                if cid:
+                    hand_card_ids.add(cid)
+            if not hand_card_ids:
+                print("Your hand is empty.", file=sys.stderr)
+                sys.exit(0)
+            # Fetch card details for the hand cards
+            result = list_cards()
+            filtered = {k: v for k, v in result.get("card", {}).items()
+                        if k in hand_card_ids}
+            result["card"] = _enrich_cards(filtered, result.get("user"))
+            output(result, _format_cards_table, fmt,
+                   csv_formatter=_format_cards_csv)
+        else:
+            result = add_to_hand(args)
+            _mutation_response("Added to hand", details=f"{len(args)} card(s)",
+                               data=result, fmt=fmt)
+
+    elif cmd == "unhand":
+        if not args:
+            print("Usage: py codecks_api.py unhand <card_id> [card_id...]",
+                  file=sys.stderr)
+            sys.exit(1)
+        result = remove_from_hand(args)
+        _mutation_response("Removed from hand", details=f"{len(args)} card(s)",
+                           data=result, fmt=fmt)
+
+    elif cmd == "activity":
+        flags, _ = parse_flags(args, ["limit"])
+        limit = 20
+        if "limit" in flags:
+            try:
+                limit = int(flags["limit"])
+            except ValueError:
+                print("[ERROR] --limit must be a number.", file=sys.stderr)
+                sys.exit(1)
+        result = list_activity(limit)
+        # Trim to limit
+        activities = result.get("activity", {})
+        if len(activities) > limit:
+            trimmed = dict(list(activities.items())[:limit])
+            result["activity"] = trimmed
+        output(result, _format_activity_table, fmt)
 
     elif cmd == "generate-token":
         flags, _ = parse_flags(args, ["label"])
