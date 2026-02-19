@@ -19,6 +19,8 @@ Commands:
   projects                - List all projects (derived from decks)
   milestones              - List all milestones
   create <title>          - Create a card via Report Token (stable, no expiry)
+    --deck <name>           Place card in a specific deck
+    --project <name>        Place card in first deck of a project
     --content <text>        Card description/content
     --severity <level>      critical, high, low, or null
   update <id>             - Update card properties (uses session token)
@@ -30,7 +32,7 @@ Commands:
     --content <text>        Update card description
     --milestone <name>      Assign to milestone (use "none" to clear)
     --hero <parent_id>      Make this a sub-card of a hero card (use "none" to detach)
-  archive <id>            - Remove a card (reversible, this is the standard way)
+  archive|remove <id>     - Remove a card (reversible, this is the standard way)
   unarchive <id>          - Restore an archived card
   delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
   done <id> [id...]       - Mark one or more cards as done
@@ -104,7 +106,7 @@ def _safe_json_parse(text, context="input"):
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON in {context}: {e.msg} at position {e.pos}",
+        print(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}",
               file=sys.stderr)
         sys.exit(1)
 
@@ -140,7 +142,7 @@ def session_request(path="/", data=None, method="POST"):
             try:
                 return json.loads(resp.read().decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
-                print("Unexpected response from Codecks API (not valid JSON).",
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
                       file=sys.stderr)
                 sys.exit(1)
     except urllib.error.HTTPError as e:
@@ -151,22 +153,22 @@ def session_request(path="/", data=None, method="POST"):
                   "(Brave > F12 > Network > api.codecks.io request > Cookie header > at=...).",
                   file=sys.stderr)
             sys.exit(2)
-        print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
         sys.exit(1)
     except socket.timeout:
-        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
               file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
-        print(f"Connection failed: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
 def report_request(content, severity=None, email=None):
     """Create a card via the Report Token endpoint (stable, no expiry)."""
     if not REPORT_TOKEN:
-        print("CODECKS_REPORT_TOKEN not set in .env. Run: py codecks_api.py generate-token",
+        print("[ERROR] CODECKS_REPORT_TOKEN not set in .env. Run: py codecks_api.py generate-token",
               file=sys.stderr)
         sys.exit(1)
     payload = {"content": content}
@@ -185,31 +187,31 @@ def report_request(content, severity=None, email=None):
             try:
                 return json.loads(resp.read().decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
-                print("Unexpected response from Codecks API (not valid JSON).",
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
                       file=sys.stderr)
                 sys.exit(1)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""
         if e.code == 401:
-            print("Report token is invalid or disabled. Generate a new one: "
+            print("[ERROR] Report token is invalid or disabled. Generate a new one: "
                   "py codecks_api.py generate-token", file=sys.stderr)
             sys.exit(1)
-        print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
         sys.exit(1)
     except socket.timeout:
-        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
               file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
-        print(f"Connection failed: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
 def generate_report_token(label="claude-code"):
     """Use the Access Key to create a new Report Token and save it to .env."""
     if not ACCESS_KEY:
-        print("CODECKS_ACCESS_KEY not set in .env.", file=sys.stderr)
+        print("[ERROR] CODECKS_ACCESS_KEY not set in .env.", file=sys.stderr)
         sys.exit(1)
     # NOTE: Access key in URL query param is required by Codecks API design.
     url = f"{BASE_URL}/user-report/v1/create-report-token?accessKey={ACCESS_KEY}"
@@ -221,31 +223,33 @@ def generate_report_token(label="claude-code"):
             try:
                 result = json.loads(resp.read().decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
-                print("Unexpected response from Codecks API (not valid JSON).",
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
                       file=sys.stderr)
                 sys.exit(1)
             if result.get("ok") and result.get("token"):
                 save_env_value("CODECKS_REPORT_TOKEN", result["token"])
                 return result
-            print("Unexpected response:", result, file=sys.stderr)
+            print("[ERROR] Unexpected response:", result, file=sys.stderr)
             sys.exit(1)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""
-        print(f"HTTP Error {e.code}: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
         print(_sanitize_error(error_body), file=sys.stderr)
         sys.exit(1)
     except socket.timeout:
-        print("Request timed out after 30 seconds. Is Codecks API reachable?",
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
               file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
-        print(f"Connection failed: {e.reason}", file=sys.stderr)
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
 def query(q):
     """Run a Codecks query (uses session token)."""
-    return session_request("/", {"query": q})
+    result = session_request("/", {"query": q})
+    result.pop("_root", None)
+    return result
 
 
 def warn_if_empty(result, relation):
@@ -293,22 +297,30 @@ def _load_milestone_names():
 # Query helpers
 # ---------------------------------------------------------------------------
 
+_cache = {}
+
+
 def get_account():
     q = {"_root": [{"account": ["name", "id"]}]}
     return query(q)
 
 
 def list_decks():
+    if "decks" in _cache:
+        return _cache["decks"]
     q = {"_root": [{"account": [{"decks": ["title", "id", "projectId"]}]}]}
     result = query(q)
     warn_if_empty(result, "deck")
+    _cache["decks"] = result
     return result
 
 
 def list_cards(deck_filter=None, status_filter=None, project_filter=None,
                search_filter=None):
-    card_fields = ["title", "status", "priority", "deckId", "content", "effort",
+    card_fields = ["title", "status", "priority", "deckId", "effort",
                    "createdAt", "milestoneId"]
+    if search_filter:
+        card_fields.append("content")
     card_query = {"visibility": "default"}
     if status_filter:
         card_query["status"] = status_filter
@@ -324,7 +336,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         if deck_id:
             card_query["deckId"] = deck_id
         else:
-            print(f"Deck '{deck_filter}' not found.", file=sys.stderr)
+            print(f"[ERROR] Deck '{deck_filter}' not found.", file=sys.stderr)
             sys.exit(1)
 
     q = {"_root": [{"account": [{f"cards({json.dumps(card_query)})": card_fields}]}]}
@@ -336,7 +348,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         decks_result = list_decks()
         project_deck_ids = _get_project_deck_ids(decks_result, project_filter)
         if project_deck_ids is None:
-            print(f"Project '{project_filter}' not found.", file=sys.stderr)
+            print(f"[ERROR] Project '{project_filter}' not found.", file=sys.stderr)
             sys.exit(1)
         filtered_cards = {}
         for key, card in result.get("card", {}).items():
@@ -565,7 +577,7 @@ def _resolve_deck_id(deck_name):
     for key, deck in decks_result.get("deck", {}).items():
         if deck.get("title", "").lower() == deck_name.lower():
             return deck.get("id")
-    print(f"Deck '{deck_name}' not found.", file=sys.stderr)
+    print(f"[ERROR] Deck '{deck_name}' not found.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -575,7 +587,7 @@ def _resolve_milestone_id(milestone_name):
     for mid, name in milestone_names.items():
         if name.lower() == milestone_name.lower():
             return mid
-    print(f"Milestone '{milestone_name}' not found in CODECKS_MILESTONES. "
+    print(f"[ERROR] Milestone '{milestone_name}' not found in CODECKS_MILESTONES. "
           "Add it to .env: CODECKS_MILESTONES=<id>=<name>", file=sys.stderr)
     sys.exit(1)
 
@@ -608,8 +620,18 @@ def _mutation_response(action, card_id=None, details=None, data=None, fmt="json"
         parts.append(details)
     summary = ": ".join(parts)
     print(f"OK: {summary}")
-    if fmt == "json" and data is not None:
+    if fmt == "json" and data and data != {}:
+        # Suppress dispatch noise (empty payload + actionId only)
+        if set(data.keys()) <= {"payload", "actionId"} and data.get("payload") in (None, {}):
+            return
         print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _trunc(s, maxlen):
+    """Truncate string with ellipsis indicator."""
+    if not s:
+        return ""
+    return s[:maxlen - 1] + "\u2026" if len(s) > maxlen else s
 
 
 # --- Table formatters ---
@@ -627,8 +649,8 @@ def _format_cards_table(result):
         status = card.get("status", "")
         pri = card.get("priority") or "-"
         effort = str(card.get("effort") or "-")
-        deck = (card.get("deck_name") or card.get("deck_id", ""))[:20]
-        title = card.get("title", "")[:40]
+        deck = _trunc(card.get("deck_name") or card.get("deck_id", ""), 20)
+        title = _trunc(card.get("title", ""), 40)
         lines.append(f"{status:<14} {pri:<5} {effort:<4} {deck:<20} {title:<40} {key}")
     lines.append(f"\nTotal: {len(cards)} cards")
     return "\n".join(lines)
@@ -663,6 +685,8 @@ def _format_card_detail(result):
             for ckey in child_cards[:10]:
                 child = child_data.get(ckey, {})
                 lines.append(f"  - [{child.get('status', '?')}] {child.get('title', ckey)}")
+            if len(child_cards) > 10:
+                lines.append(f"  ... and {len(child_cards) - 10} more")
         lines.append("")
     return "\n".join(lines)
 
@@ -677,7 +701,7 @@ def _format_decks_table(result):
     lines.append(f"{'Title':<30} {'Project':<20} {'ID'}")
     lines.append("-" * 90)
     for key, deck in decks.items():
-        title = deck.get("title", "")[:30]
+        title = _trunc(deck.get("title", ""), 30)
         pid = deck.get("project_id") or deck.get("projectId") or ""
         proj = project_names.get(pid, pid[:12])
         lines.append(f"{title:<30} {proj:<20} {deck.get('id', key)}")
@@ -834,14 +858,33 @@ def main():
 
     elif cmd == "create":
         if not args:
-            print("Usage: py codecks_api.py create <title> [--content <text>] "
-                  "[--severity critical|high|low]", file=sys.stderr)
+            print("Usage: py codecks_api.py create <title> [--deck <name>] "
+                  "[--project <name>] [--content <text>] [--severity critical|high|low]",
+                  file=sys.stderr)
             sys.exit(1)
         title = args[0]
-        flags, _ = parse_flags(args[1:], ["content", "severity"])
+        flags, _ = parse_flags(args[1:], ["content", "severity", "deck", "project"])
         result = create_card(title, flags.get("content"), flags.get("severity"))
         card_id = result.get("cardId", "")
-        _mutation_response("Created", card_id, f"title='{title}'", result, fmt)
+        # Optionally move to a specific deck or project's first deck
+        placed_in = None
+        if flags.get("deck"):
+            deck_id = _resolve_deck_id(flags["deck"])
+            update_card(card_id, deckId=deck_id)
+            placed_in = flags["deck"]
+        elif flags.get("project"):
+            decks_result = list_decks()
+            project_deck_ids = _get_project_deck_ids(decks_result, flags["project"])
+            if project_deck_ids:
+                update_card(card_id, deckId=next(iter(project_deck_ids)))
+                placed_in = flags["project"]
+            else:
+                print(f"[ERROR] Project '{flags['project']}' not found.",
+                      file=sys.stderr)
+        detail = f"title='{title}'"
+        if placed_in:
+            detail += f", deck='{placed_in}'"
+        _mutation_response("Created", card_id, detail, result, fmt)
 
     elif cmd == "update":
         if not args:
@@ -872,7 +915,7 @@ def main():
                 try:
                     update_kwargs["effort"] = int(val)
                 except ValueError:
-                    print(f"Invalid effort value '{val}': must be a number or 'null'",
+                    print(f"[ERROR] Invalid effort value '{val}': must be a number or 'null'",
                           file=sys.stderr)
                     sys.exit(1)
 
@@ -907,7 +950,7 @@ def main():
                 update_kwargs["parentCardId"] = val
 
         if not update_kwargs:
-            print("No update flags provided. Use --status, --priority, --effort, etc.",
+            print("[ERROR] No update flags provided. Use --status, --priority, --effort, etc.",
                   file=sys.stderr)
             sys.exit(1)
 
@@ -915,7 +958,7 @@ def main():
         detail_parts = [f"{k}={v}" for k, v in update_kwargs.items()]
         _mutation_response("Updated", card_id, ", ".join(detail_parts), result, fmt)
 
-    elif cmd == "archive":
+    elif cmd in ("archive", "remove"):
         if not args:
             print("Usage: py codecks_api.py archive <card_id>", file=sys.stderr)
             sys.exit(1)
@@ -936,7 +979,7 @@ def main():
         flags, remaining = parse_flags(args, [], bool_flag_names=["confirm"])
         card_id = remaining[0] if remaining else args[0]
         if not flags.get("confirm"):
-            print("Permanent deletion requires --confirm flag.", file=sys.stderr)
+            print("[ERROR] Permanent deletion requires --confirm flag.", file=sys.stderr)
             print(f"Did you mean: py codecks_api.py archive {card_id}",
                   file=sys.stderr)
             sys.exit(1)
@@ -973,7 +1016,7 @@ def main():
         output(result, fmt=fmt)
 
     else:
-        print(f"Unknown command: {cmd}", file=sys.stderr)
+        print(f"[ERROR] Unknown command: {cmd}", file=sys.stderr)
         print(__doc__)
         sys.exit(1)
 

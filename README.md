@@ -102,11 +102,17 @@ py codecks_api.py milestones
 ### Creating cards
 
 ```bash
-# Simple card
+# Simple card (lands in Inbox by default)
 py codecks_api.py create "Fix login bug"
 
 # Card with description and severity
 py codecks_api.py create "Server crash on startup" --content "Happens after the latest deploy" --severity critical
+
+# Create directly into a specific deck
+py codecks_api.py create "Refactor save system" --deck "Coding"
+
+# Create into the first deck of a project
+py codecks_api.py create "New tea recipe" --project "Tea Shop"
 ```
 
 Severity levels: `critical`, `high`, `low`, or `null`.
@@ -161,15 +167,18 @@ py codecks_api.py start <id1> <id2>
 ### Archiving and deleting
 
 ```bash
-# Archive (reversible)
+# Archive (reversible) — the default way to remove cards
 py codecks_api.py archive <id>
+py codecks_api.py remove <id>    # same as archive
 
 # Unarchive
 py codecks_api.py unarchive <id>
 
-# Permanently delete (cannot be undone!)
-py codecks_api.py delete <id>
+# Permanently delete (requires --confirm flag)
+py codecks_api.py delete <id> --confirm
 ```
+
+Without `--confirm`, `delete` will remind you to use `archive` instead — just like Codecks does in the browser.
 
 ### Token management
 
@@ -216,11 +225,13 @@ py codecks_api.py card <id> --format table
 Status         Pri   Eff  Deck                 Title                                    ID
 ------------------------------------------------------------------------------------------------------------------------
 not_started    a     8    Core Systems         Day/Night & Season Cycle                 839c6c81-033d-...
-started        b     3    Tasks                Fix inventory drag                       3e770f44-0658-...
+started        b     3    Tasks                Fix inventory drag & drop syst…          3e770f44-0658-...
 done           a     5    Craftable Items      Planks                                   839c6c93-033d-...
 
 Total: 3 cards
 ```
+
+Long titles and deck names are truncated with `…` so the table stays readable.
 
 ### Example stats output
 
@@ -263,7 +274,7 @@ The script uses three tokens, each for a different purpose:
 | `CODECKS_REPORT_TOKEN` | Creating cards | URL query parameter | Never (until disabled) |
 | `CODECKS_ACCESS_KEY` | Generating new report tokens | URL query parameter | Never |
 
-**When the session token expires**, the script prints `[TOKEN_EXPIRED]` and tells you how to get a fresh one from your browser DevTools.
+**When the session token expires**, the script prints `[TOKEN_EXPIRED]` and tells you how to get a fresh one from your browser DevTools. All other errors are prefixed with `[ERROR]` for easy detection.
 
 ## Known quirks
 
@@ -274,6 +285,8 @@ These are Codecks API behaviors to be aware of:
 - **Response fields are snake_case** (`deck_id`, `project_id`) but query fields are camelCase (`deckId`, `projectId`).
 - **Expired tokens return empty data**, not a 401 error. The script detects this and warns you.
 - **Rate limit:** 40 requests per 5 seconds per IP.
+- **30-second timeout** on all HTTP requests to prevent hangs.
+- **Delete requires `--confirm`** to prevent accidental permanent deletion. Without it, the script suggests `archive` instead.
 - **Report tokens in URL params** is the official API design. Treat them as rotatable credentials.
 
 ## Using with an AI agent
@@ -286,8 +299,20 @@ This script is designed to be called by an AI coding agent like Claude Code. The
 4. Use `--search` to find specific cards without scanning everything
 5. Chain `--project`, `--deck`, `--status`, and `--search` filters to narrow results
 6. Look for the `OK:` prefix on mutation responses to confirm success
+7. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
+8. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
+9. Use `remove` as a natural alias for `archive`
 
 The AI agent's project memory file should include the full command reference and the project/milestone UUID mappings.
+
+### Token efficiency
+
+The script is optimized to minimize context window usage for AI agents:
+
+- **Card lists omit descriptions** — the `content` field is only included when using `--search` (which needs it for matching). Use `card <id>` to get full details for a specific card.
+- **Mutation responses are clean** — `update`, `archive`, `done`, `start` print only `OK: ...` with no redundant data. `create` still returns the new card ID.
+- **API metadata is stripped** — internal `_root` keys are removed from all query responses.
+- **Deck lookups are cached** — commands that need deck data make only one API call per invocation, even if multiple filters reference decks.
 
 ## File structure
 
