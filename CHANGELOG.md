@@ -4,6 +4,24 @@ All notable changes to codecks-cli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-02-19
+
+### Added
+- Google OAuth2 for private Google Docs — no more browser extraction needed
+  - `gdd-auth` command — one-time authorization flow (opens browser)
+  - `gdd-revoke` command — revoke access and delete local tokens
+  - Auto-refreshing access tokens (silent, no user interaction)
+  - Falls back to public URL if OAuth not configured
+- Zero cost: uses free Google Drive API (no billing or credit card required)
+
+### Changed
+- `fetch_gdd()` now tries OAuth Bearer token first, then public URL, then cache
+- Improved error messages with setup instructions for private doc access
+
+### Removed
+- `gdd-url` command (replaced by direct OAuth access)
+- Browser extraction workflow (replaced by OAuth2)
+
 ## [0.2.0] - 2026-02-19
 
 ### Added

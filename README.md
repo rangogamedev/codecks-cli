@@ -17,7 +17,7 @@ Codecks doesn't have a public REST API with standard endpoints. Instead it uses 
 - A [Codecks](https://codecks.io) account (free tier works)
 - A `.env` file with your credentials (see Setup)
 
-No external dependencies. Uses only Python standard library (`urllib`, `json`, `os`, `sys`, `re`).
+No external dependencies. Uses only Python standard library (`urllib`, `json`, `os`, `sys`, `re`, `http.server`, `webbrowser`).
 
 ## Setup
 
@@ -270,12 +270,29 @@ py codecks_api.py gdd-sync --project "My Project" --section "Core Gameplay" --ap
 
 ### Private Google Docs
 
-If you don't want to make your GDD public, you have four options:
+If your GDD is private, set up Google OAuth2 (free, one-time, ~5 minutes):
 
-1. **Browser extraction (recommended for AI agents)**: If your AI agent has browser access (e.g. Claude in Chrome), it can fetch the private doc using your authenticated browser session. Set `GDD_GOOGLE_DOC_URL` in `.env`, then the agent runs `gdd-url` to get the export URL, fetches it via the browser's `fetch()` API (which carries your Google cookies), writes the result to `.gdd_cache.md`, and runs `gdd` or `gdd-sync` normally from cache. No public sharing needed.
-2. **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
-3. **AI agent piping**: If your AI agent has Google Docs access (e.g. via MCP), it can read the doc and pipe the content: `--file -` reads from stdin. Add `--save-cache` to save it for offline use.
-4. **Public with obscurity**: Use "Anyone with the link" sharing — the doc isn't indexed or discoverable, only accessible to those who have the URL
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a project (free, no billing needed)
+3. Enable the **Google Drive API** (APIs & Services > Library > search "Drive")
+4. Create an **OAuth 2.0 Client ID** (Credentials > Create Credentials > OAuth client ID > Desktop app)
+5. Copy the Client ID and Client Secret to your `.env`:
+   ```env
+   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   ```
+6. Run the authorization flow (opens your browser):
+   ```bash
+   py codecks_api.py gdd-auth
+   ```
+7. Done! The script will now fetch your private Google Doc automatically. Tokens refresh silently.
+
+To revoke access later: `py codecks_api.py gdd-revoke`
+
+**Other options** (no OAuth needed):
+- **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
+- **AI agent piping**: `--file -` reads from stdin. Add `--save-cache` to save for offline use.
+- **Public with obscurity**: Use "Anyone with the link" sharing — the doc isn't indexed or discoverable
 
 ## Output formats
 

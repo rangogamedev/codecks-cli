@@ -48,19 +48,24 @@ Commands:
     --refresh               Force re-fetch GDD before syncing
     --file <path>           Use a local markdown file (use "-" for stdin)
     --save-cache            Save fetched content to .gdd_cache.md for offline use
-  gdd-url                 - Print the GDD export URL (for browser-based extraction)
+  gdd-auth                - Authorize Google Drive access (opens browser, one-time)
+  gdd-revoke              - Revoke Google Drive authorization and delete tokens
   generate-token          - Generate a new Report Token using the Access Key
     --label <text>          Label for the token (default: claude-code)
   dispatch <path> <json>  - Raw dispatch call (uses session token)
 """
 
+import http.server
 import json
 import os
 import re
 import socket
 import sys
+import time
+import urllib.parse
 import urllib.request
 import urllib.error
+import webbrowser
 
 # Load config from .env
 ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -105,6 +110,16 @@ BASE_URL = "https://api.codecks.io"
 GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
 GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".gdd_cache.md")
 
+# Google OAuth2 (for private Google Doc access)
+GOOGLE_CLIENT_ID = env.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = env.get("GOOGLE_CLIENT_SECRET", "")
+GDD_TOKENS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".gdd_tokens.json")
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+
 
 # ---------------------------------------------------------------------------
 # Security helpers
@@ -134,6 +149,261 @@ def _sanitize_error(body, max_len=500):
     if len(cleaned) > max_len:
         return cleaned[:max_len] + "... [truncated]"
     return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth2 helpers (for private Google Doc access)
+# ---------------------------------------------------------------------------
+
+def _load_gdd_tokens():
+    """Load saved Google OAuth tokens from .gdd_tokens.json."""
+    if not os.path.exists(GDD_TOKENS_PATH):
+        return None
+    try:
+        with open(GDD_TOKENS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _save_gdd_tokens(tokens):
+    """Save Google OAuth tokens to .gdd_tokens.json."""
+    with open(GDD_TOKENS_PATH, "w", encoding="utf-8") as f:
+        json.dump(tokens, f, indent=2)
+
+
+def _google_token_request(params):
+    """POST to Google's token endpoint. Returns parsed JSON or None."""
+    body = urllib.parse.urlencode(params).encode("utf-8")
+    req = urllib.request.Request(GOOGLE_TOKEN_URL, data=body, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, socket.timeout, json.JSONDecodeError) as e:
+        print(f"[ERROR] Google token request failed: {e}", file=sys.stderr)
+        return None
+
+
+def _get_google_access_token():
+    """Get a valid Google access token, auto-refreshing if expired.
+    Returns the access token string, or None if not configured/authorized."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return None
+    tokens = _load_gdd_tokens()
+    if not tokens or "refresh_token" not in tokens:
+        return None
+
+    # Check if access token is still valid (60s buffer)
+    expires_at = tokens.get("expires_at", 0)
+    if time.time() < expires_at - 60:
+        return tokens["access_token"]
+
+    # Refresh the access token
+    result = _google_token_request({
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": tokens["refresh_token"],
+        "grant_type": "refresh_token",
+    })
+    if not result or "access_token" not in result:
+        print("[WARN] Google token refresh failed. Run: py codecks_api.py gdd-auth",
+              file=sys.stderr)
+        return None
+
+    tokens["access_token"] = result["access_token"]
+    tokens["expires_at"] = time.time() + result.get("expires_in", 3600)
+    # Refresh token may be rotated
+    if "refresh_token" in result:
+        tokens["refresh_token"] = result["refresh_token"]
+    _save_gdd_tokens(tokens)
+    return tokens["access_token"]
+
+
+def _fetch_google_doc_content(doc_id):
+    """Fetch Google Doc as markdown. Tries OAuth first, then public fallback.
+    Returns content string, or None on failure."""
+    export_url = (f"https://docs.google.com/document/d/{doc_id}"
+                  f"/export?format=md")
+
+    # Try 1: OAuth Bearer token
+    access_token = _get_google_access_token()
+    if access_token:
+        req = urllib.request.Request(export_url)
+        req.add_header("Authorization", f"Bearer {access_token}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                print("[WARN] Google OAuth token rejected. "
+                      "Run: py codecks_api.py gdd-auth", file=sys.stderr)
+            else:
+                print(f"[WARN] Google Doc fetch with OAuth failed (HTTP {e.code}), "
+                      "trying public URL...", file=sys.stderr)
+        except (urllib.error.URLError, socket.timeout) as e:
+            print(f"[WARN] Google Doc OAuth fetch failed ({e}), "
+                  "trying public URL...", file=sys.stderr)
+
+    # Try 2: Public URL (no auth — works if doc is publicly shared)
+    req = urllib.request.Request(export_url)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print("[ERROR] Google Doc not found. Check GDD_GOOGLE_DOC_URL.",
+                  file=sys.stderr)
+        elif e.code in (401, 403):
+            if GOOGLE_CLIENT_ID:
+                print("[ERROR] Google Doc is private. "
+                      "Run: py codecks_api.py gdd-auth", file=sys.stderr)
+            else:
+                print("[ERROR] Google Doc is private. Set up Google OAuth to "
+                      "access it. See README for setup instructions.",
+                      file=sys.stderr)
+        else:
+            print(f"[ERROR] Google Doc fetch failed (HTTP {e.code}).",
+                  file=sys.stderr)
+        return None
+    except (urllib.error.URLError, socket.timeout) as e:
+        print(f"[ERROR] Google Doc fetch failed: {e}", file=sys.stderr)
+        return None
+
+
+def _run_google_auth_flow():
+    """Run the OAuth2 authorization code flow with a localhost callback.
+    Opens the browser for user consent, captures the code, exchanges for tokens."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        print("[ERROR] Google OAuth not configured. Add GOOGLE_CLIENT_ID and "
+              "GOOGLE_CLIENT_SECRET to .env", file=sys.stderr)
+        print("  See README for setup instructions.", file=sys.stderr)
+        sys.exit(1)
+
+    # Find a free port
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    redirect_uri = f"http://127.0.0.1:{port}"
+    auth_code = [None]  # mutable container for closure
+    server_error = [None]
+
+    class _AuthHandler(http.server.BaseHTTPRequestHandler):
+        """Handle the OAuth redirect callback."""
+        def do_GET(self):
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+            if "code" in params:
+                auth_code[0] = params["code"][0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(
+                    b"<html><body><h2>Authorization successful!</h2>"
+                    b"<p>You can close this tab and return to the terminal.</p>"
+                    b"</body></html>"
+                )
+            elif "error" in params:
+                server_error[0] = params["error"][0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(
+                    b"<html><body><h2>Authorization denied.</h2>"
+                    b"<p>You can close this tab.</p></body></html>"
+                )
+            else:
+                self.send_response(400)
+                self.end_headers()
+
+        def log_message(self, format, *a):
+            pass  # Suppress HTTP server logging
+
+    # Build authorization URL
+    auth_params = urllib.parse.urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": GOOGLE_SCOPE,
+        "access_type": "offline",
+        "prompt": "consent",
+    })
+    auth_url = f"{GOOGLE_AUTH_URL}?{auth_params}"
+
+    # Start local server and open browser
+    server = http.server.HTTPServer(("127.0.0.1", port), _AuthHandler)
+    server.timeout = 120
+
+    print("Opening browser for Google authorization...")
+    print(f"  If the browser doesn't open, visit:\n  {auth_url}")
+    webbrowser.open(auth_url)
+
+    # Wait for the callback (one request only)
+    server.handle_request()
+    server.server_close()
+
+    if server_error[0]:
+        print(f"[ERROR] Authorization denied: {server_error[0]}",
+              file=sys.stderr)
+        sys.exit(1)
+    if not auth_code[0]:
+        print("[ERROR] No authorization code received (timed out after 120s).",
+              file=sys.stderr)
+        sys.exit(1)
+
+    # Exchange code for tokens
+    result = _google_token_request({
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "code": auth_code[0],
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    })
+    if not result or "access_token" not in result:
+        print("[ERROR] Token exchange failed.", file=sys.stderr)
+        sys.exit(1)
+
+    tokens = {
+        "access_token": result["access_token"],
+        "refresh_token": result.get("refresh_token", ""),
+        "expires_at": time.time() + result.get("expires_in", 3600),
+        "token_type": result.get("token_type", "Bearer"),
+    }
+    _save_gdd_tokens(tokens)
+    print("Authorization successful! Google Drive access configured.")
+    print(f"  Tokens saved to {GDD_TOKENS_PATH}")
+
+
+def _revoke_google_auth():
+    """Revoke Google OAuth token and delete local token file."""
+    tokens = _load_gdd_tokens()
+    if not tokens:
+        print("No Google authorization found (nothing to revoke).")
+        return
+
+    # Revoke at Google
+    token = tokens.get("refresh_token") or tokens.get("access_token")
+    if token:
+        body = urllib.parse.urlencode({"token": token}).encode("utf-8")
+        req = urllib.request.Request(GOOGLE_REVOKE_URL, data=body, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status == 200:
+                    print("Token revoked at Google.")
+                else:
+                    print(f"[WARN] Google revoke returned status {resp.status}.",
+                          file=sys.stderr)
+        except (urllib.error.URLError, socket.timeout) as e:
+            print(f"[WARN] Could not reach Google to revoke token: {e}",
+                  file=sys.stderr)
+
+    # Delete local file
+    if os.path.exists(GDD_TOKENS_PATH):
+        os.remove(GDD_TOKENS_PATH)
+        print("Local tokens deleted.")
 
 
 # ---------------------------------------------------------------------------
@@ -641,7 +911,7 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
             print(f"[INFO] GDD cached to {GDD_CACHE_PATH}", file=sys.stderr)
         return content
 
-    # 2. Google Doc fetch (with cache)
+    # 2. Google Doc fetch (OAuth → public URL → cache fallback)
     if GDD_DOC_URL:
         use_cache = (not force_refresh) and os.path.exists(GDD_CACHE_PATH)
         if not use_cache:
@@ -650,38 +920,31 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
                 print("[ERROR] Invalid Google Doc URL in GDD_GOOGLE_DOC_URL.",
                       file=sys.stderr)
                 sys.exit(1)
-            export_url = (f"https://docs.google.com/document/d/{doc_id}"
-                          f"/export?format=md")
-            req = urllib.request.Request(export_url)
-            try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    content = resp.read().decode("utf-8")
-                # Cache locally
+            content = _fetch_google_doc_content(doc_id)
+            if content:
                 with open(GDD_CACHE_PATH, "w", encoding="utf-8") as f:
                     f.write(content)
                 return content
-            except (urllib.error.URLError, socket.timeout) as e:
-                if os.path.exists(GDD_CACHE_PATH):
-                    print(f"[WARN] Google Doc fetch failed ({e}), using cache.",
-                          file=sys.stderr)
-                else:
-                    print(f"[ERROR] Failed to fetch Google Doc: {e}",
-                          file=sys.stderr)
-                    sys.exit(1)
+            # Fetch failed — try cache
+            if os.path.exists(GDD_CACHE_PATH):
+                print("[WARN] Google Doc fetch failed, using cache.",
+                      file=sys.stderr)
+            else:
+                sys.exit(1)
 
         # Use cache
         if os.path.exists(GDD_CACHE_PATH):
             with open(GDD_CACHE_PATH, "r", encoding="utf-8") as f:
                 return f.read()
 
-    # 3. Cache-only fallback (for browser extraction workflow)
+    # 3. Cache-only fallback
     if os.path.exists(GDD_CACHE_PATH):
         with open(GDD_CACHE_PATH, "r", encoding="utf-8") as f:
             return f.read()
 
     # 4. No source configured
     print("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL in .env, "
-          "use --file <path>, or write to .gdd_cache.md.", file=sys.stderr)
+          "use --file <path>, or pipe via --file -", file=sys.stderr)
     sys.exit(1)
 
 
@@ -1396,13 +1659,11 @@ def main():
         )
         output(report, _format_sync_report, fmt)
 
-    elif cmd == "gdd-url":
-        doc_id = _extract_google_doc_id(GDD_DOC_URL) if GDD_DOC_URL else None
-        if not doc_id:
-            print("[ERROR] No GDD doc configured. Set GDD_GOOGLE_DOC_URL "
-                  "in .env.", file=sys.stderr)
-            sys.exit(1)
-        print(f"https://docs.google.com/document/d/{doc_id}/export?format=md")
+    elif cmd == "gdd-auth":
+        _run_google_auth_flow()
+
+    elif cmd == "gdd-revoke":
+        _revoke_google_auth()
 
     elif cmd == "dispatch":
         if len(args) < 2:
