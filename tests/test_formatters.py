@@ -4,11 +4,11 @@ import json
 import pytest
 import config
 from formatters import (
-    _table, _trunc, _mutation_response, _format_account_table,
-    _format_cards_table, _format_card_detail, _format_stats_table,
-    _format_decks_table, _format_projects_table, _format_milestones_table,
-    _format_gdd_table, _format_cards_csv, _format_activity_diff,
-    _resolve_activity_val, output,
+    _table, _trunc, mutation_response, format_account_table,
+    format_cards_table, format_card_detail, format_stats_table,
+    format_decks_table, format_projects_table, format_milestones_table,
+    format_gdd_table, format_cards_csv, format_activity_diff,
+    resolve_activity_val, output,
 )
 
 
@@ -73,29 +73,29 @@ class TestTable:
 
 
 # ---------------------------------------------------------------------------
-# _format_account_table
+# format_account_table
 # ---------------------------------------------------------------------------
 
 class TestFormatAccountTable:
     def test_formats_account(self):
-        result = _format_account_table({
+        result = format_account_table({
             "account": {"acc-id-123": {"name": "MyAccount"}}
         })
         assert "MyAccount" in result
         assert "acc-id-123" in result
 
     def test_no_account_data(self):
-        assert "No account" in _format_account_table({})
-        assert "No account" in _format_account_table({"account": {}})
+        assert "No account" in format_account_table({})
+        assert "No account" in format_account_table({"account": {}})
 
 
 # ---------------------------------------------------------------------------
-# _format_cards_table
+# format_cards_table
 # ---------------------------------------------------------------------------
 
 class TestFormatCardsTable:
     def test_formats_cards(self):
-        result = _format_cards_table({"card": {
+        result = format_cards_table({"card": {
             "c1": {"status": "done", "priority": "a", "effort": 3,
                    "title": "Test Card", "deck_name": "Features",
                    "owner_name": "Thomas", "tags": ["bug"]},
@@ -108,23 +108,23 @@ class TestFormatCardsTable:
         assert "Total: 1 cards" in result
 
     def test_no_cards(self):
-        assert "No cards" in _format_cards_table({"card": {}})
-        assert "No cards" in _format_cards_table({})
+        assert "No cards" in format_cards_table({"card": {}})
+        assert "No cards" in format_cards_table({})
 
     def test_sub_card_count_shown(self):
-        result = _format_cards_table({"card": {
+        result = format_cards_table({"card": {
             "c1": {"title": "Hero", "sub_card_count": 5, "status": "started"},
         }})
         assert "[5 sub]" in result
 
 
 # ---------------------------------------------------------------------------
-# _format_card_detail
+# format_card_detail
 # ---------------------------------------------------------------------------
 
 class TestFormatCardDetail:
     def test_full_card_detail(self):
-        result = _format_card_detail({"card": {
+        result = format_card_detail({"card": {
             "c1": {
                 "title": "Test Card", "status": "started",
                 "priority": "b", "effort": 5,
@@ -146,11 +146,11 @@ class TestFormatCardDetail:
         assert "Some description" in result
 
     def test_card_not_found(self):
-        assert "not found" in _format_card_detail({"card": {}})
+        assert "not found" in format_card_detail({"card": {}})
 
 
 # ---------------------------------------------------------------------------
-# _format_stats_table
+# format_stats_table
 # ---------------------------------------------------------------------------
 
 class TestFormatStatsTable:
@@ -161,7 +161,7 @@ class TestFormatStatsTable:
             "by_priority": {"a": 5, "none": 5},
             "by_deck": {"Features": 10},
         }
-        result = _format_stats_table(stats)
+        result = format_stats_table(stats)
         assert "Total cards: 10" in result
         assert "Total effort: 50" in result
         assert "Avg effort: 5.0" in result
@@ -170,25 +170,25 @@ class TestFormatStatsTable:
 
 
 # ---------------------------------------------------------------------------
-# _format_decks_table
+# format_decks_table
 # ---------------------------------------------------------------------------
 
 class TestFormatDecksTable:
     def test_formats_decks(self, monkeypatch):
         monkeypatch.setattr(config, "env",
                             {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        result = _format_decks_table({"deck": {
+        result = format_decks_table({"deck": {
             "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
         }})
         assert "Features" in result
         assert "Tea Shop" in result
 
     def test_no_decks(self):
-        assert "No decks" in _format_decks_table({"deck": {}})
+        assert "No decks" in format_decks_table({"deck": {}})
 
 
 # ---------------------------------------------------------------------------
-# _format_gdd_table
+# format_gdd_table
 # ---------------------------------------------------------------------------
 
 class TestFormatGddTable:
@@ -199,23 +199,23 @@ class TestFormatGddTable:
                 {"title": "Combat System", "priority": None, "effort": None},
             ]},
         ]
-        result = _format_gdd_table(sections)
+        result = format_gdd_table(sections)
         assert "Gameplay" in result
         assert "Player Movement" in result
         assert "Combat System" in result
         assert "Total: 2 tasks" in result
 
     def test_empty_sections(self):
-        assert "No tasks" in _format_gdd_table([])
+        assert "No tasks" in format_gdd_table([])
 
 
 # ---------------------------------------------------------------------------
-# _format_cards_csv
+# format_cards_csv
 # ---------------------------------------------------------------------------
 
 class TestFormatCardsCsv:
     def test_csv_output(self):
-        result = _format_cards_csv({"card": {
+        result = format_cards_csv({"card": {
             "c1": {"status": "done", "priority": "a", "effort": 3,
                    "title": "Test Card", "deck_name": "Features",
                    "owner_name": "Thomas", "tags": ["bug", "ui"]},
@@ -229,68 +229,68 @@ class TestFormatCardsCsv:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_activity_val / _format_activity_diff
+# resolve_activity_val / format_activity_diff
 # ---------------------------------------------------------------------------
 
 class TestActivityHelpers:
     def test_resolve_priority(self):
-        assert _resolve_activity_val("priority", "a", {}, {}) == "high"
-        assert _resolve_activity_val("priority", "b", {}, {}) == "med"
+        assert resolve_activity_val("priority", "a", {}, {}) == "high"
+        assert resolve_activity_val("priority", "b", {}, {}) == "med"
 
     def test_resolve_milestone(self):
         ms = {"ms-1": "MVP"}
-        assert _resolve_activity_val("milestoneId", "ms-1", ms, {}) == "MVP"
+        assert resolve_activity_val("milestoneId", "ms-1", ms, {}) == "MVP"
 
     def test_resolve_assignee(self):
         users = {"u-1": "Thomas"}
-        assert _resolve_activity_val("assigneeId", "u-1", {}, users) == "Thomas"
+        assert resolve_activity_val("assigneeId", "u-1", {}, users) == "Thomas"
 
     def test_resolve_none(self):
-        assert _resolve_activity_val("status", None, {}, {}) == "none"
+        assert resolve_activity_val("status", None, {}, {}) == "none"
 
     def test_format_diff_status_change(self):
         diff = {"status": ["not_started", "done"]}
-        result = _format_activity_diff(diff, {}, {})
+        result = format_activity_diff(diff, {}, {})
         assert "status: not_started -> done" in result
 
     def test_format_diff_priority_change(self):
         diff = {"priority": [None, "a"]}
-        result = _format_activity_diff(diff, {}, {})
+        result = format_activity_diff(diff, {}, {})
         assert "none -> high" in result
 
     def test_format_diff_tags(self):
         diff = {"masterTags": {"+": ["bug"], "-": ["wip"]}}
-        result = _format_activity_diff(diff, {}, {})
+        result = format_activity_diff(diff, {}, {})
         assert "tags +[bug]" in result
         assert "tags -[wip]" in result
 
     def test_format_diff_skips_tags_field(self):
         diff = {"tags": {"+": ["should-skip"]}}
-        result = _format_activity_diff(diff, {}, {})
+        result = format_activity_diff(diff, {}, {})
         assert "should-skip" not in result
 
     def test_format_empty_diff(self):
-        assert _format_activity_diff({}, {}, {}) == ""
-        assert _format_activity_diff(None, {}, {}) == ""
+        assert format_activity_diff({}, {}, {}) == ""
+        assert format_activity_diff(None, {}, {}) == ""
 
 
 # ---------------------------------------------------------------------------
-# _mutation_response
+# mutation_response
 # ---------------------------------------------------------------------------
 
 class TestMutationResponse:
     def test_basic_output(self, capsys):
-        _mutation_response("Created", "card-1", "title='Test'")
+        mutation_response("Created", "card-1", "title='Test'")
         out = capsys.readouterr().out
         assert "OK: Created: card card-1: title='Test'" in out
 
     def test_no_card_id(self, capsys):
-        _mutation_response("Updated", details="3 card(s)")
+        mutation_response("Updated", details="3 card(s)")
         out = capsys.readouterr().out
         assert "OK: Updated: 3 card(s)" in out
 
     def test_suppresses_empty_dispatch_data(self, capsys):
-        _mutation_response("Updated", "c1", "status=done",
+        mutation_response("Updated", "c1", "status=done",
                            {"payload": None, "actionId": "abc"}, fmt="json")
         out = capsys.readouterr().out
         # Should only have the OK line, not the JSON dump

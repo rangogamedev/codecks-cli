@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - Version bumped to 0.4.0
 
-## [0.3.0] - 2026-02-19
+## [0.3.0] - 2026-02-18
 
 ### Added
 - Google OAuth2 for private Google Docs — no more browser extraction needed
@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `gdd-url` command (replaced by direct OAuth access)
 - Browser extraction workflow (replaced by OAuth2)
 
-## [0.2.0] - 2026-02-19
+## [0.2.0] - 2026-02-17
 
 ### Added
 - `gdd` command — fetch and parse a Game Design Document from Google Docs or local file
@@ -75,7 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Browser extraction workflow for private Google Docs (via Claude in Chrome)
 - Four options for private Google Docs: browser extraction, local file, stdin piping, link-only sharing
 
-## [0.1.0] - 2026-02-19
+## [0.1.0] - 2026-02-16
 
 Initial public release.
 

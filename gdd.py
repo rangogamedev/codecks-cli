@@ -455,7 +455,6 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
 
     Returns sync report dict.
     """
-    import time as _time
 
     # Fetch existing cards
     existing_result = list_cards(project_filter=project_name)
@@ -527,7 +526,7 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
                     report["created"].append(task_entry)
                     # Rate limit: ~10 creates before a brief pause
                     if len(report["created"]) % 10 == 0:
-                        _time.sleep(1)
+                        time.sleep(1)
                 except Exception as e:
                     task_entry["error"] = str(e)
                     report["errors"].append(task_entry)

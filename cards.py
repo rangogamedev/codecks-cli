@@ -29,15 +29,15 @@ def _load_env_mapping(env_key):
     return mapping
 
 
-def _load_project_names():
+def load_project_names():
     return _load_env_mapping("CODECKS_PROJECTS")
 
 
-def _load_milestone_names():
+def load_milestone_names():
     return _load_env_mapping("CODECKS_MILESTONES")
 
 
-def _load_users():
+def load_users():
     """Load user ID->name mapping from account roles. Cached per invocation."""
     if "users" in config._cache:
         return config._cache["users"]
@@ -114,9 +114,9 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     # Client-side project filter (cards don't have projectId directly)
     if project_filter:
         decks_result = list_decks()
-        project_deck_ids = _get_project_deck_ids(decks_result, project_filter)
+        project_deck_ids = get_project_deck_ids(decks_result, project_filter)
         if project_deck_ids is None:
-            available = [n for n in _load_project_names().values()]
+            available = [n for n in load_project_names().values()]
             hint = f" Available: {', '.join(available)}" if available else ""
             print(f"[ERROR] Project '{project_filter}' not found.{hint}",
                   file=sys.stderr)
@@ -133,7 +133,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
 
     # Client-side milestone filter
     if milestone_filter:
-        milestone_id = _resolve_milestone_id(milestone_filter)
+        milestone_id = resolve_milestone_id(milestone_filter)
         _filter_cards(result, lambda k, c:
                       (c.get("milestone_id") or c.get("milestoneId")) == milestone_id)
 
@@ -155,7 +155,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
                 owner_id = uid
                 break
         if owner_id is None:
-            user_map = _load_users()
+            user_map = load_users()
             for uid, name in user_map.items():
                 if name.lower() == owner_lower:
                     owner_id = uid
@@ -163,7 +163,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         if owner_id is None:
             available = [u.get("name", "") for u in result.get("user", {}).values()]
             if not available:
-                available = list(_load_users().values())
+                available = list(load_users().values())
             hint = f" Available: {', '.join(available)}" if available else ""
             print(f"[ERROR] Owner '{owner_filter}' not found.{hint}",
                   file=sys.stderr)
@@ -173,7 +173,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     return result
 
 
-def _get_project_deck_ids(decks_result, project_name):
+def get_project_deck_ids(decks_result, project_name):
     """Return set of deck IDs belonging to a project, matched by name."""
     projects = _build_project_map(decks_result)
     for pid, info in projects.items():
@@ -185,7 +185,7 @@ def _get_project_deck_ids(decks_result, project_name):
 def _build_project_map(decks_result):
     """Build a map of projectId -> {name, deck_ids} from deck data.
     Project names come from CODECKS_PROJECTS in .env (API can't query them)."""
-    project_names = _load_project_names()
+    project_names = load_project_names()
     project_decks = {}
     for key, deck in decks_result.get("deck", {}).items():
         pid = deck.get("project_id") or deck.get("projectId")
@@ -221,7 +221,7 @@ def get_card(card_id):
 
 def list_milestones():
     """List milestones. Scans cards for milestone IDs and uses .env names."""
-    milestone_names = _load_milestone_names()
+    milestone_names = load_milestone_names()
     result = list_cards()
     used_ids = {}
     for key, card in result.get("card", {}).items():
@@ -230,13 +230,13 @@ def list_milestones():
             if mid not in used_ids:
                 used_ids[mid] = []
             used_ids[mid].append(card.get("title", ""))
-    output = {}
+    milestone_map = {}
     for mid, name in milestone_names.items():
-        output[mid] = {"name": name, "cards": used_ids.get(mid, [])}
+        milestone_map[mid] = {"name": name, "cards": used_ids.get(mid, [])}
     for mid, cards in used_ids.items():
-        if mid not in output:
-            output[mid] = {"name": mid, "cards": cards}
-    return output
+        if mid not in milestone_map:
+            milestone_map[mid] = {"name": mid, "cards": cards}
+    return milestone_map
 
 
 def list_activity(limit=20):
@@ -268,22 +268,22 @@ def list_projects():
 # Enrichment (resolve IDs to human-readable names)
 # ---------------------------------------------------------------------------
 
-def _enrich_cards(cards_dict, user_data=None):
+def enrich_cards(cards_dict, user_data=None):
     """Add deck_name, milestone_name, owner_name to card dicts."""
     decks_result = list_decks()
     deck_names = {}
     for key, deck in decks_result.get("deck", {}).items():
         deck_names[deck.get("id")] = deck.get("title", "")
 
-    milestone_names = _load_milestone_names()
+    milestone_names = load_milestone_names()
 
-    # Build user name map from user_data (query result) or _load_users()
+    # Build user name map from user_data (query result) or load_users()
     user_names = {}
     if user_data:
         for uid, udata in user_data.items():
             user_names[uid] = udata.get("name", "")
     if not user_names:
-        user_names = _load_users()
+        user_names = load_users()
 
     for key, card in cards_dict.items():
         did = card.get("deck_id") or card.get("deckId")
@@ -313,7 +313,7 @@ def _enrich_cards(cards_dict, user_data=None):
     return cards_dict
 
 
-def _compute_card_stats(cards_dict):
+def compute_card_stats(cards_dict):
     """Compute summary statistics from card data."""
     stats = {
         "total": len(cards_dict),
@@ -439,7 +439,7 @@ def list_hand():
     return query(q)
 
 
-def _extract_hand_card_ids(hand_result):
+def extract_hand_card_ids(hand_result):
     """Extract card IDs from a list_hand() result as a set."""
     hand_card_ids = set()
     for entry in (hand_result.get("queueEntry") or {}).values():
@@ -531,7 +531,7 @@ def get_conversations(card_id):
 # Name -> ID resolution helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_deck_id(deck_name):
+def resolve_deck_id(deck_name):
     """Resolve deck name to ID."""
     decks_result = list_decks()
     available = []
@@ -545,9 +545,9 @@ def _resolve_deck_id(deck_name):
     sys.exit(1)
 
 
-def _resolve_milestone_id(milestone_name):
+def resolve_milestone_id(milestone_name):
     """Resolve milestone name to ID using .env mapping."""
-    milestone_names = _load_milestone_names()
+    milestone_names = load_milestone_names()
     for mid, name in milestone_names.items():
         if name.lower() == milestone_name.lower():
             return mid

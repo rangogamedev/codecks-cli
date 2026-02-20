@@ -11,25 +11,57 @@ from api import (_safe_json_parse, _mask_token,
                  query, dispatch, generate_report_token)
 from cards import (get_account, list_decks, list_cards, get_card,
                    list_milestones, list_activity, list_projects,
-                   _enrich_cards, _compute_card_stats,
+                   enrich_cards, compute_card_stats,
                    create_card, update_card, archive_card, unarchive_card,
                    delete_card, bulk_status,
                    list_hand, add_to_hand, remove_from_hand,
-                   _extract_hand_card_ids,
+                   extract_hand_card_ids,
                    create_comment, reply_comment, close_comment,
                    reopen_comment, get_conversations,
-                   _resolve_deck_id, _resolve_milestone_id,
-                   _get_project_deck_ids, _load_users, _load_project_names)
-from formatters import (output, _mutation_response,
-                        _format_account_table, _format_cards_table,
-                        _format_card_detail, _format_conversations_table,
-                        _format_decks_table, _format_projects_table,
-                        _format_milestones_table, _format_stats_table,
-                        _format_activity_table, _format_cards_csv,
-                        _format_gdd_table, _format_sync_report)
+                   resolve_deck_id, resolve_milestone_id,
+                   get_project_deck_ids, load_users, load_project_names)
+from formatters import (output, mutation_response,
+                        format_account_table, format_cards_table,
+                        format_card_detail, format_conversations_table,
+                        format_decks_table, format_projects_table,
+                        format_milestones_table, format_stats_table,
+                        format_activity_table, format_cards_csv,
+                        format_gdd_table, format_sync_report)
 from gdd import (_run_google_auth_flow, _revoke_google_auth,
                  fetch_gdd, parse_gdd, sync_gdd)
 from setup_wizard import cmd_setup
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SORT_KEY_MAP = {
+    "status": "status",
+    "priority": "priority",
+    "effort": "effort",
+    "deck": "deck_name",
+    "title": "title",
+    "owner": "owner_name",
+    "updated": "lastUpdatedAt",
+    "created": "createdAt",
+}
+
+
+def _sort_cards(cards_dict, sort_field):
+    """Sort a {card_id: card_data} dict by *sort_field*; return a new dict."""
+    field = _SORT_KEY_MAP[sort_field]
+    reverse = sort_field in ("updated", "created")
+
+    def _key(item):
+        v = item[1].get(field)
+        if v is None or v == "":
+            return (1, "") if not reverse else (-1, "")
+        if isinstance(v, (int, float)):
+            return (0, v)
+        return (0, str(v).lower())
+
+    return dict(sorted(cards_dict.items(), key=_key, reverse=reverse))
 
 
 # ---------------------------------------------------------------------------
@@ -42,19 +74,19 @@ def cmd_query(ns):
 
 
 def cmd_account(ns):
-    output(get_account(), _format_account_table, ns.format)
+    output(get_account(), format_account_table, ns.format)
 
 
 def cmd_decks(ns):
-    output(list_decks(), _format_decks_table, ns.format)
+    output(list_decks(), format_decks_table, ns.format)
 
 
 def cmd_projects(ns):
-    output(list_projects(), _format_projects_table, ns.format)
+    output(list_projects(), format_projects_table, ns.format)
 
 
 def cmd_milestones(ns):
-    output(list_milestones(), _format_milestones_table, ns.format)
+    output(list_milestones(), format_milestones_table, ns.format)
 
 
 def cmd_cards(ns):
@@ -72,7 +104,7 @@ def cmd_cards(ns):
     # Filter to hand cards if requested
     if ns.hand:
         hand_result = list_hand()
-        hand_card_ids = _extract_hand_card_ids(hand_result)
+        hand_card_ids = extract_hand_card_ids(hand_result)
         result["card"] = {k: v for k, v in result.get("card", {}).items()
                           if k in hand_card_ids}
     # Filter to sub-cards of a hero card
@@ -85,7 +117,7 @@ def cmd_cards(ns):
         result["card"] = {k: v for k, v in result.get("card", {}).items()
                           if k in child_ids}
     # Enrich cards with deck/milestone/owner names
-    result["card"] = _enrich_cards(result.get("card", {}),
+    result["card"] = enrich_cards(result.get("card", {}),
                                    result.get("user"))
     # Filter by card type
     card_type = ns.type
@@ -105,49 +137,27 @@ def cmd_cards(ns):
                               if k in hero_ids}
 
     # Sort cards if requested
-    sort_field = ns.sort
-    if sort_field and result.get("card"):
-        sort_key_map = {
-            "status": "status",
-            "priority": "priority",
-            "effort": "effort",
-            "deck": "deck_name",
-            "title": "title",
-            "owner": "owner_name",
-            "updated": "lastUpdatedAt",
-            "created": "createdAt",
-        }
-        field = sort_key_map[sort_field]
-        reverse = sort_field in ("updated", "created")
-        def _sort_val(item):
-            v = item[1].get(field)
-            if v is None or v == "":
-                return (1, "") if not reverse else (-1, "")
-            if isinstance(v, (int, float)):
-                return (0, v)
-            return (0, str(v).lower())
-        sorted_items = sorted(result["card"].items(), key=_sort_val,
-                              reverse=reverse)
-        result["card"] = dict(sorted_items)
+    if ns.sort and result.get("card"):
+        result["card"] = _sort_cards(result["card"], ns.sort)
 
     if ns.stats:
-        stats = _compute_card_stats(result.get("card", {}))
-        output(stats, _format_stats_table, fmt)
+        stats = compute_card_stats(result.get("card", {}))
+        output(stats, format_stats_table, fmt)
     else:
-        output(result, _format_cards_table, fmt,
-               csv_formatter=_format_cards_csv)
+        output(result, format_cards_table, fmt,
+               csv_formatter=format_cards_csv)
 
 
 def cmd_card(ns):
     result = get_card(ns.card_id)
-    result["card"] = _enrich_cards(result.get("card", {}),
+    result["card"] = enrich_cards(result.get("card", {}),
                                    result.get("user"))
     # Check if this card is in hand
     hand_result = list_hand()
-    hand_card_ids = _extract_hand_card_ids(hand_result)
+    hand_card_ids = extract_hand_card_ids(hand_result)
     for card_key, card in result.get("card", {}).items():
         card["in_hand"] = card_key in hand_card_ids
-    output(result, _format_card_detail, ns.format)
+    output(result, format_card_detail, ns.format)
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +171,11 @@ def cmd_create(ns):
     placed_in = None
     post_update = {}
     if ns.deck:
-        post_update["deckId"] = _resolve_deck_id(ns.deck)
+        post_update["deckId"] = resolve_deck_id(ns.deck)
         placed_in = ns.deck
     elif ns.project:
         decks_result = list_decks()
-        project_deck_ids = _get_project_deck_ids(decks_result, ns.project)
+        project_deck_ids = get_project_deck_ids(decks_result, ns.project)
         if project_deck_ids:
             post_update["deckId"] = next(iter(project_deck_ids))
             placed_in = ns.project
@@ -181,7 +191,7 @@ def cmd_create(ns):
         detail += f", deck='{placed_in}'"
     if ns.doc:
         detail += ", type=doc"
-    _mutation_response("Created", card_id, detail, result, fmt)
+    mutation_response("Created", card_id, detail, result, fmt)
 
 
 def cmd_update(ns):
@@ -207,7 +217,7 @@ def cmd_update(ns):
                 sys.exit(1)
 
     if ns.deck is not None:
-        update_kwargs["deckId"] = _resolve_deck_id(ns.deck)
+        update_kwargs["deckId"] = resolve_deck_id(ns.deck)
 
     if ns.title is not None:
         if len(card_ids) > 1:
@@ -237,7 +247,7 @@ def cmd_update(ns):
         if ns.milestone.lower() == "none":
             update_kwargs["milestoneId"] = None
         else:
-            update_kwargs["milestoneId"] = _resolve_milestone_id(ns.milestone)
+            update_kwargs["milestoneId"] = resolve_milestone_id(ns.milestone)
 
     if ns.hero is not None:
         if ns.hero.lower() == "none":
@@ -249,7 +259,7 @@ def cmd_update(ns):
         if ns.owner.lower() == "none":
             update_kwargs["assigneeId"] = None
         else:
-            user_map = _load_users()
+            user_map = load_users()
             owner_id = None
             for uid, name in user_map.items():
                 if name.lower() == ns.owner.lower():
@@ -292,37 +302,37 @@ def cmd_update(ns):
         last_result = update_card(cid, **update_kwargs)
     detail_parts = [f"{k}={v}" for k, v in update_kwargs.items()]
     if len(card_ids) > 1:
-        _mutation_response("Updated", details=f"{len(card_ids)} card(s), "
+        mutation_response("Updated", details=f"{len(card_ids)} card(s), "
                            + ", ".join(detail_parts), data=last_result, fmt=fmt)
     else:
-        _mutation_response("Updated", card_ids[0], ", ".join(detail_parts),
+        mutation_response("Updated", card_ids[0], ", ".join(detail_parts),
                            last_result, fmt)
 
 
 def cmd_archive(ns):
     result = archive_card(ns.card_id)
-    _mutation_response("Archived", ns.card_id, data=result, fmt=ns.format)
+    mutation_response("Archived", ns.card_id, data=result, fmt=ns.format)
 
 
 def cmd_unarchive(ns):
     result = unarchive_card(ns.card_id)
-    _mutation_response("Unarchived", ns.card_id, data=result, fmt=ns.format)
+    mutation_response("Unarchived", ns.card_id, data=result, fmt=ns.format)
 
 
 def cmd_delete(ns):
     result = delete_card(ns.card_id)
-    _mutation_response("Deleted", ns.card_id, data=result, fmt=ns.format)
+    mutation_response("Deleted", ns.card_id, data=result, fmt=ns.format)
 
 
 def cmd_done(ns):
     result = bulk_status(ns.card_ids, "done")
-    _mutation_response("Marked done", details=f"{len(ns.card_ids)} card(s)",
+    mutation_response("Marked done", details=f"{len(ns.card_ids)} card(s)",
                        data=result, fmt=ns.format)
 
 
 def cmd_start(ns):
     result = bulk_status(ns.card_ids, "started")
-    _mutation_response("Marked started", details=f"{len(ns.card_ids)} card(s)",
+    mutation_response("Marked started", details=f"{len(ns.card_ids)} card(s)",
                        data=result, fmt=ns.format)
 
 
@@ -335,25 +345,25 @@ def cmd_hand(ns):
     if not ns.card_ids:
         # No args = list hand cards
         hand_result = list_hand()
-        hand_card_ids = _extract_hand_card_ids(hand_result)
+        hand_card_ids = extract_hand_card_ids(hand_result)
         if not hand_card_ids:
             print("Your hand is empty.", file=sys.stderr)
             sys.exit(0)
         result = list_cards()
         filtered = {k: v for k, v in result.get("card", {}).items()
                     if k in hand_card_ids}
-        result["card"] = _enrich_cards(filtered, result.get("user"))
-        output(result, _format_cards_table, fmt,
-               csv_formatter=_format_cards_csv)
+        result["card"] = enrich_cards(filtered, result.get("user"))
+        output(result, format_cards_table, fmt,
+               csv_formatter=format_cards_csv)
     else:
         result = add_to_hand(ns.card_ids)
-        _mutation_response("Added to hand", details=f"{len(ns.card_ids)} card(s)",
+        mutation_response("Added to hand", details=f"{len(ns.card_ids)} card(s)",
                            data=result, fmt=fmt)
 
 
 def cmd_unhand(ns):
     result = remove_from_hand(ns.card_ids)
-    _mutation_response("Removed from hand", details=f"{len(ns.card_ids)} card(s)",
+    mutation_response("Removed from hand", details=f"{len(ns.card_ids)} card(s)",
                        data=result, fmt=ns.format)
 
 
@@ -368,7 +378,7 @@ def cmd_activity(ns):
     if len(activities) > limit:
         trimmed = dict(list(activities.items())[:limit])
         result["activity"] = trimmed
-    output(result, _format_activity_table, ns.format)
+    output(result, format_activity_table, ns.format)
 
 
 # ---------------------------------------------------------------------------
@@ -380,27 +390,27 @@ def cmd_comment(ns):
     card_id = ns.card_id
     if ns.close:
         result = close_comment(ns.close, card_id)
-        _mutation_response("Closed thread", ns.close, "", result, fmt)
+        mutation_response("Closed thread", ns.close, "", result, fmt)
     elif ns.reopen:
         result = reopen_comment(ns.reopen, card_id)
-        _mutation_response("Reopened thread", ns.reopen, "", result, fmt)
+        mutation_response("Reopened thread", ns.reopen, "", result, fmt)
     elif ns.thread:
         if not ns.message:
             print("[ERROR] Reply message is required.", file=sys.stderr)
             sys.exit(1)
         result = reply_comment(ns.thread, ns.message)
-        _mutation_response("Replied to thread", ns.thread, "", result, fmt)
+        mutation_response("Replied to thread", ns.thread, "", result, fmt)
     else:
         if not ns.message:
             print("[ERROR] Comment message is required.", file=sys.stderr)
             sys.exit(1)
         result = create_comment(card_id, ns.message)
-        _mutation_response("Created thread on", card_id, "", result, fmt)
+        mutation_response("Created thread on", card_id, "", result, fmt)
 
 
 def cmd_conversations(ns):
     result = get_conversations(ns.card_id)
-    output(result, _format_conversations_table, ns.format)
+    output(result, format_conversations_table, ns.format)
 
 
 # ---------------------------------------------------------------------------
@@ -414,13 +424,13 @@ def cmd_gdd(ns):
         save_cache=ns.save_cache,
     )
     sections = parse_gdd(content)
-    output(sections, _format_gdd_table, ns.format)
+    output(sections, format_gdd_table, ns.format)
 
 
 def cmd_gdd_sync(ns):
     fmt = ns.format
     if not ns.project:
-        available = [n for n in _load_project_names().values()]
+        available = [n for n in load_project_names().values()]
         hint = f" Available: {', '.join(available)}" if available else ""
         print(f"[ERROR] --project is required for gdd-sync.{hint}",
               file=sys.stderr)
@@ -437,7 +447,7 @@ def cmd_gdd_sync(ns):
         apply=ns.apply,
         quiet=ns.quiet,
     )
-    output(report, _format_sync_report, fmt)
+    output(report, format_sync_report, fmt)
 
 
 def cmd_gdd_auth(ns):

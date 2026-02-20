@@ -8,7 +8,7 @@ import sys
 import config
 from api import _try_call, _mask_token, query, generate_report_token
 from cards import (get_account, list_decks, list_cards,
-                   _load_project_names, _load_milestone_names)
+                   load_project_names, load_milestone_names)
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ def _setup_discover_projects():
         config.save_env_value("CODECKS_PROJECTS", "")
         return
 
-    existing_names = _load_project_names()
+    existing_names = load_project_names()
 
     print(f"  Found {len(project_decks)} project(s):\n")
     project_pairs = []
@@ -86,7 +86,7 @@ def _setup_discover_milestones():
         config.save_env_value("CODECKS_MILESTONES", "")
         return
 
-    existing_names = _load_milestone_names()
+    existing_names = load_milestone_names()
 
     print(f"  Found {len(milestone_cards)} milestone(s):\n")
     milestone_pairs = []

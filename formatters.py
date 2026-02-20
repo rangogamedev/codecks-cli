@@ -9,7 +9,7 @@ import json
 import sys
 
 import config
-from cards import _load_project_names, _load_milestone_names, _load_users
+from cards import load_project_names, load_milestone_names, load_users
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ def output(data, formatter=None, fmt="json", csv_formatter=None):
         print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def _mutation_response(action, card_id=None, details=None, data=None, fmt="json"):
+def mutation_response(action, card_id=None, details=None, data=None, fmt="json"):
     """Print a mutation confirmation."""
     parts = [action]
     if card_id:
@@ -86,7 +86,7 @@ def _table(columns, rows, footer=None):
 # Table formatters
 # ---------------------------------------------------------------------------
 
-def _format_account_table(result):
+def format_account_table(result):
     """Format account info as readable text."""
     acc = result.get("account", {})
     if not acc:
@@ -95,7 +95,7 @@ def _format_account_table(result):
         return f"Account: {info.get('name', '?')}\nID:      {key}"
 
 
-def _format_cards_table(result):
+def format_cards_table(result):
     """Format cards as a readable table."""
     cards = result.get("card", {})
     if not cards:
@@ -122,7 +122,7 @@ def _format_cards_table(result):
     return _table(cols, rows, f"Total: {len(cards)} cards")
 
 
-def _format_card_detail(result):
+def format_card_detail(result):
     """Format a single card with full details."""
     cards = result.get("card", {})
     if not cards:
@@ -208,7 +208,7 @@ def _format_card_detail(result):
     return "\n".join(lines)
 
 
-def _format_conversations_table(result):
+def format_conversations_table(result):
     """Format conversations on a card as readable text."""
     cards = result.get("card", {})
     if not cards:
@@ -245,12 +245,12 @@ def _format_conversations_table(result):
     return "\n".join(lines)
 
 
-def _format_decks_table(result):
+def format_decks_table(result):
     """Format decks as a readable table."""
     decks = result.get("deck", {})
     if not decks:
         return "No decks found."
-    project_names = _load_project_names()
+    project_names = load_project_names()
     cols = [("Title", 30), ("Project", 20), ("ID", 0)]
     rows = []
     for key, deck in decks.items():
@@ -263,7 +263,7 @@ def _format_decks_table(result):
     return _table(cols, rows, f"Total: {len(decks)} decks")
 
 
-def _format_projects_table(result):
+def format_projects_table(result):
     """Format projects as a readable table."""
     if not result:
         return "No projects found."
@@ -276,7 +276,7 @@ def _format_projects_table(result):
     return "\n".join(lines)
 
 
-def _format_milestones_table(result):
+def format_milestones_table(result):
     """Format milestones as a readable table."""
     if not result:
         return "No milestones found."
@@ -294,7 +294,7 @@ def _format_milestones_table(result):
     return "\n".join(lines)
 
 
-def _format_stats_table(stats):
+def format_stats_table(stats):
     """Format card stats as readable text."""
     lines = [f"Total cards: {stats['total']}"]
     lines.append(f"Total effort: {stats['total_effort']}  "
@@ -315,7 +315,7 @@ def _format_stats_table(stats):
     return "\n".join(lines)
 
 
-def _resolve_activity_val(field, val, ms_names, user_names):
+def resolve_activity_val(field, val, ms_names, user_names):
     """Resolve a diff value to a human-readable string."""
     if val is None:
         return "none"
@@ -328,15 +328,15 @@ def _resolve_activity_val(field, val, ms_names, user_names):
     return val
 
 
-def _format_activity_table(result):
+def format_activity_table(result):
     """Format activity feed as readable text."""
     activities = result.get("activity", {})
     if not activities:
         return "No activity found."
     users = result.get("user", {})
     decks = result.get("deck", {})
-    ms_names = _load_milestone_names()
-    user_names = _load_users()
+    ms_names = load_milestone_names()
+    user_names = load_users()
     cols = [("Time", 18), ("Type", 18), ("By", 12), ("Deck", 16), ("Details", 0)]
     rows = []
     for key, act in activities.items():
@@ -346,13 +346,13 @@ def _format_activity_table(result):
         deck_id = act.get("deck")
         deck_name = decks.get(deck_id, {}).get("title", "") if deck_id else ""
         diff = act.get("data", {}).get("diff", {})
-        details = _format_activity_diff(diff, ms_names, user_names)
+        details = format_activity_diff(diff, ms_names, user_names)
         rows.append((ts, act.get("type", "?"), changer,
                       _trunc(deck_name, 16), details))
     return _table(cols, rows, f"Total: {len(activities)} events")
 
 
-def _format_activity_diff(diff, ms_names, user_names):
+def format_activity_diff(diff, ms_names, user_names):
     """Format an activity diff dict into a human-readable string."""
     if not diff:
         return ""
@@ -372,8 +372,8 @@ def _format_activity_diff(diff, ms_names, user_names):
         label = field.replace("Id", "").replace("_", " ")
         if isinstance(change, list) and len(change) == 2:
             old, new = change
-            old = _resolve_activity_val(field, old, ms_names, user_names)
-            new = _resolve_activity_val(field, new, ms_names, user_names)
+            old = resolve_activity_val(field, old, ms_names, user_names)
+            new = resolve_activity_val(field, new, ms_names, user_names)
             parts.append(f"{label}: {old} -> {new}")
         elif isinstance(change, dict):
             added = change.get("+", [])
@@ -391,7 +391,7 @@ def _format_activity_diff(diff, ms_names, user_names):
 # GDD formatters
 # ---------------------------------------------------------------------------
 
-def _format_gdd_table(sections):
+def format_gdd_table(sections):
     """Format parsed GDD sections as a readable table."""
     if not sections:
         return "No tasks found in GDD."
@@ -409,7 +409,7 @@ def _format_gdd_table(sections):
                   f"Total: {len(rows)} tasks across {len(sections)} sections")
 
 
-def _format_sync_report(report):
+def format_sync_report(report):
     """Format GDD sync report as readable text."""
     lines = []
     project = report.get("project", "?")
@@ -473,7 +473,7 @@ def _format_sync_report(report):
 # CSV formatters
 # ---------------------------------------------------------------------------
 
-def _format_cards_csv(result):
+def format_cards_csv(result):
     """Format cards as CSV for export."""
     cards = result.get("card", {})
     buf = io.StringIO()

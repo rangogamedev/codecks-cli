@@ -46,7 +46,7 @@ class TestSortWithNone:
     }
 
     @patch("commands.list_cards")
-    @patch("commands._enrich_cards", side_effect=lambda c, u: c)
+    @patch("commands.enrich_cards", side_effect=lambda c, u: c)
     def test_sort_effort_no_crash(self, mock_enrich, mock_list, capsys):
         mock_list.return_value = self.MOCK_CARDS.copy()
         cmd_cards(_ns(sort="effort", format="json"))
@@ -56,7 +56,7 @@ class TestSortWithNone:
         assert len(card_keys) == 3
 
     @patch("commands.list_cards")
-    @patch("commands._enrich_cards", side_effect=lambda c, u: c)
+    @patch("commands.enrich_cards", side_effect=lambda c, u: c)
     def test_sort_priority_none_last(self, mock_enrich, mock_list, capsys):
         mock_list.return_value = self.MOCK_CARDS.copy()
         cmd_cards(_ns(sort="priority", format="json"))
@@ -67,7 +67,7 @@ class TestSortWithNone:
         assert keys[-1] == "c2"
 
     @patch("commands.list_cards")
-    @patch("commands._enrich_cards", side_effect=lambda c, u: c)
+    @patch("commands.enrich_cards", side_effect=lambda c, u: c)
     def test_sort_updated_newest_first(self, mock_enrich, mock_list, capsys):
         """Known bug regression: sort by updated should be newest first."""
         mock_list.return_value = self.MOCK_CARDS.copy()
@@ -78,7 +78,7 @@ class TestSortWithNone:
         assert keys.index("c2") < keys.index("c1")
 
     @patch("commands.list_cards")
-    @patch("commands._enrich_cards", side_effect=lambda c, u: c)
+    @patch("commands.enrich_cards", side_effect=lambda c, u: c)
     def test_sort_owner_empty_last(self, mock_enrich, mock_list, capsys):
         mock_list.return_value = self.MOCK_CARDS.copy()
         cmd_cards(_ns(sort="owner", format="json"))
