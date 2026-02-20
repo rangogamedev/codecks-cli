@@ -1,8 +1,15 @@
 # HANDOFF.md — codecks-cli
 
-Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 389
+Last updated: 2026-02-21 | Version: 0.4.0
 
 ## Recent Changes
+
+### MCP Server
+- **New `mcp_server.py`** — 22 MCP tools wrapping `CodecksClient` via FastMCP (stdio transport)
+- **Install**: `pip install .[mcp]` (optional dep `mcp[cli]>=1.6.0`)
+- **Run**: `python -m codecks_cli.mcp_server` or `codecks-mcp` entry point
+- **Client fixes**: `_guard_duplicate_title()` returns warnings in dict (no stderr), `list_cards()` always returns `{cards, stats}` shape, improved docstrings for tool descriptions
+- **New tests**: `test_mcp_server.py` (skipped if mcp not installed)
 
 ### API-First Library Refactoring
 - **New `CodecksClient`** (`client.py`, ~1300 lines) — 27 public methods, keyword-only args, flat dict returns
@@ -18,9 +25,9 @@ Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 389
 - Strict mode, typed models, feature scaffolding with transaction-safe rollback
 
 ## Next Work
-1. **MCP server** — wrap `CodecksClient` as MCP tools (~100 lines)
-2. **Thin commands.py** — migrate `cmd_*` to delegate to `CodecksClient` (update test mocks)
-3. **Type annotations** — return type hints on `CodecksClient` using `TypedDict`
+1. **Thin commands.py** — migrate `cmd_*` to delegate to `CodecksClient` (update test mocks)
+2. **Type annotations** — return type hints on `CodecksClient` using `TypedDict`
+3. **Open-LLM-VTuber fork** — register codecks MCP server in `mcp_servers.json`
 
 ## Notes
 - `commands.py` keeps original implementations (not delegating to `CodecksClient`) to preserve test mock compat

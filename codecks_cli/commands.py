@@ -195,11 +195,12 @@ def cmd_card(ns):
 
 def cmd_create(ns):
     fmt = ns.format
-    _guard_duplicate_title(
+    for w in _guard_duplicate_title(
         ns.title,
         allow_duplicate=getattr(ns, "allow_duplicate", False),
         context="card",
-    )
+    ):
+        print(f"[WARN] {w}", file=sys.stderr)
     result = create_card(ns.title, ns.content, ns.severity)
     card_id = result.get("cardId", "")
     if not card_id:
@@ -239,11 +240,12 @@ def cmd_feature(ns):
     spec = FeatureSpec.from_namespace(ns)
     fmt = spec.format
     hero_title = f"Feature: {spec.title}"
-    _guard_duplicate_title(
+    for w in _guard_duplicate_title(
         hero_title,
         allow_duplicate=spec.allow_duplicate,
         context="feature hero",
-    )
+    ):
+        print(f"[WARN] {w}", file=sys.stderr)
 
     hero_deck_id = resolve_deck_id(spec.hero_deck)
     code_deck_id = resolve_deck_id(spec.code_deck)

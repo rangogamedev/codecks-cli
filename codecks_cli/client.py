@@ -6,7 +6,6 @@ All methods return flat dicts suitable for JSON serialization.
 """
 
 import json
-import sys
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
@@ -160,9 +159,13 @@ def _find_duplicate_title_candidates(title, limit=5):
 
 
 def _guard_duplicate_title(title, allow_duplicate=False, context="card"):
-    """Fail on exact duplicates and warn on near matches unless explicitly allowed."""
+    """Fail on exact duplicates and warn on near matches unless explicitly allowed.
+
+    Returns:
+        list of warning strings (empty if no near matches found).
+    """
     if allow_duplicate:
-        return
+        return []
 
     exact, similar = _find_duplicate_title_candidates(title)
     if exact:
@@ -175,14 +178,13 @@ def _guard_duplicate_title(title, allow_duplicate=False, context="card"):
             "[ERROR] Re-run with --allow-duplicate to bypass this check."
         )
 
+    warnings = []
     if similar:
         preview = ", ".join(
             f"{item['id']} ('{item['title']}', status={item['status']})" for item in similar
         )
-        print(
-            f"[WARN] Similar {context} titles found for '{title}': {preview}",
-            file=sys.stderr,
-        )
+        warnings.append(f"Similar {context} titles found for '{title}': {preview}")
+    return warnings
 
 
 def _normalize_dispatch_path(path):
@@ -247,10 +249,10 @@ class CodecksClient:
     # -------------------------------------------------------------------
 
     def get_account(self):
-        """Get account info.
+        """Get current account info for the authenticated user.
 
         Returns:
-            dict with account data (name, id, role).
+            dict with keys: name, id, email, organizationId, role.
         """
         return get_account()
 
@@ -295,10 +297,13 @@ class CodecksClient:
             updated_after: Cards updated after this date (YYYY-MM-DD).
             updated_before: Cards updated before this date (YYYY-MM-DD).
             archived: If True, show archived cards instead of active ones.
-            include_stats: If True, return stats instead of card list.
+            include_stats: If True, also compute aggregate stats.
 
         Returns:
-            dict with 'cards' list (or 'stats' dict if include_stats=True).
+            dict with 'cards' (list of card dicts with id, title, status,
+            priority, effort, deck_name, owner_name) and 'stats' (null unless
+            include_stats=True, then dict with total, by_status, by_priority,
+            by_effort counts).
         """
         # Validate sort field
         if sort and sort not in config.VALID_SORT_FIELDS:
@@ -371,9 +376,9 @@ class CodecksClient:
 
         if include_stats:
             stats = compute_card_stats(result.get("card", {}))
-            return {"stats": stats}
+            return {"cards": _flatten_cards(result.get("card", {})), "stats": stats}
 
-        return {"cards": _flatten_cards(result.get("card", {}))}
+        return {"cards": _flatten_cards(result.get("card", {})), "stats": None}
 
     def get_card(self, card_id):
         """Get full details for a single card.
@@ -538,13 +543,15 @@ class CodecksClient:
         return result
 
     def list_activity(self, *, limit=20):
-        """Show recent activity feed.
+        """Show recent activity feed for the account.
 
         Args:
-            limit: Number of events to return (default 20).
+            limit: Maximum number of activity events to return (default 20).
 
         Returns:
-            dict with raw activity data.
+            dict with 'activity' (map of event_id to event dict with type,
+            card, user, createdAt), 'card' (referenced cards), and 'user'
+            (referenced users).
         """
         if limit <= 0:
             raise CliError("[ERROR] --limit must be a positive integer.")
@@ -703,10 +710,10 @@ class CodecksClient:
         return _flatten_cards(sorted_cards)
 
     def add_to_hand(self, card_ids):
-        """Add cards to the user's hand.
+        """Add cards to the user's hand (personal work queue).
 
         Args:
-            card_ids: List of card UUIDs to add.
+            card_ids: List of full card UUIDs (36-char format) to add.
 
         Returns:
             dict with ok=True and count of added cards.
@@ -715,10 +722,10 @@ class CodecksClient:
         return {"ok": True, "added": len(card_ids), "data": result}
 
     def remove_from_hand(self, card_ids):
-        """Remove cards from the user's hand.
+        """Remove cards from the user's hand (personal work queue).
 
         Args:
-            card_ids: List of card UUIDs to remove.
+            card_ids: List of full card UUIDs (36-char format) to remove.
 
         Returns:
             dict with ok=True and count of removed cards.
@@ -755,7 +762,7 @@ class CodecksClient:
         Returns:
             dict with ok=True, card_id, and title.
         """
-        _guard_duplicate_title(title, allow_duplicate=allow_duplicate, context="card")
+        warnings = _guard_duplicate_title(title, allow_duplicate=allow_duplicate, context="card")
 
         result = create_card(title, content, severity)
         card_id = result.get("cardId", "")
@@ -785,13 +792,16 @@ class CodecksClient:
         if post_update:
             update_card(card_id, **post_update)
 
-        return {
+        result_dict = {
             "ok": True,
             "card_id": card_id,
             "title": title,
             "deck": placed_in,
             "doc": doc,
         }
+        if warnings:
+            result_dict["warnings"] = warnings
+        return result_dict
 
     def update_cards(
         self,
@@ -1031,7 +1041,7 @@ class CodecksClient:
         )
 
         hero_title = f"Feature: {spec.title}"
-        _guard_duplicate_title(
+        warnings = _guard_duplicate_title(
             hero_title,
             allow_duplicate=spec.allow_duplicate,
             context="feature hero",
@@ -1158,6 +1168,11 @@ class CodecksClient:
                 detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
             raise CliError(detail) from err
 
+        notes = []
+        if spec.auto_skip_art:
+            notes.append("Art lane auto-skipped (no --art-deck provided).")
+        if warnings:
+            notes.extend(warnings)
         report = FeatureScaffoldReport(
             hero_id=hero_id,
             hero_title=hero_title,
@@ -1166,9 +1181,7 @@ class CodecksClient:
             code_deck=spec.code_deck,
             design_deck=spec.design_deck,
             art_deck=None if spec.skip_art else spec.art_deck,
-            notes=(
-                ["Art lane auto-skipped (no --art-deck provided)."] if spec.auto_skip_art else None
-            ),
+            notes=notes or None,
         )
         return report.to_dict()
 
@@ -1233,13 +1246,15 @@ class CodecksClient:
         return {"ok": True, "thread_id": thread_id, "data": result}
 
     def list_conversations(self, card_id):
-        """List all conversations on a card.
+        """List all comment threads on a card.
 
         Args:
             card_id: Card UUID.
 
         Returns:
-            Raw conversation data from the API.
+            dict with 'resolvable' (threads with isClosed, creator,
+            entries), 'resolvableEntry' (messages with author, content,
+            createdAt), and 'user' (referenced users).
         """
         return get_conversations(card_id)
 

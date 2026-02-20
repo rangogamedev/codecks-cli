@@ -6,7 +6,13 @@ from unittest.mock import patch
 
 import pytest
 
-from codecks_cli.client import CodecksClient, _flatten_cards, _sort_cards, _to_legacy_format
+from codecks_cli.client import (
+    CodecksClient,
+    _flatten_cards,
+    _guard_duplicate_title,
+    _sort_cards,
+    _to_legacy_format,
+)
 from codecks_cli.config import CliError, SetupError
 
 # ---------------------------------------------------------------------------
@@ -77,6 +83,39 @@ class TestSortCards:
 
 
 # ---------------------------------------------------------------------------
+# _guard_duplicate_title
+# ---------------------------------------------------------------------------
+
+
+class TestGuardDuplicateTitle:
+    @patch("codecks_cli.client.list_cards")
+    def test_returns_empty_list_when_no_matches(self, mock_list):
+        mock_list.return_value = {"card": {}}
+        result = _guard_duplicate_title("Unique Title")
+        assert result == []
+
+    def test_returns_empty_when_allowed(self):
+        result = _guard_duplicate_title("Any Title", allow_duplicate=True)
+        assert result == []
+
+    @patch("codecks_cli.client.list_cards")
+    def test_raises_on_exact_match(self, mock_list):
+        mock_list.return_value = {"card": {"c1": {"title": "Duplicate", "status": "started"}}}
+        with pytest.raises(CliError) as exc_info:
+            _guard_duplicate_title("Duplicate")
+        assert "Duplicate card title detected" in str(exc_info.value)
+
+    @patch("codecks_cli.client.list_cards")
+    def test_returns_warnings_for_similar(self, mock_list):
+        mock_list.return_value = {
+            "card": {"c1": {"title": "Duplicate Title Here", "status": "started"}}
+        }
+        result = _guard_duplicate_title("Duplicate Title")
+        assert len(result) == 1
+        assert "Similar" in result[0]
+
+
+# ---------------------------------------------------------------------------
 # list_cards
 # ---------------------------------------------------------------------------
 
@@ -107,7 +146,18 @@ class TestListCards:
         client = _client()
         result = client.list_cards(include_stats=True)
         assert "stats" in result
+        assert "cards" in result
         assert result["stats"]["total"] == 1
+        assert len(result["cards"]) == 1
+
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.list_cards")
+    def test_stats_null_by_default(self, mock_list, mock_enrich):
+        mock_list.return_value = {"card": {"c1": {"title": "A"}}, "user": {}}
+        client = _client()
+        result = client.list_cards()
+        assert result["stats"] is None
+        assert "cards" in result
 
     @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
     @patch("codecks_cli.client.list_cards")
@@ -312,6 +362,28 @@ class TestCreateCard:
         with pytest.raises(CliError) as exc_info:
             client.create_card("Duplicate Title")
         assert "Duplicate card title detected" in str(exc_info.value)
+
+    @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_returns_warnings_for_similar_titles(self, mock_create, mock_list):
+        mock_list.return_value = {
+            "card": {"c1": {"title": "My Card Title Extended", "status": "started"}}
+        }
+        mock_create.return_value = {"cardId": "new-id"}
+        client = _client()
+        result = client.create_card("My Card Title")
+        assert result["ok"] is True
+        assert "warnings" in result
+        assert len(result["warnings"]) >= 1
+
+    @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_no_warnings_key_when_clean(self, mock_create, mock_list):
+        mock_list.return_value = {"card": {}}
+        mock_create.return_value = {"cardId": "new-id"}
+        client = _client()
+        result = client.create_card("Totally Unique")
+        assert "warnings" not in result
 
 
 # ---------------------------------------------------------------------------
