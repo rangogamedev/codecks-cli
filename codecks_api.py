@@ -3,6 +3,7 @@ codecks-cli — CLI tool for managing Codecks.io cards, decks, and projects
 """
 
 import argparse
+import json
 import sys
 
 import config
@@ -23,6 +24,7 @@ Usage: py codecks_api.py <command> [args...]
 Global flags:
   --format table          Output as readable text instead of JSON (default: json)
   --format csv            Output cards as CSV (cards command only)
+  --strict                Enable strict agent mode (fail fast on ambiguous raw API responses)
   --version               Show version number
 
 Commands:
@@ -106,15 +108,20 @@ Commands:
 # ---------------------------------------------------------------------------
 
 def _extract_global_flags(argv):
-    """Extract --format and --version from argv regardless of position.
-    Returns (format_str, remaining_argv). Handles --version directly."""
+    """Extract global flags from argv regardless of position.
+    Returns (format_str, strict_bool, remaining_argv). Handles --version directly."""
     fmt = "json"
+    strict = False
     remaining = []
     i = 0
     while i < len(argv):
         if argv[i] == "--version":
             print(f"codecks-cli {config.VERSION}")
             sys.exit(0)
+        elif argv[i] == "--strict":
+            strict = True
+            i += 1
+            continue
         elif argv[i] == "--format" and i + 1 < len(argv):
             fmt = argv[i + 1]
             if fmt not in ("json", "table", "csv"):
@@ -125,7 +132,7 @@ def _extract_global_flags(argv):
         else:
             remaining.append(argv[i])
         i += 1
-    return fmt, remaining
+    return fmt, strict, remaining
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +143,16 @@ class _SubcommandParser(argparse.ArgumentParser):
     """Subparser that raises CliError instead of printing full help text."""
     def error(self, message):
         raise CliError(f"[ERROR] {message}")
+
+
+def _positive_int(value):
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def build_parser():
@@ -236,15 +253,16 @@ def build_parser():
 
     # --- activity ---
     p = sub.add_parser("activity")
-    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--limit", type=_positive_int, default=20)
 
     # --- comment ---
     p = sub.add_parser("comment")
     p.add_argument("card_id")
     p.add_argument("message", nargs="?")
-    p.add_argument("--thread")
-    p.add_argument("--close")
-    p.add_argument("--reopen")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--thread")
+    mode.add_argument("--close")
+    mode.add_argument("--reopen")
 
     # --- conversations ---
     p = sub.add_parser("conversations")
@@ -322,6 +340,32 @@ DISPATCH = {
 }
 
 
+def _error_type_from_message(message):
+    if message.startswith("[TOKEN_EXPIRED]"):
+        return "token_expired"
+    if message.startswith("[SETUP_NEEDED]"):
+        return "setup_needed"
+    if message.startswith("[ERROR]"):
+        return "error"
+    return "cli_error"
+
+
+def _emit_cli_error(err, fmt):
+    msg = str(err)
+    if fmt == "json":
+        payload = {
+            "ok": False,
+            "error": {
+                "type": _error_type_from_message(msg),
+                "message": msg,
+                "exit_code": getattr(err, "exit_code", 1),
+            },
+        }
+        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
+        return
+    print(msg, file=sys.stderr)
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -330,7 +374,8 @@ def main():
         sys.exit(0)
 
     # Extract --format and --version from anywhere in argv
-    fmt, remaining_argv = _extract_global_flags(sys.argv[1:])
+    fmt, strict, remaining_argv = _extract_global_flags(sys.argv[1:])
+    config.RUNTIME_STRICT = strict
 
     if not remaining_argv:
         print(HELP_TEXT)
@@ -371,7 +416,7 @@ def main():
             raise CliError(f"[ERROR] Unknown command: {cmd}")
 
     except CliError as e:
-        print(str(e), file=sys.stderr)
+        _emit_cli_error(e, fmt)
         sys.exit(e.exit_code)
 
 

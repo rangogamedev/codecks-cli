@@ -2,8 +2,10 @@
 
 import pytest
 import sys
+import json
 from config import CliError
-from codecks_api import _extract_global_flags, build_parser
+from codecks_api import (_extract_global_flags, build_parser,
+                         _error_type_from_message, _emit_cli_error)
 
 
 # ---------------------------------------------------------------------------
@@ -12,24 +14,35 @@ from codecks_api import _extract_global_flags, build_parser
 
 class TestExtractGlobalFlags:
     def test_no_flags(self):
-        fmt, remaining = _extract_global_flags(["cards"])
+        fmt, strict, remaining = _extract_global_flags(["cards"])
         assert fmt == "json"
+        assert strict is False
         assert remaining == ["cards"]
 
     def test_format_before_command(self):
-        fmt, remaining = _extract_global_flags(["--format", "table", "cards"])
+        fmt, strict, remaining = _extract_global_flags(["--format", "table", "cards"])
         assert fmt == "table"
+        assert strict is False
         assert remaining == ["cards"]
 
     def test_format_after_command(self):
-        fmt, remaining = _extract_global_flags(["cards", "--format", "table"])
+        fmt, strict, remaining = _extract_global_flags(["cards", "--format", "table"])
         assert fmt == "table"
+        assert strict is False
         assert remaining == ["cards"]
 
     def test_format_between_args(self):
-        fmt, remaining = _extract_global_flags(
+        fmt, strict, remaining = _extract_global_flags(
             ["cards", "--status", "done", "--format", "csv"])
         assert fmt == "csv"
+        assert strict is False
+        assert remaining == ["cards", "--status", "done"]
+
+    def test_strict_flag_anywhere(self):
+        fmt, strict, remaining = _extract_global_flags(
+            ["cards", "--strict", "--status", "done"])
+        assert fmt == "json"
+        assert strict is True
         assert remaining == ["cards", "--status", "done"]
 
     def test_version_exits(self):
@@ -44,14 +57,16 @@ class TestExtractGlobalFlags:
 
     def test_format_without_value(self):
         """--format at end of argv with no value should be kept as-is."""
-        fmt, remaining = _extract_global_flags(["cards", "--format"])
+        fmt, strict, remaining = _extract_global_flags(["cards", "--format"])
         assert fmt == "json"
+        assert strict is False
         assert remaining == ["cards", "--format"]
 
     def test_preserves_other_args(self):
-        fmt, remaining = _extract_global_flags(
+        fmt, strict, remaining = _extract_global_flags(
             ["update", "abc", "--status", "done", "--format", "table"])
         assert fmt == "table"
+        assert strict is False
         assert remaining == ["update", "abc", "--status", "done"]
 
 
@@ -146,6 +161,10 @@ class TestBuildParser:
         ns = self.parser.parse_args(["activity", "--limit", "5"])
         assert ns.limit == 5
 
+    def test_activity_limit_must_be_positive(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["activity", "--limit", "0"])
+
     def test_comment_command(self):
         ns = self.parser.parse_args(["comment", "card-1", "Hello"])
         assert ns.card_id == "card-1"
@@ -156,6 +175,11 @@ class TestBuildParser:
             ["comment", "card-1", "Reply", "--thread", "thread-1"])
         assert ns.thread == "thread-1"
         assert ns.message == "Reply"
+
+    def test_comment_modes_are_mutually_exclusive(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(
+                ["comment", "card-1", "--thread", "t1", "--close", "t2"])
 
     def test_delete_command(self):
         ns = self.parser.parse_args(["delete", "card-1", "--confirm"])
@@ -183,3 +207,24 @@ class TestBuildParser:
         assert ns1.command == "archive"
         assert ns2.command == "remove"
         assert ns1.card_id == ns2.card_id == "card-1"
+
+
+class TestCliErrorOutput:
+    def test_error_type_mapping(self):
+        assert _error_type_from_message("[TOKEN_EXPIRED] x") == "token_expired"
+        assert _error_type_from_message("[SETUP_NEEDED] x") == "setup_needed"
+        assert _error_type_from_message("[ERROR] x") == "error"
+        assert _error_type_from_message("plain") == "cli_error"
+
+    def test_emit_json_error(self, capsys):
+        _emit_cli_error(CliError("[ERROR] bad input"), "json")
+        err = capsys.readouterr().err.strip()
+        payload = json.loads(err)
+        assert payload["ok"] is False
+        assert payload["error"]["type"] == "error"
+        assert payload["error"]["exit_code"] == 1
+
+    def test_emit_table_error(self, capsys):
+        _emit_cli_error(CliError("[ERROR] bad input"), "table")
+        err = capsys.readouterr().err.strip()
+        assert err == "[ERROR] bad input"

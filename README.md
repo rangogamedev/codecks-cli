@@ -364,6 +364,8 @@ The script uses three tokens, each for a different purpose:
 | `CODECKS_ACCESS_KEY` | Generating new report tokens | URL query parameter | Never |
 
 **The session token is validated automatically** every time you run a command. If it's expired, the script prints `[TOKEN_EXPIRED]` with instructions to refresh it (or run `setup` again). If no configuration exists at all, it prints `[SETUP_NEEDED]`. All other errors are prefixed with `[ERROR]` for easy detection.
+With `--format json`, errors are emitted as JSON envelopes on stderr (`{"ok": false, "error": ...}`) so AI agents can parse failures consistently.
+Use `--strict` for fail-fast agent mode on raw API workflows (`query`/`dispatch`) when ambiguous responses should be treated as errors.
 
 ## Known quirks
 
@@ -374,7 +376,10 @@ These are Codecks API behaviors to be aware of:
 - **Response fields are snake_case** (`deck_id`, `project_id`) but query fields are camelCase (`deckId`, `projectId`).
 - **Expired tokens return empty data**, not a 401 error. The script detects this and warns you.
 - **Rate limit:** 40 requests per 5 seconds per IP.
-- **30-second timeout** on all HTTP requests to prevent hangs.
+- **Configurable HTTP timeout** (default 30s) on all requests to prevent hangs.
+- **Safe retries for read/query calls** on transient gateway errors (`429/502/503/504`) with backoff.
+- **Per-request tracing header** (`X-Request-Id`) is sent for easier API/gateway log correlation.
+- **Optional structured HTTP logs** to stderr via `CODECKS_HTTP_LOG=true` (secrets in URL query are masked), with sampling via `CODECKS_HTTP_LOG_SAMPLE_RATE`.
 - **Delete requires `--confirm`** to prevent accidental permanent deletion. Without it, the script suggests `archive` instead.
 - **Report tokens in URL params** is the official API design. Treat them as rotatable credentials.
 

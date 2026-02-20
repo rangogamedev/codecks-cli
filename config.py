@@ -42,6 +42,25 @@ def save_env_value(key, value):
         f.writelines(lines)
 
 
+def _env_bool(key, default=False):
+    """Parse common boolean env formats."""
+    raw = env.get(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(key, default):
+    """Parse float env values with fallback."""
+    raw = env.get(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -69,6 +88,12 @@ ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
 REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
 USER_ID = env.get("CODECKS_USER_ID", "")
+HTTP_TIMEOUT_SECONDS = int(env.get("CODECKS_HTTP_TIMEOUT_SECONDS", "30"))
+HTTP_MAX_RETRIES = int(env.get("CODECKS_HTTP_MAX_RETRIES", "2"))
+HTTP_RETRY_BASE_SECONDS = float(env.get("CODECKS_HTTP_RETRY_BASE_SECONDS", "1.0"))
+HTTP_MAX_RESPONSE_BYTES = int(env.get("CODECKS_HTTP_MAX_RESPONSE_BYTES", "5000000"))
+HTTP_LOG_ENABLED = _env_bool("CODECKS_HTTP_LOG", False)
+HTTP_LOG_SAMPLE_RATE = min(1.0, max(0.0, _env_float("CODECKS_HTTP_LOG_SAMPLE_RATE", 1.0)))
 
 # ---------------------------------------------------------------------------
 # GDD-related paths and Google OAuth constants
@@ -92,6 +117,7 @@ GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 # ---------------------------------------------------------------------------
 
 _cache = {}
+RUNTIME_STRICT = False
 
 # ---------------------------------------------------------------------------
 # Custom exceptions (defined here to avoid circular imports)

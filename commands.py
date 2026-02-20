@@ -65,6 +65,19 @@ def _sort_cards(cards_dict, sort_field):
     return dict(sorted(cards_dict.items(), key=_key, reverse=reverse))
 
 
+def _normalize_dispatch_path(path):
+    """Normalize and validate a dispatch path segment."""
+    normalized = (path or "").strip()
+    if not normalized:
+        raise CliError("[ERROR] Dispatch path cannot be empty.")
+    normalized = normalized.lstrip("/")
+    if normalized.startswith("dispatch/"):
+        normalized = normalized[len("dispatch/"):]
+    if not normalized or normalized.startswith("/") or " " in normalized:
+        raise CliError("[ERROR] Invalid dispatch path. Use e.g. cards/update")
+    return normalized
+
+
 # ---------------------------------------------------------------------------
 # Read commands
 # ---------------------------------------------------------------------------
@@ -366,6 +379,8 @@ def cmd_unhand(ns):
 
 def cmd_activity(ns):
     limit = ns.limit
+    if limit <= 0:
+        raise CliError("[ERROR] --limit must be a positive integer.")
     result = list_activity(limit)
     activities = result.get("activity", {})
     if len(activities) > limit:
@@ -381,10 +396,17 @@ def cmd_activity(ns):
 def cmd_comment(ns):
     fmt = ns.format
     card_id = ns.card_id
+    selected = [bool(ns.thread), bool(ns.close), bool(ns.reopen)]
+    if sum(selected) > 1:
+        raise CliError("[ERROR] Use only one of --thread, --close, or --reopen.")
     if ns.close:
+        if ns.message:
+            raise CliError("[ERROR] Do not provide a message with --close.")
         result = close_comment(ns.close, card_id)
         mutation_response("Closed thread", ns.close, "", result, fmt)
     elif ns.reopen:
+        if ns.message:
+            raise CliError("[ERROR] Do not provide a message with --reopen.")
         result = reopen_comment(ns.reopen, card_id)
         mutation_response("Reopened thread", ns.reopen, "", result, fmt)
     elif ns.thread:
@@ -458,5 +480,6 @@ def cmd_generate_token(ns):
 
 
 def cmd_dispatch(ns):
-    result = dispatch(ns.path, _safe_json_parse(ns.json_data, "dispatch data"))
+    path = _normalize_dispatch_path(ns.path)
+    result = dispatch(path, _safe_json_parse(ns.json_data, "dispatch data"))
     output(result, fmt=ns.format)

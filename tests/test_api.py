@@ -1,13 +1,14 @@
 """Tests for api.py — security helpers, HTTP error handling, token validation."""
 
-import json
+import io
 import pytest
-import sys
-from unittest.mock import patch
+import urllib.error
+from unittest.mock import MagicMock, patch
 
 from config import CliError
 from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
-                 HTTPError, warn_if_empty, session_request, _http_request)
+                 HTTPError, warn_if_empty, session_request, _http_request,
+                 _sanitize_url_for_log, _is_sampled_request, query, dispatch)
 
 
 class TestMaskToken:
@@ -22,6 +23,34 @@ class TestMaskToken:
 
     def test_seven_chars(self):
         assert _mask_token("abcdefg") == "abcdef..."
+
+
+class TestSanitizeUrlForLog:
+    def test_masks_token_and_access_key(self):
+        url = ("https://api.codecks.io/user-report/v1/create-report"
+               "?token=secret-token&accessKey=secret-key&foo=bar")
+        safe = _sanitize_url_for_log(url)
+        assert "token=%2A%2A%2A" in safe
+        assert "accessKey=%2A%2A%2A" in safe
+        assert "foo=bar" in safe
+        assert "secret-token" not in safe
+        assert "secret-key" not in safe
+
+
+class TestSampling:
+    def test_sample_rate_zero_disables(self, monkeypatch):
+        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 0.0)
+        assert _is_sampled_request("req-1") is False
+
+    def test_sample_rate_one_enables(self, monkeypatch):
+        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 1.0)
+        assert _is_sampled_request("req-1") is True
+
+    def test_sampling_is_deterministic(self, monkeypatch):
+        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 0.5)
+        a = _is_sampled_request("req-stable")
+        b = _is_sampled_request("req-stable")
+        assert a == b
 
 
 class TestSafeJsonParse:
@@ -73,6 +102,7 @@ class TestHTTPError:
         assert e.code == 404
         assert e.reason == "Not Found"
         assert e.body == "body"
+        assert e.headers == {}
 
 
 class TestWarnIfEmpty:
@@ -96,6 +126,90 @@ class TestSessionRequest429:
         with pytest.raises(CliError) as exc_info:
             session_request("/", {"query": {}})
         assert "Rate limit" in str(exc_info.value)
+
+    @patch("api._http_request")
+    def test_sends_request_id_header(self, mock_http):
+        session_request("/", {"query": {}}, idempotent=True)
+        headers = mock_http.call_args.args[2]
+        assert headers["Accept"] == "application/json"
+        assert "X-Request-Id" in headers
+        assert headers["X-Request-Id"]
+
+
+class TestHttpRetries:
+    @patch("api.time.sleep")
+    @patch("api.urllib.request.urlopen")
+    def test_retries_429_for_idempotent_request(self, mock_urlopen, mock_sleep):
+        first = urllib.error.HTTPError(
+            "https://api.codecks.io/", 429, "Too Many Requests",
+            {"Retry-After": "0"}, io.BytesIO(b"busy")
+        )
+        success_cm = MagicMock()
+        success_resp = success_cm.__enter__.return_value
+        success_resp.headers.get.return_value = "application/json"
+        success_resp.read.return_value = b'{"ok": true}'
+        mock_urlopen.side_effect = [first, success_cm]
+
+        result = _http_request("https://api.codecks.io/", {"query": {}},
+                               idempotent=True)
+        assert result["ok"] is True
+        assert mock_urlopen.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch("api.urllib.request.urlopen")
+    def test_does_not_retry_429_for_non_idempotent_request(self, mock_urlopen):
+        first = urllib.error.HTTPError(
+            "https://api.codecks.io/", 429, "Too Many Requests",
+            {"Retry-After": "0"}, io.BytesIO(b"busy")
+        )
+        mock_urlopen.side_effect = first
+
+        with pytest.raises(HTTPError):
+            _http_request("https://api.codecks.io/", {"x": 1}, idempotent=False)
+        assert mock_urlopen.call_count == 1
+
+    @patch("api.urllib.request.urlopen")
+    def test_response_size_limit(self, mock_urlopen, monkeypatch):
+        monkeypatch.setattr("api.config.HTTP_MAX_RESPONSE_BYTES", 4)
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.headers.get.return_value = "application/json"
+        mock_resp.read.return_value = b"12345"
+
+        with pytest.raises(CliError) as exc_info:
+            _http_request("https://api.codecks.io/", {"query": {}})
+        assert "Response too large" in str(exc_info.value)
+
+
+class TestResponseShapeValidation:
+    @patch("api.session_request")
+    def test_query_rejects_non_object(self, mock_session):
+        mock_session.return_value = []
+        with pytest.raises(CliError) as exc_info:
+            query({"_root": [{"account": ["id"]}]})
+        assert "Unexpected query response shape" in str(exc_info.value)
+
+    @patch("api.session_request")
+    def test_dispatch_rejects_non_object(self, mock_session):
+        mock_session.return_value = "ok"
+        with pytest.raises(CliError) as exc_info:
+            dispatch("cards/update", {"id": "x"})
+        assert "Unexpected dispatch response shape" in str(exc_info.value)
+
+    @patch("api.session_request")
+    def test_query_strict_rejects_empty_object(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.RUNTIME_STRICT", True)
+        mock_session.return_value = {}
+        with pytest.raises(CliError) as exc_info:
+            query({"_root": [{"account": ["id"]}]})
+        assert "Strict mode: query returned an empty object" in str(exc_info.value)
+
+    @patch("api.session_request")
+    def test_dispatch_strict_requires_ack_fields(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.RUNTIME_STRICT", True)
+        mock_session.return_value = {"foo": "bar"}
+        with pytest.raises(CliError) as exc_info:
+            dispatch("cards/update", {"id": "x"})
+        assert "Strict mode: dispatch response missing expected ack fields" in str(exc_info.value)
 
 
 class TestContentTypeCheck:

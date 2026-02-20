@@ -3,10 +3,13 @@ Google Docs integration for codecks-cli.
 OAuth2 flow, GDD fetch/parse, and sync to Codecks cards.
 """
 
+import base64
+import hashlib
 import http.server
 import json
 import os
 import re
+import secrets
 import socket
 import sys
 import time
@@ -163,12 +166,34 @@ def _run_google_auth_flow():
     auth_code = [None]  # mutable container for closure
     server_error = [None]
 
+    # CSRF protection (RFC 6749 §10.12)
+    oauth_state = secrets.token_urlsafe(32)
+
+    # PKCE (RFC 7636) — defense-in-depth for installed app OAuth
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode("ascii")).digest()
+    ).rstrip(b"=").decode("ascii")
+
     class _AuthHandler(http.server.BaseHTTPRequestHandler):
         """Handle the OAuth redirect callback."""
         def do_GET(self):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
             if "code" in params:
+                # Verify state to prevent CSRF
+                returned_state = params.get("state", [None])[0]
+                if returned_state != oauth_state:
+                    server_error[0] = "state_mismatch"
+                    self.send_response(400)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    self.wfile.write(
+                        b"<html><body><h2>Authorization failed "
+                        b"(state mismatch).</h2>"
+                        b"<p>You can close this tab.</p></body></html>"
+                    )
+                    return
                 auth_code[0] = params["code"][0]
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
@@ -202,6 +227,9 @@ def _run_google_auth_flow():
         "scope": config.GOOGLE_SCOPE,
         "access_type": "offline",
         "prompt": "consent",
+        "state": oauth_state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     })
     auth_url = f"{config.GOOGLE_AUTH_URL}?{auth_params}"
 
@@ -230,6 +258,7 @@ def _run_google_auth_flow():
         "code": auth_code[0],
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
+        "code_verifier": code_verifier,
     })
     if not result or "access_token" not in result:
         raise CliError("[ERROR] Token exchange failed.")

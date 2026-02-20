@@ -9,7 +9,8 @@ from unittest.mock import patch, MagicMock
 
 import config
 from config import CliError
-from commands import cmd_cards, cmd_update, cmd_create, cmd_card
+from commands import (cmd_cards, cmd_update, cmd_create, cmd_card,
+                      cmd_dispatch, cmd_comment, cmd_activity)
 
 
 def _ns(**kwargs):
@@ -270,3 +271,47 @@ class TestFilteredEmptyResults:
         result = list_cards()
         err = capsys.readouterr().err
         assert "[TOKEN_EXPIRED]" in err
+
+
+class TestDispatchPathValidation:
+    @patch("commands.output")
+    @patch("commands.dispatch")
+    def test_normalizes_prefixed_dispatch_path(self, mock_dispatch, mock_output):
+        ns = argparse.Namespace(path="/dispatch/cards/update",
+                                json_data='{"id":"c1"}', format="json")
+        mock_dispatch.return_value = {"ok": True}
+        cmd_dispatch(ns)
+        mock_dispatch.assert_called_once_with("cards/update", {"id": "c1"})
+
+    def test_rejects_invalid_dispatch_path(self):
+        ns = argparse.Namespace(path="dispatch/ bad path",
+                                json_data='{"id":"c1"}', format="json")
+        with pytest.raises(CliError):
+            cmd_dispatch(ns)
+
+
+class TestCommentValidation:
+    def test_rejects_multiple_modes(self):
+        ns = argparse.Namespace(card_id="c1", message=None, thread="t1",
+                                close="t2", reopen=None, format="json")
+        with pytest.raises(CliError):
+            cmd_comment(ns)
+
+    def test_rejects_message_with_close(self):
+        ns = argparse.Namespace(card_id="c1", message="nope", thread=None,
+                                close="t1", reopen=None, format="json")
+        with pytest.raises(CliError):
+            cmd_comment(ns)
+
+    def test_rejects_message_with_reopen(self):
+        ns = argparse.Namespace(card_id="c1", message="nope", thread=None,
+                                close=None, reopen="t1", format="json")
+        with pytest.raises(CliError):
+            cmd_comment(ns)
+
+
+class TestActivityValidation:
+    def test_rejects_non_positive_limit(self):
+        ns = argparse.Namespace(limit=0, format="json")
+        with pytest.raises(CliError):
+            cmd_activity(ns)

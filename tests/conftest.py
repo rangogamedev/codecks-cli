@@ -20,3 +20,4 @@ def _isolate_config(monkeypatch):
     monkeypatch.setattr(config, "ACCOUNT", "fake-account")
     monkeypatch.setattr(config, "USER_ID", "fake-user-id")
     monkeypatch.setattr(config, "_cache", {})
+    monkeypatch.setattr(config, "RUNTIME_STRICT", False)
