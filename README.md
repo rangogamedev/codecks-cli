@@ -540,6 +540,26 @@ codecks-cli/
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Quality Checks
+
+The project keeps **runtime dependencies at zero** (stdlib only), while using
+optional dev tooling for quality gates.
+
+Install dev tools:
+
+```powershell
+py -m pip install .[dev]
+```
+
+Run checks:
+
+```powershell
+py -m ruff check .
+py -m ruff format --check .
+py -m mypy api.py cards.py commands.py formatters.py models.py
+py -m pytest tests/ -v --basetemp .tmp/pytest
+```
+
 ## Security
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md) for responsible disclosure.

@@ -12,7 +12,8 @@ For architecture details, see `CLAUDE.md`. For current project state, see `HANDO
 
 ## Project principles
 
-- **Zero external dependencies.** The tool uses only Python's standard library. Please don't add external packages.
+- **Zero runtime dependencies.** The CLI runtime uses only Python's standard library.
+- **Dev tooling is allowed.** Lint/type/test tools may be added as `dev` extras in `pyproject.toml`, but must not become runtime dependencies.
 - **AI-agent first, human-friendly second.** JSON output is the default for agent consumption. Table output (`--format table`) is for humans.
 - **Token efficiency.** Minimize output noise — AI agents pay per token. Avoid verbose responses.
 
@@ -37,10 +38,15 @@ Open an issue describing:
 
 1. Fork the repo and create a branch
 2. Make your changes in the relevant module (see `PROJECT_INDEX.md` or `CLAUDE.md` for module layout)
-3. Run `py -m pytest tests/ -v` to verify all 293 tests pass
-4. Test your changes with real Codecks API calls if they touch the API layer
-5. Update `README.md` if you add new commands or flags
-6. Open a pull request with a clear description
+3. Install dev tools: `py -m pip install .[dev]`
+4. Run quality checks:
+   - `py -m ruff check .`
+   - `py -m ruff format --check .`
+   - `py -m mypy api.py cards.py commands.py formatters.py models.py`
+   - `py -m pytest tests/ -v --basetemp .tmp/pytest`
+5. Test your changes with real Codecks API calls if they touch the API layer
+6. Update `README.md` if you add new commands or flags
+7. Open a pull request with a clear description
 
 ### Commit messages
 
@@ -57,7 +63,8 @@ Open an issue describing:
 
 ## Important constraints
 
-- **Zero external dependencies.** Stdlib only — do not add packages to requirements.
+- **Zero runtime dependencies.** Do not add non-stdlib runtime requirements.
+- **Dev-only packages must stay optional.** Tooling belongs in `[project.optional-dependencies].dev`.
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.

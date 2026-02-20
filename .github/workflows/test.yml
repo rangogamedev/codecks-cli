@@ -1,4 +1,4 @@
-name: Tests
+name: Quality
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,7 +18,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pytest
-        run: pip install pytest
-      - name: Run tests
-        run: python -m pytest tests/ -v
+      - name: Install project + dev tools
+        run: pip install .[dev]
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Mypy (core modules)
+        run: mypy api.py cards.py commands.py formatters.py models.py
+      - name: Pytest with coverage
+        run: pytest tests/ -v --basetemp .tmp/pytest-ci
