@@ -12,6 +12,7 @@ from api import _check_token
 from commands import (
     cmd_setup, cmd_query, cmd_account, cmd_decks, cmd_projects,
     cmd_milestones, cmd_cards, cmd_card, cmd_create, cmd_update,
+    cmd_feature,
     cmd_archive, cmd_unarchive, cmd_delete, cmd_done, cmd_start,
     cmd_hand, cmd_unhand, cmd_activity, cmd_comment, cmd_conversations,
     cmd_gdd, cmd_gdd_sync, cmd_gdd_auth, cmd_gdd_revoke,
@@ -58,6 +59,16 @@ Commands:
     --content <text>        Card description/content
     --severity <level>      critical, high, low, or null
     --doc                   Create as a doc card (no workflow states)
+  feature <title>         - Scaffold Hero + lane sub-cards (no Journey mode)
+    --hero-deck <name>      Hero destination deck (required)
+    --code-deck <name>      Code sub-card deck (required)
+    --design-deck <name>    Design sub-card deck (required)
+    --art-deck <name>       Art sub-card deck (required unless --skip-art)
+    --skip-art              Skip art lane for non-visual features
+    --description <text>    Feature context/goal
+    --owner <name>          Assign owner to hero and sub-cards
+    --priority <level>      a, b, c, or null
+    --effort <n>            Apply effort to sub-cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
     --status <state>        not_started, started, done, blocked, in_review
     --priority <level>      a (high), b (medium), c (low), or null
@@ -223,6 +234,19 @@ def build_parser():
     p.add_argument("--tag")
     p.add_argument("--doc")
 
+    # --- feature ---
+    p = sub.add_parser("feature")
+    p.add_argument("title")
+    p.add_argument("--hero-deck", required=True, dest="hero_deck")
+    p.add_argument("--code-deck", required=True, dest="code_deck")
+    p.add_argument("--design-deck", required=True, dest="design_deck")
+    p.add_argument("--art-deck", dest="art_deck")
+    p.add_argument("--skip-art", action="store_true", dest="skip_art")
+    p.add_argument("--description")
+    p.add_argument("--owner")
+    p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
+    p.add_argument("--effort", type=_positive_int)
+
     # --- archive / remove ---
     for name in ("archive", "remove"):
         p = sub.add_parser(name)
@@ -320,6 +344,7 @@ DISPATCH = {
     "card": cmd_card,
     "create": cmd_create,
     "update": cmd_update,
+    "feature": cmd_feature,
     "archive": cmd_archive,
     "remove": cmd_archive,
     "unarchive": cmd_unarchive,

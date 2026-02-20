@@ -88,6 +88,17 @@ def _require_object_payload(value, context):
     )
 
 
+def _resolve_owner_id(owner_name):
+    """Resolve owner display name to user ID."""
+    user_map = load_users()
+    for uid, name in user_map.items():
+        if name.lower() == owner_name.lower():
+            return uid
+    available = list(user_map.values())
+    hint = f" Available: {', '.join(available)}" if available else ""
+    raise CliError(f"[ERROR] Owner '{owner_name}' not found.{hint}")
+
+
 # ---------------------------------------------------------------------------
 # Read commands
 # ---------------------------------------------------------------------------
@@ -226,6 +237,109 @@ def cmd_create(ns):
     if ns.doc:
         detail += ", type=doc"
     mutation_response("Created", card_id, detail, result, fmt)
+
+
+def cmd_feature(ns):
+    """Scaffold one Hero feature plus Code/Design/(optional Art) sub-cards."""
+    fmt = ns.format
+    if ns.skip_art and ns.art_deck:
+        raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
+    if not ns.skip_art and not ns.art_deck:
+        raise CliError("[ERROR] --art-deck is required unless --skip-art is set.")
+
+    hero_deck_id = resolve_deck_id(ns.hero_deck)
+    code_deck_id = resolve_deck_id(ns.code_deck)
+    design_deck_id = resolve_deck_id(ns.design_deck)
+    art_deck_id = resolve_deck_id(ns.art_deck) if ns.art_deck else None
+
+    owner_id = _resolve_owner_id(ns.owner) if ns.owner else None
+    priority = None if ns.priority == "null" else ns.priority
+    common_update = {}
+    if owner_id:
+        common_update["assigneeId"] = owner_id
+    if priority is not None:
+        common_update["priority"] = priority
+    if ns.effort is not None:
+        common_update["effort"] = ns.effort
+
+    hero_title = f"Feature: {ns.title}"
+    hero_body = (
+        (ns.description.strip() + "\n\n" if ns.description else "")
+        + "Success criteria:\n"
+          "- [] Lane coverage agreed (Code/Design/Art)\n"
+          "- [] Acceptance criteria validated\n"
+          "- [] Integration verified\n\n"
+          "Tags: #hero #feature"
+    )
+    hero_result = create_card(hero_title, hero_body)
+    hero_id = hero_result.get("cardId")
+    if not hero_id:
+        raise CliError("[ERROR] Hero creation failed: missing cardId.")
+    update_card(hero_id, deckId=hero_deck_id,
+                masterTags=["hero", "feature"], **common_update)
+
+    created = []
+
+    def _make_sub(lane, deck_id, tags, checklist_lines):
+        sub_title = f"[{lane}] {ns.title}"
+        sub_body = (
+            "Scope:\n"
+            f"- {lane} lane execution for feature goal\n\n"
+            "Checklist:\n"
+            + "\n".join(f"- [] {line}" for line in checklist_lines)
+            + "\n\nTags: " + " ".join(f"#{t}" for t in tags)
+        )
+        res = create_card(sub_title, sub_body)
+        sub_id = res.get("cardId")
+        if not sub_id:
+            raise CliError(f"[ERROR] {lane} sub-card creation failed: missing cardId.")
+        update_card(
+            sub_id,
+            parentCardId=hero_id,
+            deckId=deck_id,
+            masterTags=tags,
+            **common_update,
+        )
+        created.append({"lane": lane.lower(), "id": sub_id})
+
+    _make_sub("Code", code_deck_id, ["code", "feature"], [
+        "Implement core logic",
+        "Handle edge cases",
+        "Add tests/verification",
+    ])
+    _make_sub("Design", design_deck_id, ["design", "feel", "economy", "feature"], [
+        "Define target player feel",
+        "Tune balance/economy parameters",
+        "Run playtest and iterate",
+    ])
+    if not ns.skip_art and art_deck_id:
+        _make_sub("Art", art_deck_id, ["art", "feature"], [
+            "Create required assets/content",
+            "Integrate assets in game flow",
+            "Visual quality pass",
+        ])
+
+    report = {
+        "ok": True,
+        "hero": {"id": hero_id, "title": hero_title},
+        "subcards": created,
+        "decks": {
+            "hero": ns.hero_deck,
+            "code": ns.code_deck,
+            "design": ns.design_deck,
+            "art": None if ns.skip_art else ns.art_deck,
+        },
+    }
+    if fmt == "table":
+        lines = [
+            f"Hero created: {hero_id} ({hero_title})",
+            f"Sub-cards created: {len(created)}",
+        ]
+        for item in created:
+            lines.append(f"  - [{item['lane']}] {item['id']}")
+        print("\n".join(lines))
+    else:
+        output(report, fmt=fmt)
 
 
 def cmd_update(ns):

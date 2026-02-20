@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 import config
 from config import CliError
 from commands import (cmd_cards, cmd_update, cmd_create, cmd_card,
-                      cmd_dispatch, cmd_comment, cmd_activity)
+                      cmd_dispatch, cmd_comment, cmd_activity, cmd_feature)
 
 
 def _ns(**kwargs):
@@ -355,3 +355,94 @@ class TestRawCommandValidation:
         with pytest.raises(CliError) as exc_info:
             cmd_dispatch(ns)
         assert "dispatch payload cannot be empty" in str(exc_info.value)
+
+
+class TestFeatureScaffold:
+    @patch("commands.output")
+    @patch("commands.update_card")
+    @patch("commands.create_card")
+    @patch("commands.resolve_deck_id")
+    def test_creates_hero_and_subcards(self, mock_resolve_deck, mock_create,
+                                       mock_update, mock_output):
+        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design", "d-art"]
+        mock_create.side_effect = [
+            {"cardId": "hero-1"},
+            {"cardId": "code-1"},
+            {"cardId": "design-1"},
+            {"cardId": "art-1"},
+        ]
+        ns = argparse.Namespace(
+            title="Inventory 2.0",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck="Art",
+            skip_art=False,
+            description="Improve inventory flow",
+            owner=None,
+            priority="a",
+            effort=5,
+            format="json",
+        )
+        cmd_feature(ns)
+        assert mock_create.call_count == 4
+        assert mock_update.call_count == 4
+        # hero update + 3 sub updates
+        hero_kwargs = mock_update.call_args_list[0].kwargs
+        assert hero_kwargs["deckId"] == "d-hero"
+        assert hero_kwargs["masterTags"] == ["hero", "feature"]
+        code_kwargs = mock_update.call_args_list[1].kwargs
+        assert code_kwargs["parentCardId"] == "hero-1"
+        assert code_kwargs["deckId"] == "d-code"
+        design_kwargs = mock_update.call_args_list[2].kwargs
+        assert design_kwargs["deckId"] == "d-design"
+        art_kwargs = mock_update.call_args_list[3].kwargs
+        assert art_kwargs["deckId"] == "d-art"
+        mock_output.assert_called_once()
+
+    @patch("commands.resolve_deck_id")
+    def test_requires_art_deck_unless_skip_art(self, mock_resolve_deck):
+        ns = argparse.Namespace(
+            title="Audio Mix",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=False,
+            description=None,
+            owner=None,
+            priority=None,
+            effort=None,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_feature(ns)
+        assert "--art-deck is required" in str(exc_info.value)
+
+    @patch("commands.output")
+    @patch("commands.update_card")
+    @patch("commands.create_card")
+    @patch("commands.resolve_deck_id")
+    def test_skip_art_creates_two_subcards(self, mock_resolve_deck, mock_create,
+                                           mock_update, mock_output):
+        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
+        mock_create.side_effect = [
+            {"cardId": "hero-1"},
+            {"cardId": "code-1"},
+            {"cardId": "design-1"},
+        ]
+        ns = argparse.Namespace(
+            title="Economy Tuning",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=True,
+            description=None,
+            owner=None,
+            priority=None,
+            effort=None,
+            format="json",
+        )
+        cmd_feature(ns)
+        assert mock_create.call_count == 3

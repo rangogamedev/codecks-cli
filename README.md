@@ -119,6 +119,29 @@ py codecks_api.py create "Refactor save system" --deck "Backlog"
 py codecks_api.py create "New feature idea" --project "My Project"
 ```
 
+### Scaffold a feature (Hero + sub-cards, no Journey)
+
+Create one Hero card and linked lane sub-cards for Code/Design/(optional Art):
+
+```bash
+py codecks_api.py feature "Inventory 2.0" \
+  --hero-deck "Features" \
+  --code-deck "Code" \
+  --design-deck "Design" \
+  --art-deck "Art" \
+  --priority a --effort 5
+```
+
+For non-visual features:
+
+```bash
+py codecks_api.py feature "Economy Tuning" \
+  --hero-deck "Features" \
+  --code-deck "Code" \
+  --design-deck "Design" \
+  --skip-art
+```
+
 Severity levels: `critical`, `high`, `low`, or `null`.
 
 ### Updating cards

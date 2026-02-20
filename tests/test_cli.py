@@ -134,6 +134,26 @@ class TestBuildParser:
         assert ns.deck == "Inbox"
         assert ns.doc is True
 
+    def test_feature_command(self):
+        ns = self.parser.parse_args([
+            "feature", "Combat Revamp",
+            "--hero-deck", "Features",
+            "--code-deck", "Code",
+            "--design-deck", "Design",
+            "--art-deck", "Art",
+            "--priority", "a",
+            "--effort", "5",
+        ])
+        assert ns.command == "feature"
+        assert ns.title == "Combat Revamp"
+        assert ns.hero_deck == "Features"
+        assert ns.code_deck == "Code"
+        assert ns.design_deck == "Design"
+        assert ns.art_deck == "Art"
+        assert ns.skip_art is False
+        assert ns.priority == "a"
+        assert ns.effort == 5
+
     def test_card_command(self):
         ns = self.parser.parse_args(["card", "abc-123"])
         assert ns.command == "card"
