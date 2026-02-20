@@ -8,6 +8,7 @@ from config import CliError
 from cards import (
     _load_env_mapping, load_project_names, load_milestone_names,
     _filter_cards, _parse_multi_value, _parse_date, _parse_iso_timestamp,
+    _get_field,
     compute_card_stats, enrich_cards,
     _build_project_map, get_project_deck_ids,
     resolve_deck_id, resolve_milestone_id,
@@ -49,6 +50,20 @@ class TestLoadEnvMapping:
         })
         assert load_project_names() == {"p1": "Tea Shop"}
         assert load_milestone_names() == {"m1": "MVP"}
+
+
+class TestGetField:
+    def test_prefers_snake_when_present(self):
+        data = {"last_updated_at": "snake", "lastUpdatedAt": "camel"}
+        assert _get_field(data, "last_updated_at", "lastUpdatedAt") == "snake"
+
+    def test_uses_camel_when_snake_missing(self):
+        data = {"lastUpdatedAt": "camel"}
+        assert _get_field(data, "last_updated_at", "lastUpdatedAt") == "camel"
+
+    def test_keeps_falsy_snake_value(self):
+        data = {"is_closed": False, "isClosed": True}
+        assert _get_field(data, "is_closed", "isClosed") is False
 
 
 # ---------------------------------------------------------------------------

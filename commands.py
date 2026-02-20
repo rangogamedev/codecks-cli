@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 
 import config
-from config import CliError
+from config import CliError, SetupError
 from api import (_safe_json_parse, _mask_token,
                  query, dispatch, generate_report_token)
 from cards import (get_account, list_decks, list_cards, get_card,
@@ -293,6 +293,17 @@ def cmd_feature(ns):
     created = []
     created_ids = []
 
+    def _rollback_created_ids():
+        rolled_back = []
+        rollback_failed = []
+        for cid in reversed(created_ids):
+            try:
+                archive_card(cid)
+                rolled_back.append(cid)
+            except Exception:
+                rollback_failed.append(cid)
+        return rolled_back, rollback_failed
+
     try:
         hero_result = create_card(hero_title, hero_body)
         hero_id = hero_result.get("cardId")
@@ -342,16 +353,20 @@ def cmd_feature(ns):
                 "Integrate assets in game flow",
                 "Visual quality pass",
             ])
+    except SetupError as err:
+        # Preserve setup/token semantics (exit code 2) while still rolling back.
+        rolled_back, rollback_failed = _rollback_created_ids()
+        detail = (
+            f"{err}\n"
+            f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
+            "created cards."
+        )
+        if rollback_failed:
+            detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
+        raise SetupError(detail) from err
     except Exception as err:
         # Transaction safety: best-effort compensating rollback.
-        rolled_back = []
-        rollback_failed = []
-        for cid in reversed(created_ids):
-            try:
-                archive_card(cid)
-                rolled_back.append(cid)
-            except Exception:
-                rollback_failed.append(cid)
+        rolled_back, rollback_failed = _rollback_created_ids()
         detail = (
             f"[ERROR] Feature scaffold failed: {err}\n"
             f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
@@ -553,10 +568,6 @@ def cmd_activity(ns):
     if limit <= 0:
         raise CliError("[ERROR] --limit must be a positive integer.")
     result = list_activity(limit)
-    activities = result.get("activity", {})
-    if len(activities) > limit:
-        trimmed = dict(list(activities.items())[:limit])
-        result["activity"] = trimmed
     output(result, format_activity_table, ns.format)
 
 

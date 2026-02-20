@@ -60,7 +60,9 @@ def load_users():
 
 def _get_field(d, snake, camel):
     """Get a value from a dict trying snake_case then camelCase key."""
-    return d.get(snake) or d.get(camel)
+    if snake in d:
+        return d.get(snake)
+    return d.get(camel)
 
 
 def get_card_tags(card):
@@ -344,6 +346,9 @@ def list_activity(limit=20):
         {"deck": ["title"]},
     ]}]}]}
     result = query(q)
+    activities = result.get("activity", {})
+    if len(activities) > limit:
+        result["activity"] = dict(list(activities.items())[:limit])
     return result
 
 

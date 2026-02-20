@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 import config
-from config import CliError
+from config import CliError, SetupError
 from commands import (cmd_cards, cmd_update, cmd_create, cmd_card,
                       cmd_dispatch, cmd_comment, cmd_activity, cmd_feature,
                       cmd_pm_focus, cmd_standup, cmd_hand, cmd_decks)
@@ -369,6 +369,15 @@ class TestActivityValidation:
         with pytest.raises(CliError):
             cmd_activity(ns)
 
+    @patch("commands.output")
+    @patch("commands.list_activity")
+    def test_forwards_limit_to_list_activity(self, mock_list_activity, mock_output):
+        ns = argparse.Namespace(limit=5, format="json")
+        mock_list_activity.return_value = {"activity": {}}
+        cmd_activity(ns)
+        mock_list_activity.assert_called_once_with(5)
+        mock_output.assert_called_once()
+
 
 class TestPmFocus:
     @patch("commands.output")
@@ -636,6 +645,42 @@ class TestFeatureScaffold:
         assert "Feature scaffold failed" in msg
         assert "Rollback archived" in msg
         # Reversed rollback order: code first, then hero.
+        assert mock_archive.call_count == 2
+        assert mock_archive.call_args_list[0].args[0] == "code-1"
+        assert mock_archive.call_args_list[1].args[0] == "hero-1"
+
+    @patch("commands.archive_card")
+    @patch("commands.update_card")
+    @patch("commands.create_card")
+    @patch("commands.resolve_deck_id")
+    def test_preserves_setup_error_during_rollback(self, mock_resolve_deck,
+                                                   mock_create, mock_update,
+                                                   mock_archive):
+        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
+        mock_create.side_effect = [
+            {"cardId": "hero-1"},
+            {"cardId": "code-1"},
+            {"cardId": "design-1"},
+        ]
+        mock_update.side_effect = [None, SetupError("[TOKEN_EXPIRED] expired")]
+        ns = argparse.Namespace(
+            title="Combat Feel",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=True,
+            description=None,
+            owner=None,
+            priority=None,
+            effort=None,
+            format="json",
+        )
+        with pytest.raises(SetupError) as exc_info:
+            cmd_feature(ns)
+        msg = str(exc_info.value)
+        assert msg.startswith("[TOKEN_EXPIRED]")
+        assert "Rollback archived" in msg
         assert mock_archive.call_count == 2
         assert mock_archive.call_args_list[0].args[0] == "code-1"
         assert mock_archive.call_args_list[1].args[0] == "hero-1"
