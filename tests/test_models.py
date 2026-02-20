@@ -1,11 +1,11 @@
 """Tests for typed models used by command orchestration."""
 
 import argparse
+
 import pytest
 
-from config import CliError
-from models import (ObjectPayload, FeatureSpec,
-                    FeatureSubcard, FeatureScaffoldReport)
+from codecks_cli.config import CliError
+from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard, ObjectPayload
 
 
 class TestObjectPayload:

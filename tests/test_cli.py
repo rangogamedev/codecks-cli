@@ -1,16 +1,21 @@
 """Tests for codecks_api.py — argparse, global flags, command dispatch."""
 
-import pytest
-import sys
 import json
-from config import CliError
-from codecks_api import (_extract_global_flags, build_parser,
-                         _error_type_from_message, _emit_cli_error)
 
+import pytest
+
+from codecks_cli.cli import (
+    _emit_cli_error,
+    _error_type_from_message,
+    _extract_global_flags,
+    build_parser,
+)
+from codecks_cli.config import CliError
 
 # ---------------------------------------------------------------------------
 # _extract_global_flags
 # ---------------------------------------------------------------------------
+
 
 class TestExtractGlobalFlags:
     def test_no_flags(self):
@@ -33,14 +38,14 @@ class TestExtractGlobalFlags:
 
     def test_format_between_args(self):
         fmt, strict, remaining = _extract_global_flags(
-            ["cards", "--status", "done", "--format", "csv"])
+            ["cards", "--status", "done", "--format", "csv"]
+        )
         assert fmt == "csv"
         assert strict is False
         assert remaining == ["cards", "--status", "done"]
 
     def test_strict_flag_anywhere(self):
-        fmt, strict, remaining = _extract_global_flags(
-            ["cards", "--strict", "--status", "done"])
+        fmt, strict, remaining = _extract_global_flags(["cards", "--strict", "--status", "done"])
         assert fmt == "json"
         assert strict is True
         assert remaining == ["cards", "--status", "done"]
@@ -64,7 +69,8 @@ class TestExtractGlobalFlags:
 
     def test_preserves_other_args(self):
         fmt, strict, remaining = _extract_global_flags(
-            ["update", "abc", "--status", "done", "--format", "table"])
+            ["update", "abc", "--status", "done", "--format", "table"]
+        )
         assert fmt == "table"
         assert strict is False
         assert remaining == ["update", "abc", "--status", "done"]
@@ -73,6 +79,7 @@ class TestExtractGlobalFlags:
 # ---------------------------------------------------------------------------
 # build_parser — subcommand parsing
 # ---------------------------------------------------------------------------
+
 
 class TestBuildParser:
     def setup_method(self):
@@ -88,8 +95,8 @@ class TestBuildParser:
 
     def test_cards_with_filters(self):
         ns = self.parser.parse_args(
-            ["cards", "--status", "done", "--deck", "Features",
-             "--sort", "priority"])
+            ["cards", "--status", "done", "--deck", "Features", "--sort", "priority"]
+        )
         assert ns.status == "done"
         assert ns.deck == "Features"
         assert ns.sort == "priority"
@@ -109,8 +116,8 @@ class TestBuildParser:
 
     def test_cards_date_filters(self):
         ns = self.parser.parse_args(
-            ["cards", "--updated-after", "2026-01-01",
-             "--updated-before", "2026-02-01"])
+            ["cards", "--updated-after", "2026-01-01", "--updated-before", "2026-02-01"]
+        )
         assert ns.updated_after == "2026-01-01"
         assert ns.updated_before == "2026-02-01"
 
@@ -127,8 +134,7 @@ class TestBuildParser:
         assert ns.severity == "critical"
 
     def test_update_command(self):
-        ns = self.parser.parse_args(
-            ["update", "card-1", "--status", "done", "--priority", "a"])
+        ns = self.parser.parse_args(["update", "card-1", "--status", "done", "--priority", "a"])
         assert ns.command == "update"
         assert ns.card_ids == ["card-1"]
         assert ns.status == "done"
@@ -143,8 +149,7 @@ class TestBuildParser:
             self.parser.parse_args(["update", "id", "--priority", "x"])
 
     def test_create_command(self):
-        ns = self.parser.parse_args(
-            ["create", "My Card", "--deck", "Inbox", "--doc"])
+        ns = self.parser.parse_args(["create", "My Card", "--deck", "Inbox", "--doc"])
         assert ns.command == "create"
         assert ns.title == "My Card"
         assert ns.deck == "Inbox"
@@ -156,15 +161,24 @@ class TestBuildParser:
         assert ns.allow_duplicate is True
 
     def test_feature_command(self):
-        ns = self.parser.parse_args([
-            "feature", "Combat Revamp",
-            "--hero-deck", "Features",
-            "--code-deck", "Code",
-            "--design-deck", "Design",
-            "--art-deck", "Art",
-            "--priority", "a",
-            "--effort", "5",
-        ])
+        ns = self.parser.parse_args(
+            [
+                "feature",
+                "Combat Revamp",
+                "--hero-deck",
+                "Features",
+                "--code-deck",
+                "Code",
+                "--design-deck",
+                "Design",
+                "--art-deck",
+                "Art",
+                "--priority",
+                "a",
+                "--effort",
+                "5",
+            ]
+        )
         assert ns.command == "feature"
         assert ns.title == "Combat Revamp"
         assert ns.hero_deck == "Features"
@@ -177,13 +191,19 @@ class TestBuildParser:
         assert ns.allow_duplicate is False
 
     def test_feature_allow_duplicate_flag(self):
-        ns = self.parser.parse_args([
-            "feature", "Combat Revamp",
-            "--hero-deck", "Features",
-            "--code-deck", "Code",
-            "--design-deck", "Design",
-            "--allow-duplicate",
-        ])
+        ns = self.parser.parse_args(
+            [
+                "feature",
+                "Combat Revamp",
+                "--hero-deck",
+                "Features",
+                "--code-deck",
+                "Code",
+                "--design-deck",
+                "Design",
+                "--allow-duplicate",
+            ]
+        )
         assert ns.allow_duplicate is True
 
     def test_card_command(self):
@@ -244,15 +264,13 @@ class TestBuildParser:
         assert ns.message == "Hello"
 
     def test_comment_with_thread(self):
-        ns = self.parser.parse_args(
-            ["comment", "card-1", "Reply", "--thread", "thread-1"])
+        ns = self.parser.parse_args(["comment", "card-1", "Reply", "--thread", "thread-1"])
         assert ns.thread == "thread-1"
         assert ns.message == "Reply"
 
     def test_comment_modes_are_mutually_exclusive(self):
         with pytest.raises(CliError):
-            self.parser.parse_args(
-                ["comment", "card-1", "--thread", "t1", "--close", "t2"])
+            self.parser.parse_args(["comment", "card-1", "--thread", "t1", "--close", "t2"])
 
     def test_delete_command(self):
         ns = self.parser.parse_args(["delete", "card-1", "--confirm"])
@@ -261,8 +279,7 @@ class TestBuildParser:
         assert ns.confirm is True
 
     def test_gdd_sync_command(self):
-        ns = self.parser.parse_args(
-            ["gdd-sync", "--project", "Tea Shop", "--apply", "--quiet"])
+        ns = self.parser.parse_args(["gdd-sync", "--project", "Tea Shop", "--apply", "--quiet"])
         assert ns.command == "gdd-sync"
         assert ns.project == "Tea Shop"
         assert ns.apply is True

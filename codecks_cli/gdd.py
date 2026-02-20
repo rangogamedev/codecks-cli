@@ -18,21 +18,21 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
-import config
-from config import CliError, SetupError
-from cards import list_cards, list_decks, create_card, update_card
-
+from codecks_cli import config
+from codecks_cli.cards import create_card, list_cards, list_decks, update_card
+from codecks_cli.config import CliError, SetupError
 
 # ---------------------------------------------------------------------------
 # Google OAuth2 helpers (for private Google Doc access)
 # ---------------------------------------------------------------------------
+
 
 def _load_gdd_tokens():
     """Load saved Google OAuth tokens from .gdd_tokens.json."""
     if not os.path.exists(config.GDD_TOKENS_PATH):
         return None
     try:
-        with open(config.GDD_TOKENS_PATH, "r", encoding="utf-8") as f:
+        with open(config.GDD_TOKENS_PATH, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return None
@@ -67,7 +67,7 @@ def _google_token_request(params):
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, socket.timeout, json.JSONDecodeError) as e:
+    except (TimeoutError, urllib.error.URLError, json.JSONDecodeError) as e:
         print(f"[ERROR] Google token request failed: {e}", file=sys.stderr)
         return None
 
@@ -87,15 +87,18 @@ def _get_google_access_token():
         return tokens["access_token"]
 
     # Refresh the access token
-    result = _google_token_request({
-        "client_id": config.GOOGLE_CLIENT_ID,
-        "client_secret": config.GOOGLE_CLIENT_SECRET,
-        "refresh_token": tokens["refresh_token"],
-        "grant_type": "refresh_token",
-    })
+    result = _google_token_request(
+        {
+            "client_id": config.GOOGLE_CLIENT_ID,
+            "client_secret": config.GOOGLE_CLIENT_SECRET,
+            "refresh_token": tokens["refresh_token"],
+            "grant_type": "refresh_token",
+        }
+    )
     if not result or "access_token" not in result:
-        print("[WARN] Google token refresh failed. Run: py codecks_api.py gdd-auth",
-              file=sys.stderr)
+        print(
+            "[WARN] Google token refresh failed. Run: py codecks_api.py gdd-auth", file=sys.stderr
+        )
         return None
 
     tokens["access_token"] = result["access_token"]
@@ -113,8 +116,7 @@ _MAX_DOC_BYTES = 10_000_000  # 10 MB safety limit for Google Doc responses
 def _fetch_google_doc_content(doc_id):
     """Fetch Google Doc as markdown. Tries OAuth first, then public fallback.
     Returns content string, or None on failure."""
-    export_url = (f"https://docs.google.com/document/d/{doc_id}"
-                  f"/export?format=md")
+    export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=md"
 
     # Try 1: OAuth Bearer token
     access_token = _get_google_access_token()
@@ -127,18 +129,25 @@ def _fetch_google_doc_content(doc_id):
                 if len(raw) > _MAX_DOC_BYTES:
                     raise CliError(
                         f"[ERROR] Google Doc response too large "
-                        f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?")
+                        f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?"
+                    )
                 return raw.decode("utf-8")
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                print("[WARN] Google OAuth token rejected. "
-                      "Run: py codecks_api.py gdd-auth", file=sys.stderr)
+                print(
+                    "[WARN] Google OAuth token rejected. Run: py codecks_api.py gdd-auth",
+                    file=sys.stderr,
+                )
             else:
-                print(f"[WARN] Google Doc fetch with OAuth failed (HTTP {e.code}), "
-                      "trying public URL...", file=sys.stderr)
-        except (urllib.error.URLError, socket.timeout) as e:
-            print(f"[WARN] Google Doc OAuth fetch failed ({e}), "
-                  "trying public URL...", file=sys.stderr)
+                print(
+                    f"[WARN] Google Doc fetch with OAuth failed (HTTP {e.code}), "
+                    "trying public URL...",
+                    file=sys.stderr,
+                )
+        except (TimeoutError, urllib.error.URLError) as e:
+            print(
+                f"[WARN] Google Doc OAuth fetch failed ({e}), trying public URL...", file=sys.stderr
+            )
 
     # Try 2: Public URL (no auth — works if doc is publicly shared)
     req = urllib.request.Request(export_url)
@@ -148,25 +157,28 @@ def _fetch_google_doc_content(doc_id):
             if len(raw) > _MAX_DOC_BYTES:
                 raise CliError(
                     f"[ERROR] Google Doc response too large "
-                    f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?")
+                    f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?"
+                )
             return raw.decode("utf-8")
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            print("[ERROR] Google Doc not found. Check GDD_GOOGLE_DOC_URL.",
-                  file=sys.stderr)
+            print("[ERROR] Google Doc not found. Check GDD_GOOGLE_DOC_URL.", file=sys.stderr)
         elif e.code in (401, 403):
             if config.GOOGLE_CLIENT_ID:
-                print("[ERROR] Google Doc is private. "
-                      "Run: py codecks_api.py gdd-auth", file=sys.stderr)
+                print(
+                    "[ERROR] Google Doc is private. Run: py codecks_api.py gdd-auth",
+                    file=sys.stderr,
+                )
             else:
-                print("[ERROR] Google Doc is private. Set up Google OAuth to "
-                      "access it. See README for setup instructions.",
-                      file=sys.stderr)
+                print(
+                    "[ERROR] Google Doc is private. Set up Google OAuth to "
+                    "access it. See README for setup instructions.",
+                    file=sys.stderr,
+                )
         else:
-            print(f"[ERROR] Google Doc fetch failed (HTTP {e.code}).",
-                  file=sys.stderr)
+            print(f"[ERROR] Google Doc fetch failed (HTTP {e.code}).", file=sys.stderr)
         return None
-    except (urllib.error.URLError, socket.timeout) as e:
+    except (TimeoutError, urllib.error.URLError) as e:
         print(f"[ERROR] Google Doc fetch failed: {e}", file=sys.stderr)
         return None
 
@@ -175,9 +187,11 @@ def _run_google_auth_flow():
     """Run the OAuth2 authorization code flow with a localhost callback.
     Opens the browser for user consent, captures the code, exchanges for tokens."""
     if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
-        raise CliError("[ERROR] Google OAuth not configured. Add GOOGLE_CLIENT_ID "
-                       "and GOOGLE_CLIENT_SECRET to .env\n"
-                       "  See README for setup instructions.")
+        raise CliError(
+            "[ERROR] Google OAuth not configured. Add GOOGLE_CLIENT_ID "
+            "and GOOGLE_CLIENT_SECRET to .env\n"
+            "  See README for setup instructions."
+        )
 
     # Find a free port
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -194,12 +208,15 @@ def _run_google_auth_flow():
 
     # PKCE (RFC 7636) — defense-in-depth for installed app OAuth
     code_verifier = secrets.token_urlsafe(64)
-    code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode("ascii")).digest()
-    ).rstrip(b"=").decode("ascii")
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
 
     class _AuthHandler(http.server.BaseHTTPRequestHandler):
         """Handle the OAuth redirect callback."""
+
         def do_GET(self):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
@@ -243,17 +260,19 @@ def _run_google_auth_flow():
             pass  # Suppress HTTP server logging
 
     # Build authorization URL
-    auth_params = urllib.parse.urlencode({
-        "client_id": config.GOOGLE_CLIENT_ID,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": config.GOOGLE_SCOPE,
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": oauth_state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-    })
+    auth_params = urllib.parse.urlencode(
+        {
+            "client_id": config.GOOGLE_CLIENT_ID,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": config.GOOGLE_SCOPE,
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": oauth_state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+        }
+    )
     auth_url = f"{config.GOOGLE_AUTH_URL}?{auth_params}"
 
     # Start local server and open browser
@@ -273,18 +292,19 @@ def _run_google_auth_flow():
     if server_error[0]:
         raise CliError(f"[ERROR] Authorization denied: {server_error[0]}")
     if not auth_code[0]:
-        raise CliError("[ERROR] No authorization code received "
-                       "(timed out after 120s).")
+        raise CliError("[ERROR] No authorization code received (timed out after 120s).")
 
     # Exchange code for tokens
-    result = _google_token_request({
-        "client_id": config.GOOGLE_CLIENT_ID,
-        "client_secret": config.GOOGLE_CLIENT_SECRET,
-        "code": auth_code[0],
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
-        "code_verifier": code_verifier,
-    })
+    result = _google_token_request(
+        {
+            "client_id": config.GOOGLE_CLIENT_ID,
+            "client_secret": config.GOOGLE_CLIENT_SECRET,
+            "code": auth_code[0],
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+            "code_verifier": code_verifier,
+        }
+    )
     if not result or "access_token" not in result:
         raise CliError("[ERROR] Token exchange failed.")
 
@@ -317,11 +337,9 @@ def _revoke_google_auth():
                 if resp.status == 200:
                     print("Token revoked at Google.")
                 else:
-                    print(f"[WARN] Google revoke returned status {resp.status}.",
-                          file=sys.stderr)
-        except (urllib.error.URLError, socket.timeout) as e:
-            print(f"[WARN] Could not reach Google to revoke token: {e}",
-                  file=sys.stderr)
+                    print(f"[WARN] Google revoke returned status {resp.status}.", file=sys.stderr)
+        except (TimeoutError, urllib.error.URLError) as e:
+            print(f"[WARN] Could not reach Google to revoke token: {e}", file=sys.stderr)
 
     # Delete local file
     if os.path.exists(config.GDD_TOKENS_PATH):
@@ -333,13 +351,14 @@ def _revoke_google_auth():
 # GDD fetch, parse, and sync
 # ---------------------------------------------------------------------------
 
+
 def _extract_google_doc_id(url):
     """Extract document ID from a Google Docs URL or bare ID."""
-    match = re.search(r'/document/d/([a-zA-Z0-9_-]+)', url)
+    match = re.search(r"/document/d/([a-zA-Z0-9_-]+)", url)
     if match:
         return match.group(1)
     # Maybe it's just the ID itself
-    if re.match(r'^[a-zA-Z0-9_-]{20,}$', url):
+    if re.match(r"^[a-zA-Z0-9_-]{20,}$", url):
         return url
     return None
 
@@ -355,7 +374,7 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
         elif not os.path.exists(local_file):
             raise CliError(f"[ERROR] File not found: {local_file}")
         else:
-            with open(local_file, "r", encoding="utf-8") as f:
+            with open(local_file, encoding="utf-8") as f:
                 content = f.read()
         if save_cache and content.strip():
             _save_gdd_cache(content)
@@ -368,33 +387,32 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
         if not use_cache:
             doc_id = _extract_google_doc_id(config.GDD_DOC_URL)
             if not doc_id:
-                raise CliError("[ERROR] Invalid Google Doc URL in "
-                               "GDD_GOOGLE_DOC_URL.")
+                raise CliError("[ERROR] Invalid Google Doc URL in GDD_GOOGLE_DOC_URL.")
             content = _fetch_google_doc_content(doc_id)
             if content:
                 _save_gdd_cache(content)
                 return content
             # Fetch failed — try cache
             if os.path.exists(config.GDD_CACHE_PATH):
-                print("[WARN] Google Doc fetch failed, using cache.",
-                      file=sys.stderr)
+                print("[WARN] Google Doc fetch failed, using cache.", file=sys.stderr)
             else:
-                raise CliError("[ERROR] Google Doc fetch failed and "
-                               "no cache available.")
+                raise CliError("[ERROR] Google Doc fetch failed and no cache available.")
 
         # Use cache
         if os.path.exists(config.GDD_CACHE_PATH):
-            with open(config.GDD_CACHE_PATH, "r", encoding="utf-8") as f:
+            with open(config.GDD_CACHE_PATH, encoding="utf-8") as f:
                 return f.read()
 
     # 3. Cache-only fallback
     if os.path.exists(config.GDD_CACHE_PATH):
-        with open(config.GDD_CACHE_PATH, "r", encoding="utf-8") as f:
+        with open(config.GDD_CACHE_PATH, encoding="utf-8") as f:
             return f.read()
 
     # 4. No source configured
-    raise CliError("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL "
-                   "in .env, use --file <path>, or pipe via --file -")
+    raise CliError(
+        "[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL "
+        "in .env, use --file <path>, or pipe via --file -"
+    )
 
 
 def parse_gdd(content):
@@ -409,9 +427,9 @@ def parse_gdd(content):
     current_section = None
     current_task = None
     # Match [P:a], [E:5], or combined [P:a E:5]
-    tag_re = re.compile(r'\[P:([abc])\]', re.IGNORECASE)
-    effort_re = re.compile(r'\[E:(\d+)\]', re.IGNORECASE)
-    combined_re = re.compile(r'\[P:([abc])\s+E:(\d+)\]', re.IGNORECASE)
+    tag_re = re.compile(r"\[P:([abc])\]", re.IGNORECASE)
+    effort_re = re.compile(r"\[E:(\d+)\]", re.IGNORECASE)
+    combined_re = re.compile(r"\[P:([abc])\s+E:(\d+)\]", re.IGNORECASE)
 
     for raw_line in content.split("\n"):
         line = raw_line.rstrip()
@@ -431,13 +449,13 @@ def parse_gdd(content):
             continue
 
         # Top-level bullet: - Task title [P:a E:5]
-        if re.match(r'^[-*]\s', line.lstrip()) and not re.match(r'^\s{2,}', line):
+        if re.match(r"^[-*]\s", line.lstrip()) and not re.match(r"^\s{2,}", line):
             if not current_section:
                 # Tasks before any section go into "Uncategorized"
                 current_section = {"section": "Uncategorized", "tasks": []}
                 sections.append(current_section)
 
-            task_text = re.sub(r'^[-*]\s+', '', line.strip())
+            task_text = re.sub(r"^[-*]\s+", "", line.strip())
 
             # Extract tags: [P:a E:5] (combined) or [P:a] [E:5] (separate)
             priority = None
@@ -446,16 +464,16 @@ def parse_gdd(content):
             if combined_match:
                 priority = combined_match.group(1).lower()
                 effort = int(combined_match.group(2))
-                task_text = combined_re.sub('', task_text)
+                task_text = combined_re.sub("", task_text)
             else:
                 p_match = tag_re.search(task_text)
                 if p_match:
                     priority = p_match.group(1).lower()
-                    task_text = tag_re.sub('', task_text)
+                    task_text = tag_re.sub("", task_text)
                 e_match = effort_re.search(task_text)
                 if e_match:
                     effort = int(e_match.group(1))
-                    task_text = effort_re.sub('', task_text)
+                    task_text = effort_re.sub("", task_text)
 
             title = task_text.strip()
             if title:
@@ -469,8 +487,8 @@ def parse_gdd(content):
             continue
 
         # Indented bullet: sub-item -> append to current task's content
-        if re.match(r'^\s{2,}[-*]\s', line) and current_task:
-            sub_text = re.sub(r'^\s+[-*]\s+', '', line)
+        if re.match(r"^\s{2,}[-*]\s", line) and current_task:
+            sub_text = re.sub(r"^\s+[-*]\s+", "", line)
             if current_task["content"]:
                 current_task["content"] += "\n" + sub_text
             else:
@@ -500,8 +518,7 @@ def _fuzzy_match(needle, haystack_set):
     return None
 
 
-def sync_gdd(sections, project_name, target_section=None, apply=False,
-             quiet=False):
+def sync_gdd(sections, project_name, target_section=None, apply=False, quiet=False):
     """Compare GDD tasks against Codecks cards. Optionally create missing ones.
 
     Returns sync report dict.
@@ -545,12 +562,14 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
 
             if match:
                 match_type = "exact" if match == task["title"].lower().strip() else "fuzzy"
-                report["existing"].append({
-                    "title": task["title"],
-                    "matched_to": match,
-                    "match_type": match_type,
-                    "card_id": existing_titles[match],
-                })
+                report["existing"].append(
+                    {
+                        "title": task["title"],
+                        "matched_to": match,
+                        "match_type": match_type,
+                        "card_id": existing_titles[match],
+                    }
+                )
                 continue
 
             task_entry = {
@@ -566,8 +585,8 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
                     card_id = result.get("cardId", "")
                     if not card_id:
                         raise CliError(
-                            "[ERROR] create_card returned no cardId "
-                            f"for '{task['title']}'")
+                            f"[ERROR] create_card returned no cardId for '{task['title']}'"
+                        )
                     update_kwargs = {}
                     if deck_id:
                         update_kwargs["deckId"] = deck_id

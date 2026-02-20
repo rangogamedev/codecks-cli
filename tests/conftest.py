@@ -3,8 +3,6 @@ Shared test fixtures for codecks-cli tests.
 Patches config module to avoid loading real .env and making API calls.
 """
 
-import sys
-import types
 import pytest
 
 
@@ -12,7 +10,8 @@ import pytest
 def _isolate_config(monkeypatch):
     """Ensure every test starts with a clean config state.
     Prevents tests from reading the real .env or sharing cached data."""
-    import config
+    from codecks_cli import config
+
     monkeypatch.setattr(config, "env", {})
     monkeypatch.setattr(config, "SESSION_TOKEN", "fake-token")
     monkeypatch.setattr(config, "ACCESS_KEY", "fake-key")

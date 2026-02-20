@@ -6,17 +6,16 @@ for codecks-cli.
 import json
 import sys
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-import config
-from config import CliError
-from api import (query, warn_if_empty, session_request, report_request,
-                 _try_call)
-
+from codecks_cli import config
+from codecks_cli.api import _try_call, query, report_request, session_request, warn_if_empty
+from codecks_cli.config import CliError
 
 # ---------------------------------------------------------------------------
 # Config helpers (.env name mappings)
 # ---------------------------------------------------------------------------
+
 
 def _load_env_mapping(env_key):
     """Load an id=Name mapping from a comma-separated .env value.
@@ -43,9 +42,9 @@ def load_users():
     """Load user ID->name mapping from account roles. Cached per invocation."""
     if "users" in config._cache:
         return config._cache["users"]
-    result = _try_call(query, {"_root": [{"account": [
-        {"roles": ["userId", "role", {"user": ["id", "name"]}]}
-    ]}]})
+    result = _try_call(
+        query, {"_root": [{"account": [{"roles": ["userId", "role", {"user": ["id", "name"]}]}]}]}
+    )
     user_map = {}
     if result:
         for uid, udata in result.get("user", {}).items():
@@ -57,6 +56,7 @@ def load_users():
 # ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_field(d, snake, camel):
     """Get a value from a dict trying snake_case then camelCase key."""
@@ -72,8 +72,7 @@ def get_card_tags(card):
 
 def _filter_cards(result, predicate):
     """Filter result['card'] dict by predicate(key, card). Returns result."""
-    result["card"] = {k: v for k, v in result.get("card", {}).items()
-                      if predicate(k, v)}
+    result["card"] = {k: v for k, v in result.get("card", {}).items() if predicate(k, v)}
     return result
 
 
@@ -98,8 +97,9 @@ def _parse_multi_value(raw, valid_set, field_name):
     values = [v.strip() for v in raw.split(",") if v.strip()]
     for v in values:
         if v not in valid_set:
-            raise CliError(f"[ERROR] Invalid {field_name} '{v}'. "
-                           f"Valid: {', '.join(sorted(valid_set))}")
+            raise CliError(
+                f"[ERROR] Invalid {field_name} '{v}'. Valid: {', '.join(sorted(valid_set))}"
+            )
     return values
 
 
@@ -123,15 +123,35 @@ def _parse_iso_timestamp(ts):
         return None
 
 
-def list_cards(deck_filter=None, status_filter=None, project_filter=None,
-               search_filter=None, milestone_filter=None, tag_filter=None,
-               owner_filter=None, priority_filter=None,
-               stale_days=None, updated_after=None, updated_before=None,
-               archived=False):
-    card_fields = ["title", "status", "priority", "deckId", "effort",
-                   "severity", "createdAt", "milestoneId", "masterTags",
-                   "lastUpdatedAt", "isDoc", "childCardInfo",
-                   {"assignee": ["name", "id"]}]
+def list_cards(
+    deck_filter=None,
+    status_filter=None,
+    project_filter=None,
+    search_filter=None,
+    milestone_filter=None,
+    tag_filter=None,
+    owner_filter=None,
+    priority_filter=None,
+    stale_days=None,
+    updated_after=None,
+    updated_before=None,
+    archived=False,
+):
+    card_fields = [
+        "title",
+        "status",
+        "priority",
+        "deckId",
+        "effort",
+        "severity",
+        "createdAt",
+        "milestoneId",
+        "masterTags",
+        "lastUpdatedAt",
+        "isDoc",
+        "childCardInfo",
+        {"assignee": ["name", "id"]},
+    ]
     if search_filter:
         card_fields.append("content")
     card_query = {"visibility": "archived" if archived else "default"}
@@ -139,8 +159,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     # Parse and validate status filter (supports comma-separated values)
     status_values = None
     if status_filter:
-        status_values = _parse_multi_value(
-            status_filter, config.VALID_STATUSES, "status")
+        status_values = _parse_multi_value(status_filter, config.VALID_STATUSES, "status")
         if len(status_values) == 1:
             # Single value → server-side filter
             card_query["status"] = status_values[0]
@@ -173,15 +192,15 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
 
     # Client-side priority filter (supports comma-separated values)
     if priority_filter:
-        pri_values = _parse_multi_value(
-            priority_filter, config.VALID_PRIORITIES, "priority")
+        pri_values = _parse_multi_value(priority_filter, config.VALID_PRIORITIES, "priority")
         # Normalize "null" → match cards with None priority
         pri_set = set(pri_values)
         has_null = "null" in pri_set
         pri_set.discard("null")
-        _filter_cards(result, lambda k, c:
-                      c.get("priority") in pri_set or
-                      (has_null and not c.get("priority")))
+        _filter_cards(
+            result,
+            lambda k, c: c.get("priority") in pri_set or (has_null and not c.get("priority")),
+        )
 
     # Client-side project filter (cards don't have projectId directly)
     if project_filter:
@@ -191,28 +210,30 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             available = [n for n in load_project_names().values()]
             hint = f" Available: {', '.join(available)}" if available else ""
             raise CliError(f"[ERROR] Project '{project_filter}' not found.{hint}")
-        _filter_cards(result, lambda k, c:
-                      _get_field(c, "deck_id", "deckId") in project_deck_ids)
+        _filter_cards(result, lambda k, c: _get_field(c, "deck_id", "deckId") in project_deck_ids)
 
     # Client-side text search
     if search_filter:
         search_lower = search_filter.lower()
-        _filter_cards(result, lambda k, c:
-                      search_lower in (c.get("title", "") or "").lower() or
-                      search_lower in (c.get("content", "") or "").lower())
+        _filter_cards(
+            result,
+            lambda k, c: (
+                search_lower in (c.get("title", "") or "").lower()
+                or search_lower in (c.get("content", "") or "").lower()
+            ),
+        )
 
     # Client-side milestone filter
     if milestone_filter:
         milestone_id = resolve_milestone_id(milestone_filter)
-        _filter_cards(result, lambda k, c:
-                      _get_field(c, "milestone_id", "milestoneId") == milestone_id)
+        _filter_cards(
+            result, lambda k, c: _get_field(c, "milestone_id", "milestoneId") == milestone_id
+        )
 
     # Client-side tag filter
     if tag_filter:
         tag_lower = tag_filter.lower()
-        _filter_cards(result, lambda k, c:
-                      any(t.lower() == tag_lower
-                          for t in get_card_tags(c)))
+        _filter_cards(result, lambda k, c: any(t.lower() == tag_lower for t in get_card_tags(c)))
 
     # Client-side owner filter
     if owner_filter:
@@ -246,26 +267,29 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     # Cards with missing timestamps are excluded from all date-filtered results.
     if stale_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
         def _stale_pred(k, c):
-            ts = _parse_iso_timestamp(
-                _get_field(c, "last_updated_at", "lastUpdatedAt"))
+            ts = _parse_iso_timestamp(_get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts < cutoff
+
         _filter_cards(result, _stale_pred)
 
     if updated_after:
         after_dt = _parse_date(updated_after)
+
         def _after_pred(k, c):
-            ts = _parse_iso_timestamp(
-                _get_field(c, "last_updated_at", "lastUpdatedAt"))
+            ts = _parse_iso_timestamp(_get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts >= after_dt
+
         _filter_cards(result, _after_pred)
 
     if updated_before:
         before_dt = _parse_date(updated_before)
+
         def _before_pred(k, c):
-            ts = _parse_iso_timestamp(
-                _get_field(c, "last_updated_at", "lastUpdatedAt"))
+            ts = _parse_iso_timestamp(_get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts < before_dt
+
         _filter_cards(result, _before_pred)
 
     return result
@@ -302,18 +326,43 @@ def _build_project_map(decks_result):
 
 def get_card(card_id):
     card_filter = json.dumps({"cardId": card_id, "visibility": "default"})
-    q = {"_root": [{"account": [{f"cards({card_filter})": [
-        "title", "status", "priority", "content", "deckId",
-        "effort", "severity", "createdAt", "milestoneId", "masterTags",
-        "lastUpdatedAt", "isDoc", "checkboxStats", "parentCardId",
-        {"assignee": ["name", "id"]},
-        {"childCards": ["title", "status"]},
-        {"resolvables": [
-            "context", "isClosed", "createdAt",
-            {"creator": ["name"]},
-            {"entries": ["content", "createdAt", {"author": ["name"]}]},
-        ]},
-    ]}]}]}
+    q = {
+        "_root": [
+            {
+                "account": [
+                    {
+                        f"cards({card_filter})": [
+                            "title",
+                            "status",
+                            "priority",
+                            "content",
+                            "deckId",
+                            "effort",
+                            "severity",
+                            "createdAt",
+                            "milestoneId",
+                            "masterTags",
+                            "lastUpdatedAt",
+                            "isDoc",
+                            "checkboxStats",
+                            "parentCardId",
+                            {"assignee": ["name", "id"]},
+                            {"childCards": ["title", "status"]},
+                            {
+                                "resolvables": [
+                                    "context",
+                                    "isClosed",
+                                    "createdAt",
+                                    {"creator": ["name"]},
+                                    {"entries": ["content", "createdAt", {"author": ["name"]}]},
+                                ]
+                            },
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
     return query(q)
 
 
@@ -339,12 +388,24 @@ def list_milestones():
 
 def list_activity(limit=20):
     """Query recent account activity."""
-    q = {"_root": [{"account": [{"activities": [
-        "type", "createdAt", "data",
-        {"card": ["title"]},
-        {"changer": ["name"]},
-        {"deck": ["title"]},
-    ]}]}]}
+    q = {
+        "_root": [
+            {
+                "account": [
+                    {
+                        "activities": [
+                            "type",
+                            "createdAt",
+                            "data",
+                            {"card": ["title"]},
+                            {"changer": ["name"]},
+                            {"deck": ["title"]},
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
     result = query(q)
     activities = result.get("activity", {})
     if len(activities) > limit:
@@ -369,6 +430,7 @@ def list_projects():
 # ---------------------------------------------------------------------------
 # Enrichment (resolve IDs to human-readable names)
 # ---------------------------------------------------------------------------
+
 
 def enrich_cards(cards_dict, user_data=None):
     """Add deck_name, milestone_name, owner_name to card dicts."""
@@ -452,6 +514,7 @@ def compute_card_stats(cards_dict):
 # Mutation helpers
 # ---------------------------------------------------------------------------
 
+
 def create_card(title, content=None, severity=None):
     """Create a card using the Report Token (stable, no expiry).
     First line of content becomes the card title."""
@@ -474,55 +537,68 @@ def update_card(card_id, **kwargs):
 
 def archive_card(card_id):
     """Archive a card (uses session token)."""
-    return session_request("/dispatch/cards/update", {
-        "id": card_id,
-        "isArchived": True,
-    })
+    return session_request(
+        "/dispatch/cards/update",
+        {
+            "id": card_id,
+            "isArchived": True,
+        },
+    )
 
 
 def unarchive_card(card_id):
     """Unarchive a card (uses session token)."""
-    return session_request("/dispatch/cards/update", {
-        "id": card_id,
-        "isArchived": False,
-    })
+    return session_request(
+        "/dispatch/cards/update",
+        {
+            "id": card_id,
+            "isArchived": False,
+        },
+    )
 
 
 def delete_card(card_id):
     """Delete a card — archives first, then deletes (uses session token)."""
     archive_card(card_id)
     try:
-        return session_request("/dispatch/cards/bulkUpdate", {
-            "ids": [card_id],
-            "visibility": "deleted",
-            "deleteFiles": False,
-        })
+        return session_request(
+            "/dispatch/cards/bulkUpdate",
+            {
+                "ids": [card_id],
+                "visibility": "deleted",
+                "deleteFiles": False,
+            },
+        )
     except CliError:
-        print(f"Warning: Card {card_id} was archived but delete failed. "
-              f"Use 'unarchive' to recover.", file=sys.stderr)
+        print(
+            f"Warning: Card {card_id} was archived but delete failed. Use 'unarchive' to recover.",
+            file=sys.stderr,
+        )
         raise
 
 
 def bulk_status(card_ids, status):
     """Update status for multiple cards at once."""
-    return session_request("/dispatch/cards/bulkUpdate", {
-        "ids": card_ids,
-        "status": status,
-    })
+    return session_request(
+        "/dispatch/cards/bulkUpdate",
+        {
+            "ids": card_ids,
+            "status": status,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Hand helpers (personal card queue)
 # ---------------------------------------------------------------------------
 
+
 def _get_user_id():
     """Return the current user's ID. Reads from .env, falls back to API."""
     if config.USER_ID:
         return config.USER_ID
     # Auto-discover: query account roles, pick the first owner
-    result = query({"_root": [{"account": [
-        {"roles": ["userId", "role"]}
-    ]}]})
+    result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
     for entry in (result.get("accountRole") or {}).values():
         if entry.get("role") == "owner":
             return _get_field(entry, "user_id", "userId")
@@ -531,15 +607,12 @@ def _get_user_id():
         uid = _get_field(entry, "user_id", "userId")
         if uid:
             return uid
-    raise CliError("[ERROR] Could not determine your user ID. "
-                   "Run: py codecks_api.py setup")
+    raise CliError("[ERROR] Could not determine your user ID. Run: py codecks_api.py setup")
 
 
 def list_hand():
     """Query the current user's hand (queueEntries)."""
-    q = {"_root": [{"account": [{"queueEntries": [
-        "card", "sortIndex", "user"
-    ]}]}]}
+    q = {"_root": [{"account": [{"queueEntries": ["card", "sortIndex", "user"]}]}]}
     return query(q)
 
 
@@ -556,84 +629,118 @@ def extract_hand_card_ids(hand_result):
 def add_to_hand(card_ids):
     """Add cards to the current user's hand."""
     user_id = _get_user_id()
-    return session_request("/dispatch/handQueue/setCardOrders", {
-        "sessionId": str(uuid.uuid4()),
-        "userId": user_id,
-        "cardIds": card_ids,
-        "draggedCardIds": card_ids,
-    })
+    return session_request(
+        "/dispatch/handQueue/setCardOrders",
+        {
+            "sessionId": str(uuid.uuid4()),
+            "userId": user_id,
+            "cardIds": card_ids,
+            "draggedCardIds": card_ids,
+        },
+    )
 
 
 def remove_from_hand(card_ids):
     """Remove cards from the current user's hand."""
-    return session_request("/dispatch/handQueue/removeCards", {
-        "sessionId": str(uuid.uuid4()),
-        "cardIds": card_ids,
-    })
+    return session_request(
+        "/dispatch/handQueue/removeCards",
+        {
+            "sessionId": str(uuid.uuid4()),
+            "cardIds": card_ids,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Conversation helpers (threaded comments on cards)
 # ---------------------------------------------------------------------------
 
+
 def create_comment(card_id, content):
     """Create a new comment thread on a card."""
     user_id = _get_user_id()
-    return session_request("/dispatch/resolvables/create", {
-        "cardId": card_id,
-        "userId": user_id,
-        "content": content,
-        "context": "comment",
-    })
+    return session_request(
+        "/dispatch/resolvables/create",
+        {
+            "cardId": card_id,
+            "userId": user_id,
+            "content": content,
+            "context": "comment",
+        },
+    )
 
 
 def reply_comment(resolvable_id, content):
     """Reply to an existing comment thread."""
     user_id = _get_user_id()
-    return session_request("/dispatch/resolvables/comment", {
-        "resolvableId": resolvable_id,
-        "content": content,
-        "authorId": user_id,
-    })
+    return session_request(
+        "/dispatch/resolvables/comment",
+        {
+            "resolvableId": resolvable_id,
+            "content": content,
+            "authorId": user_id,
+        },
+    )
 
 
 def close_comment(resolvable_id, card_id):
     """Close a comment thread."""
     user_id = _get_user_id()
-    return session_request("/dispatch/resolvables/close", {
-        "id": resolvable_id,
-        "isClosed": True,
-        "cardId": card_id,
-        "closedBy": user_id,
-    })
+    return session_request(
+        "/dispatch/resolvables/close",
+        {
+            "id": resolvable_id,
+            "isClosed": True,
+            "cardId": card_id,
+            "closedBy": user_id,
+        },
+    )
 
 
 def reopen_comment(resolvable_id, card_id):
     """Reopen a closed comment thread."""
-    return session_request("/dispatch/resolvables/reopen", {
-        "id": resolvable_id,
-        "isClosed": False,
-        "cardId": card_id,
-    })
+    return session_request(
+        "/dispatch/resolvables/reopen",
+        {
+            "id": resolvable_id,
+            "isClosed": False,
+            "cardId": card_id,
+        },
+    )
 
 
 def get_conversations(card_id):
     """Fetch all conversations (resolvables) on a card."""
     card_filter = json.dumps({"cardId": card_id, "visibility": "default"})
-    q = {"_root": [{"account": [{f"cards({card_filter})": [
-        "title",
-        {"resolvables": [
-            "context", "isClosed", "createdAt",
-            {"creator": ["name"]},
-            {"entries": ["content", "createdAt", {"author": ["name"]}]},
-        ]},
-    ]}]}]}
+    q = {
+        "_root": [
+            {
+                "account": [
+                    {
+                        f"cards({card_filter})": [
+                            "title",
+                            {
+                                "resolvables": [
+                                    "context",
+                                    "isClosed",
+                                    "createdAt",
+                                    {"creator": ["name"]},
+                                    {"entries": ["content", "createdAt", {"author": ["name"]}]},
+                                ]
+                            },
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
     return query(q)
 
 
 # ---------------------------------------------------------------------------
 # Name -> ID resolution helpers
 # ---------------------------------------------------------------------------
+
 
 def resolve_deck_id(deck_name):
     """Resolve deck name to ID."""
@@ -656,5 +763,7 @@ def resolve_milestone_id(milestone_name):
             return mid
     available = list(milestone_names.values())
     hint = f" Available: {', '.join(available)}" if available else ""
-    raise CliError(f"[ERROR] Milestone '{milestone_name}' not found.{hint} "
-                   "Add milestones to .env: CODECKS_MILESTONES=<id>=<name>")
+    raise CliError(
+        f"[ERROR] Milestone '{milestone_name}' not found.{hint} "
+        "Add milestones to .env: CODECKS_MILESTONES=<id>=<name>"
+    )

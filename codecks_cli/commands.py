@@ -1,204 +1,93 @@
 """
 Command implementations for codecks-cli.
 Each cmd_*() function receives an argparse.Namespace and handles one CLI command.
+
+Business logic lives in client.py (CodecksClient). These thin wrappers
+handle argparse → keyword args, format selection, and formatter dispatch.
 """
 
-import json
 import sys
-from difflib import SequenceMatcher
-from datetime import datetime, timezone, timedelta
 
-import config
-from config import CliError, SetupError
-from api import (_safe_json_parse, _mask_token,
-                 query, dispatch, generate_report_token)
-from cards import (get_account, list_decks, list_cards, get_card,
-                   list_milestones, list_activity, list_projects,
-                   enrich_cards, compute_card_stats,
-                   create_card, update_card, archive_card, unarchive_card,
-                   delete_card, bulk_status,
-                   list_hand, add_to_hand, remove_from_hand,
-                   extract_hand_card_ids,
-                   create_comment, reply_comment, close_comment,
-                   reopen_comment, get_conversations,
-                   resolve_deck_id, resolve_milestone_id,
-                   get_project_deck_ids, load_users, load_project_names,
-                   _parse_iso_timestamp, _get_field)
-from formatters import (output, mutation_response,
-                        format_account_table, format_cards_table,
-                        format_card_detail, format_conversations_table,
-                        format_decks_table, format_projects_table,
-                        format_milestones_table, format_stats_table,
-                        format_activity_table, format_cards_csv,
-                        format_gdd_table, format_sync_report,
-                        format_pm_focus_table, format_standup_table)
-from gdd import (_run_google_auth_flow, _revoke_google_auth,
-                 fetch_gdd, parse_gdd, sync_gdd)
-from models import (ObjectPayload, FeatureSpec,
-                    FeatureSubcard, FeatureScaffoldReport)
-from setup_wizard import cmd_setup
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-_SORT_KEY_MAP = {
-    "status": "status",
-    "priority": "priority",
-    "effort": "effort",
-    "deck": "deck_name",
-    "title": "title",
-    "owner": "owner_name",
-    "updated": "lastUpdatedAt",
-    "created": "createdAt",
-}
-
-
-def _sort_field_value(card, sort_field):
-    """Return the sortable value for a field with snake/camel compatibility."""
-    if sort_field == "updated":
-        return _get_field(card, "last_updated_at", "lastUpdatedAt")
-    if sort_field == "created":
-        return _get_field(card, "created_at", "createdAt")
-    field = _SORT_KEY_MAP[sort_field]
-    return card.get(field)
-
-
-def _sort_cards(cards_dict, sort_field):
-    """Sort a {card_id: card_data} dict by *sort_field*; return a new dict."""
-    reverse = sort_field in ("updated", "created")
-
-    def _key(item):
-        v = _sort_field_value(item[1], sort_field)
-        if v is None or v == "":
-            return (1, "") if not reverse else (-1, "")
-        if isinstance(v, (int, float)):
-            return (0, v)
-        return (0, str(v).lower())
-
-    return dict(sorted(cards_dict.items(), key=_key, reverse=reverse))
-
-
-def _normalize_dispatch_path(path):
-    """Normalize and validate a dispatch path segment."""
-    normalized = (path or "").strip()
-    if not normalized:
-        raise CliError("[ERROR] Dispatch path cannot be empty.")
-    normalized = normalized.lstrip("/")
-    if normalized.startswith("dispatch/"):
-        normalized = normalized[len("dispatch/"):]
-    if not normalized or normalized.startswith("/") or " " in normalized:
-        raise CliError("[ERROR] Invalid dispatch path. Use e.g. cards/update")
-    return normalized
-
-
-def _resolve_owner_id(owner_name):
-    """Resolve owner display name to user ID."""
-    user_map = load_users()
-    for uid, name in user_map.items():
-        if name.lower() == owner_name.lower():
-            return uid
-    available = list(user_map.values())
-    hint = f" Available: {', '.join(available)}" if available else ""
-    raise CliError(f"[ERROR] Owner '{owner_name}' not found.{hint}")
-
-
-def _card_row(cid, card):
-    return {
-        "id": cid,
-        "title": card.get("title", ""),
-        "status": card.get("status"),
-        "priority": card.get("priority"),
-        "effort": card.get("effort"),
-        "deck_name": card.get("deck_name") or card.get("deck"),
-        "owner_name": card.get("owner_name"),
-    }
-
-
-def _normalize_title(title):
-    return " ".join((title or "").strip().lower().split())
-
-
-def _find_duplicate_title_candidates(title, limit=5):
-    """Return (exact, similar) duplicate candidates for a card title."""
-    normalized_target = _normalize_title(title)
-    if not normalized_target:
-        return [], []
-
-    result = list_cards(search_filter=title, archived=False)
-    cards = result.get("card", {})
-
-    exact = []
-    similar = []
-    for cid, card in cards.items():
-        existing_title = (card.get("title") or "").strip()
-        if not existing_title:
-            continue
-        normalized_existing = _normalize_title(existing_title)
-        if not normalized_existing:
-            continue
-
-        status = card.get("status") or "unknown"
-        row = {"id": cid, "title": existing_title, "status": status}
-        if normalized_existing == normalized_target:
-            exact.append(row)
-            continue
-
-        score = SequenceMatcher(None, normalized_target, normalized_existing).ratio()
-        if (
-            normalized_target in normalized_existing
-            or normalized_existing in normalized_target
-            or score >= 0.88
-        ):
-            row["score"] = score
-            similar.append(row)
-
-    similar.sort(key=lambda item: item.get("score", 0), reverse=True)
-    return exact[:limit], similar[:limit]
-
-
-def _guard_duplicate_title(title, allow_duplicate=False, context="card"):
-    """Fail on exact duplicates and warn on near matches unless explicitly allowed."""
-    if allow_duplicate:
-        return
-
-    exact, similar = _find_duplicate_title_candidates(title)
-    if exact:
-        preview = ", ".join(
-            f"{item['id']} ('{item['title']}', status={item['status']})"
-            for item in exact
-        )
-        raise CliError(
-            f"[ERROR] Duplicate {context} title detected: '{title}'.\n"
-            f"[ERROR] Existing: {preview}\n"
-            "[ERROR] Re-run with --allow-duplicate to bypass this check."
-        )
-
-    if similar:
-        preview = ", ".join(
-            f"{item['id']} ('{item['title']}', status={item['status']})"
-            for item in similar
-        )
-        print(
-            f"[WARN] Similar {context} titles found for '{title}': {preview}",
-            file=sys.stderr,
-        )
-
+from codecks_cli import config
+from codecks_cli.api import _mask_token, _safe_json_parse, dispatch, generate_report_token, query
+from codecks_cli.cards import (
+    _get_field,
+    add_to_hand,
+    archive_card,
+    bulk_status,
+    close_comment,
+    compute_card_stats,
+    create_card,
+    create_comment,
+    delete_card,
+    enrich_cards,
+    extract_hand_card_ids,
+    get_account,
+    get_card,
+    get_conversations,
+    get_project_deck_ids,
+    list_activity,
+    list_cards,
+    list_decks,
+    list_hand,
+    list_milestones,
+    list_projects,
+    load_project_names,
+    remove_from_hand,
+    reopen_comment,
+    reply_comment,
+    resolve_deck_id,
+    resolve_milestone_id,
+    unarchive_card,
+    update_card,
+)
+from codecks_cli.client import (
+    _card_row,
+    _guard_duplicate_title,
+    _normalize_dispatch_path,
+    _resolve_owner_id,
+    _sort_cards,
+)
+from codecks_cli.config import CliError, SetupError
+from codecks_cli.formatters import (
+    format_account_table,
+    format_activity_table,
+    format_card_detail,
+    format_cards_csv,
+    format_cards_table,
+    format_conversations_table,
+    format_decks_table,
+    format_gdd_table,
+    format_milestones_table,
+    format_pm_focus_table,
+    format_projects_table,
+    format_standup_table,
+    format_stats_table,
+    format_sync_report,
+    mutation_response,
+    output,
+)
+from codecks_cli.gdd import (
+    _revoke_google_auth,
+    _run_google_auth_flow,
+    fetch_gdd,
+    parse_gdd,
+    sync_gdd,
+)
+from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard, ObjectPayload
 
 # ---------------------------------------------------------------------------
 # Read commands
 # ---------------------------------------------------------------------------
 
+
 def cmd_query(ns):
-    q = ObjectPayload.from_value(
-        _safe_json_parse(ns.json_query, "query"), "query").data
+    q = ObjectPayload.from_value(_safe_json_parse(ns.json_query, "query"), "query").data
     if config.RUNTIME_STRICT:
         root = q.get("_root")
         if not isinstance(root, list) or not root:
             raise CliError(
-                "[ERROR] Strict mode: query payload must include non-empty "
-                "'_root' array."
+                "[ERROR] Strict mode: query payload must include non-empty '_root' array."
             )
     output(query(q), fmt=ns.format)
 
@@ -248,36 +137,34 @@ def cmd_cards(ns):
     if ns.hand:
         hand_result = list_hand()
         hand_card_ids = extract_hand_card_ids(hand_result)
-        result["card"] = {k: v for k, v in result.get("card", {}).items()
-                          if k in hand_card_ids}
+        result["card"] = {k: v for k, v in result.get("card", {}).items() if k in hand_card_ids}
     # Filter to sub-cards of a hero card
     if ns.hero:
         hero_result = get_card(ns.hero)
         child_ids = set()
         for cdata in hero_result.get("card", {}).values():
-            for cid in (cdata.get("childCards") or []):
+            for cid in cdata.get("childCards") or []:
                 child_ids.add(cid)
-        result["card"] = {k: v for k, v in result.get("card", {}).items()
-                          if k in child_ids}
+        result["card"] = {k: v for k, v in result.get("card", {}).items() if k in child_ids}
     # Enrich cards with deck/milestone/owner names
-    result["card"] = enrich_cards(result.get("card", {}),
-                                   result.get("user"))
+    result["card"] = enrich_cards(result.get("card", {}), result.get("user"))
     # Filter by card type
     card_type = ns.type
     if card_type:
         if card_type == "doc":
-            result["card"] = {k: v for k, v in result.get("card", {}).items()
-                              if _get_field(v, "is_doc", "isDoc")}
+            result["card"] = {
+                k: v for k, v in result.get("card", {}).items() if _get_field(v, "is_doc", "isDoc")
+            }
         elif card_type == "hero":
+            import json
+
             card_filter = json.dumps({"visibility": "default"})
-            hero_q = {"_root": [{"account": [{
-                f"cards({card_filter})": [{"childCards": ["title"]}]
-            }]}]}
+            hero_q = {
+                "_root": [{"account": [{f"cards({card_filter})": [{"childCards": ["title"]}]}]}]
+            }
             hero_result = query(hero_q)
-            hero_ids = {k for k, v in hero_result.get("card", {}).items()
-                        if v.get("childCards")}
-            result["card"] = {k: v for k, v in result.get("card", {}).items()
-                              if k in hero_ids}
+            hero_ids = {k for k, v in hero_result.get("card", {}).items() if v.get("childCards")}
+            result["card"] = {k: v for k, v in result.get("card", {}).items() if k in hero_ids}
 
     # Sort cards if requested
     if ns.sort and result.get("card"):
@@ -287,14 +174,12 @@ def cmd_cards(ns):
         stats = compute_card_stats(result.get("card", {}))
         output(stats, format_stats_table, fmt)
     else:
-        output(result, format_cards_table, fmt,
-               csv_formatter=format_cards_csv)
+        output(result, format_cards_table, fmt, csv_formatter=format_cards_csv)
 
 
 def cmd_card(ns):
     result = get_card(ns.card_id)
-    result["card"] = enrich_cards(result.get("card", {}),
-                                   result.get("user"))
+    result["card"] = enrich_cards(result.get("card", {}), result.get("user"))
     # Check if this card is in hand
     hand_result = list_hand()
     hand_card_ids = extract_hand_card_ids(hand_result)
@@ -307,6 +192,7 @@ def cmd_card(ns):
 # Mutation commands
 # ---------------------------------------------------------------------------
 
+
 def cmd_create(ns):
     fmt = ns.format
     _guard_duplicate_title(
@@ -317,8 +203,10 @@ def cmd_create(ns):
     result = create_card(ns.title, ns.content, ns.severity)
     card_id = result.get("cardId", "")
     if not card_id:
-        raise CliError("[ERROR] Card creation failed: API response missing "
-                       f"'cardId'. Response: {str(result)[:200]}")
+        raise CliError(
+            "[ERROR] Card creation failed: API response missing "
+            f"'cardId'. Response: {str(result)[:200]}"
+        )
     placed_in = None
     post_update = {}
     if ns.deck:
@@ -373,12 +261,11 @@ def cmd_feature(ns):
         common_update["effort"] = spec.effort
 
     hero_body = (
-        (spec.description.strip() + "\n\n" if spec.description else "")
-        + "Success criteria:\n"
-          "- [] Lane coverage agreed (Code/Design/Art)\n"
-          "- [] Acceptance criteria validated\n"
-          "- [] Integration verified\n\n"
-          "Tags: #hero #feature"
+        (spec.description.strip() + "\n\n" if spec.description else "") + "Success criteria:\n"
+        "- [] Lane coverage agreed (Code/Design/Art)\n"
+        "- [] Acceptance criteria validated\n"
+        "- [] Integration verified\n\n"
+        "Tags: #hero #feature"
     )
     created = []
     created_ids = []
@@ -400,8 +287,7 @@ def cmd_feature(ns):
         if not hero_id:
             raise CliError("[ERROR] Hero creation failed: missing cardId.")
         created_ids.append(hero_id)
-        update_card(hero_id, deckId=hero_deck_id,
-                    masterTags=["hero", "feature"], **common_update)
+        update_card(hero_id, deckId=hero_deck_id, masterTags=["hero", "feature"], **common_update)
 
         def _make_sub(lane, deck_id, tags, checklist_lines):
             sub_title = f"[{lane}] {spec.title}"
@@ -410,13 +296,13 @@ def cmd_feature(ns):
                 f"- {lane} lane execution for feature goal\n\n"
                 "Checklist:\n"
                 + "\n".join(f"- [] {line}" for line in checklist_lines)
-                + "\n\nTags: " + " ".join(f"#{t}" for t in tags)
+                + "\n\nTags: "
+                + " ".join(f"#{t}" for t in tags)
             )
             res = create_card(sub_title, sub_body)
             sub_id = res.get("cardId")
             if not sub_id:
-                raise CliError(
-                    f"[ERROR] {lane} sub-card creation failed: missing cardId.")
+                raise CliError(f"[ERROR] {lane} sub-card creation failed: missing cardId.")
             created_ids.append(sub_id)
             update_card(
                 sub_id,
@@ -427,29 +313,42 @@ def cmd_feature(ns):
             )
             created.append(FeatureSubcard(lane=lane.lower(), id=sub_id))
 
-        _make_sub("Code", code_deck_id, ["code", "feature"], [
-            "Implement core logic",
-            "Handle edge cases",
-            "Add tests/verification",
-        ])
-        _make_sub("Design", design_deck_id, ["design", "feel", "economy", "feature"], [
-            "Define target player feel",
-            "Tune balance/economy parameters",
-            "Run playtest and iterate",
-        ])
+        _make_sub(
+            "Code",
+            code_deck_id,
+            ["code", "feature"],
+            [
+                "Implement core logic",
+                "Handle edge cases",
+                "Add tests/verification",
+            ],
+        )
+        _make_sub(
+            "Design",
+            design_deck_id,
+            ["design", "feel", "economy", "feature"],
+            [
+                "Define target player feel",
+                "Tune balance/economy parameters",
+                "Run playtest and iterate",
+            ],
+        )
         if not spec.skip_art and art_deck_id:
-            _make_sub("Art", art_deck_id, ["art", "feature"], [
-                "Create required assets/content",
-                "Integrate assets in game flow",
-                "Visual quality pass",
-            ])
+            _make_sub(
+                "Art",
+                art_deck_id,
+                ["art", "feature"],
+                [
+                    "Create required assets/content",
+                    "Integrate assets in game flow",
+                    "Visual quality pass",
+                ],
+            )
     except SetupError as err:
         # Preserve setup/token semantics (exit code 2) while still rolling back.
         rolled_back, rollback_failed = _rollback_created_ids()
         detail = (
-            f"{err}\n"
-            f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
-            "created cards."
+            f"{err}\n[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} created cards."
         )
         if rollback_failed:
             detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
@@ -474,8 +373,7 @@ def cmd_feature(ns):
         code_deck=spec.code_deck,
         design_deck=spec.design_deck,
         art_deck=None if spec.skip_art else spec.art_deck,
-        notes=(["Art lane auto-skipped (no --art-deck provided)."]
-               if spec.auto_skip_art else None),
+        notes=(["Art lane auto-skipped (no --art-deck provided)."] if spec.auto_skip_art else None),
     )
     if fmt == "table":
         lines = [
@@ -506,9 +404,10 @@ def cmd_update(ns):
         else:
             try:
                 update_kwargs["effort"] = int(ns.effort)
-            except ValueError:
-                raise CliError(f"[ERROR] Invalid effort value '{ns.effort}': "
-                               "must be a number or 'null'")
+            except ValueError as e:
+                raise CliError(
+                    f"[ERROR] Invalid effort value '{ns.effort}': must be a number or 'null'"
+                ) from e
 
     if ns.deck is not None:
         update_kwargs["deckId"] = resolve_deck_id(ns.deck)
@@ -520,8 +419,8 @@ def cmd_update(ns):
         cards = card_data.get("card", {})
         if not cards:
             raise CliError(f"[ERROR] Card '{card_ids[0]}' not found.")
-        for k, c in cards.items():
-            old_content = c.get("content", "")
+        for _k, c in cards.items():
+            old_content = c.get("content") or ""
             parts = old_content.split("\n", 1)
             new_content = ns.title + ("\n" + parts[1] if len(parts) > 1 else "")
             update_kwargs["content"] = new_content
@@ -564,23 +463,27 @@ def cmd_update(ns):
         elif val in ("false", "no", "0"):
             update_kwargs["isDoc"] = False
         else:
-            raise CliError(f"[ERROR] Invalid --doc value '{ns.doc}'. "
-                           "Use true or false.")
+            raise CliError(f"[ERROR] Invalid --doc value '{ns.doc}'. Use true or false.")
 
     if not update_kwargs:
-        raise CliError("[ERROR] No update flags provided. Use --status, "
-                       "--priority, --effort, --owner, --tag, --doc, etc.")
+        raise CliError(
+            "[ERROR] No update flags provided. Use --status, "
+            "--priority, --effort, --owner, --tag, --doc, etc."
+        )
 
     last_result = None
     for cid in card_ids:
         last_result = update_card(cid, **update_kwargs)
     detail_parts = [f"{k}={v}" for k, v in update_kwargs.items()]
     if len(card_ids) > 1:
-        mutation_response("Updated", details=f"{len(card_ids)} card(s), "
-                           + ", ".join(detail_parts), data=last_result, fmt=fmt)
+        mutation_response(
+            "Updated",
+            details=f"{len(card_ids)} card(s), " + ", ".join(detail_parts),
+            data=last_result,
+            fmt=fmt,
+        )
     else:
-        mutation_response("Updated", card_ids[0], ", ".join(detail_parts),
-                           last_result, fmt)
+        mutation_response("Updated", card_ids[0], ", ".join(detail_parts), last_result, fmt)
 
 
 def cmd_archive(ns):
@@ -600,19 +503,22 @@ def cmd_delete(ns):
 
 def cmd_done(ns):
     result = bulk_status(ns.card_ids, "done")
-    mutation_response("Marked done", details=f"{len(ns.card_ids)} card(s)",
-                       data=result, fmt=ns.format)
+    mutation_response(
+        "Marked done", details=f"{len(ns.card_ids)} card(s)", data=result, fmt=ns.format
+    )
 
 
 def cmd_start(ns):
     result = bulk_status(ns.card_ids, "started")
-    mutation_response("Marked started", details=f"{len(ns.card_ids)} card(s)",
-                       data=result, fmt=ns.format)
+    mutation_response(
+        "Marked started", details=f"{len(ns.card_ids)} card(s)", data=result, fmt=ns.format
+    )
 
 
 # ---------------------------------------------------------------------------
 # Hand commands
 # ---------------------------------------------------------------------------
+
 
 def cmd_hand(ns):
     fmt = ns.format
@@ -624,8 +530,7 @@ def cmd_hand(ns):
             print("Your hand is empty.", file=sys.stderr)
             return
         result = list_cards()
-        filtered = {k: v for k, v in result.get("card", {}).items()
-                    if k in hand_card_ids}
+        filtered = {k: v for k, v in result.get("card", {}).items() if k in hand_card_ids}
         result["card"] = enrich_cards(filtered, result.get("user"))
         # Sort by hand sort order (sortIndex from queueEntries)
         sort_map = {}
@@ -633,25 +538,28 @@ def cmd_hand(ns):
             cid = _get_field(entry, "card", "cardId")
             if cid:
                 sort_map[cid] = entry.get("sortIndex", 0) or 0
-        result["card"] = dict(sorted(result["card"].items(),
-                                      key=lambda item: sort_map.get(item[0], 0)))
-        output(result, format_cards_table, fmt,
-               csv_formatter=format_cards_csv)
+        result["card"] = dict(
+            sorted(result["card"].items(), key=lambda item: sort_map.get(item[0], 0))
+        )
+        output(result, format_cards_table, fmt, csv_formatter=format_cards_csv)
     else:
         result = add_to_hand(ns.card_ids)
-        mutation_response("Added to hand", details=f"{len(ns.card_ids)} card(s)",
-                           data=result, fmt=fmt)
+        mutation_response(
+            "Added to hand", details=f"{len(ns.card_ids)} card(s)", data=result, fmt=fmt
+        )
 
 
 def cmd_unhand(ns):
     result = remove_from_hand(ns.card_ids)
-    mutation_response("Removed from hand", details=f"{len(ns.card_ids)} card(s)",
-                       data=result, fmt=ns.format)
+    mutation_response(
+        "Removed from hand", details=f"{len(ns.card_ids)} card(s)", data=result, fmt=ns.format
+    )
 
 
 # ---------------------------------------------------------------------------
 # Activity command
 # ---------------------------------------------------------------------------
+
 
 def cmd_activity(ns):
     limit = ns.limit
@@ -661,13 +569,16 @@ def cmd_activity(ns):
     output(result, format_activity_table, ns.format)
 
 
-def cmd_pm_focus(ns):
-    """Show focused PM dashboard: blocked, in_review, hand, stale, and suggested."""
-    result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
+def gather_pm_focus_data(project=None, owner=None, limit=5, stale_days=14):
+    """Return PM focus report dict without printing."""
+    from datetime import datetime, timedelta, timezone
+
+    from codecks_cli.cards import _parse_iso_timestamp
+
+    result = list_cards(project_filter=project, owner_filter=owner)
     cards = enrich_cards(result.get("card", {}), result.get("user"))
     hand_ids = extract_hand_card_ids(list_hand())
 
-    stale_days = getattr(ns, "stale_days", 14) or 14
     cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
 
     started = []
@@ -692,21 +603,22 @@ def cmd_pm_focus(ns):
             candidates.append(row)
         # Stale: started or in_review cards not updated in stale_days
         if status in ("started", "in_review"):
-            updated = _parse_iso_timestamp(
-                _get_field(card, "last_updated_at", "lastUpdatedAt"))
+            updated = _parse_iso_timestamp(_get_field(card, "last_updated_at", "lastUpdatedAt"))
             if updated and updated < cutoff:
                 stale.append(row)
 
     pri_rank = {"a": 0, "b": 1, "c": 2, None: 3, "": 3}
-    candidates.sort(key=lambda c: (
-        pri_rank.get(c.get("priority"), 3),
-        0 if c.get("effort") is not None else 1,
-        -(c.get("effort") or 0),
-        c.get("title", "").lower(),
-    ))
-    suggested = candidates[:ns.limit]
+    candidates.sort(
+        key=lambda c: (
+            pri_rank.get(c.get("priority"), 3),
+            0 if c.get("effort") is not None else 1,
+            -(c.get("effort") or 0),
+            c.get("title", "").lower(),
+        )
+    )
+    suggested = candidates[:limit]
 
-    report = {
+    return {
         "counts": {
             "started": len(started),
             "blocked": len(blocked),
@@ -719,18 +631,26 @@ def cmd_pm_focus(ns):
         "hand": hand,
         "stale": stale,
         "suggested": suggested,
-        "filters": {"project": ns.project, "owner": ns.owner, "limit": ns.limit,
-                     "stale_days": stale_days},
+        "filters": {"project": project, "owner": owner, "limit": limit, "stale_days": stale_days},
     }
+
+
+def cmd_pm_focus(ns):
+    """Show focused PM dashboard: blocked, in_review, hand, stale, and suggested."""
+    stale_days = getattr(ns, "stale_days", 14) or 14
+    report = gather_pm_focus_data(ns.project, ns.owner, ns.limit, stale_days)
     output(report, format_pm_focus_table, ns.format)
 
 
-def cmd_standup(ns):
-    """Show daily standup summary: recently done, in progress, blocked, hand."""
-    days = ns.days
+def gather_standup_data(days=2, project=None, owner=None):
+    """Return standup report dict without printing."""
+    from datetime import datetime, timedelta, timezone
+
+    from codecks_cli.cards import _parse_iso_timestamp
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
+    result = list_cards(project_filter=project, owner_filter=owner)
     cards = enrich_cards(result.get("card", {}), result.get("user"))
     hand_ids = extract_hand_card_ids(list_hand())
 
@@ -744,8 +664,7 @@ def cmd_standup(ns):
         row = _card_row(cid, card)
 
         if status == "done":
-            updated = _parse_iso_timestamp(
-                _get_field(card, "last_updated_at", "lastUpdatedAt"))
+            updated = _parse_iso_timestamp(_get_field(card, "last_updated_at", "lastUpdatedAt"))
             if updated and updated >= cutoff:
                 recently_done.append(row)
 
@@ -758,19 +677,25 @@ def cmd_standup(ns):
         if cid in hand_ids and status != "done":
             hand.append(row)
 
-    report = {
+    return {
         "recently_done": recently_done,
         "in_progress": in_progress,
         "blocked": blocked,
         "hand": hand,
-        "filters": {"project": ns.project, "owner": ns.owner, "days": days},
+        "filters": {"project": project, "owner": owner, "days": days},
     }
+
+
+def cmd_standup(ns):
+    """Show daily standup summary: recently done, in progress, blocked, hand."""
+    report = gather_standup_data(ns.days, ns.project, ns.owner)
     output(report, format_standup_table, ns.format)
 
 
 # ---------------------------------------------------------------------------
 # Comment commands
 # ---------------------------------------------------------------------------
+
 
 def cmd_comment(ns):
     fmt = ns.format
@@ -809,6 +734,7 @@ def cmd_conversations(ns):
 # GDD commands
 # ---------------------------------------------------------------------------
 
+
 def cmd_gdd(ns):
     content = fetch_gdd(
         force_refresh=ns.refresh,
@@ -832,7 +758,8 @@ def cmd_gdd_sync(ns):
     )
     sections = parse_gdd(content)
     report = sync_gdd(
-        sections, ns.project,
+        sections,
+        ns.project,
         target_section=ns.section,
         apply=ns.apply,
         quiet=ns.quiet,
@@ -852,6 +779,7 @@ def cmd_gdd_revoke(ns):
 # Token & raw API commands
 # ---------------------------------------------------------------------------
 
+
 def cmd_generate_token(ns):
     result = generate_report_token(ns.label)
     print(f"Report Token created: {_mask_token(result['token'])}")
@@ -861,8 +789,8 @@ def cmd_generate_token(ns):
 def cmd_dispatch(ns):
     path = _normalize_dispatch_path(ns.path)
     payload = ObjectPayload.from_value(
-        _safe_json_parse(ns.json_data, "dispatch data"),
-        "dispatch data").data
+        _safe_json_parse(ns.json_data, "dispatch data"), "dispatch data"
+    ).data
     if config.RUNTIME_STRICT:
         if "/" not in path:
             raise CliError(
@@ -870,8 +798,6 @@ def cmd_dispatch(ns):
                 "segment, e.g. cards/update."
             )
         if not payload:
-            raise CliError(
-                "[ERROR] Strict mode: dispatch payload cannot be empty."
-            )
+            raise CliError("[ERROR] Strict mode: dispatch payload cannot be empty.")
     result = dispatch(path, payload)
     output(result, fmt=ns.format)

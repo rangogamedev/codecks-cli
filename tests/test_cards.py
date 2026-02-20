@@ -1,33 +1,40 @@
 """Tests for cards.py — env mappings, filters, enrichment, stats, resolvers."""
 
-import pytest
 from unittest.mock import patch
 
-import config
-from config import CliError
-from cards import (
-    _load_env_mapping, load_project_names, load_milestone_names,
-    _filter_cards, _parse_multi_value, _parse_date, _parse_iso_timestamp,
-    _get_field,
-    compute_card_stats, enrich_cards,
-    _build_project_map, get_project_deck_ids,
-    resolve_deck_id, resolve_milestone_id,
-)
+import pytest
 
+from codecks_cli import config
+from codecks_cli.cards import (
+    _build_project_map,
+    _filter_cards,
+    _get_field,
+    _load_env_mapping,
+    _parse_date,
+    _parse_iso_timestamp,
+    _parse_multi_value,
+    compute_card_stats,
+    enrich_cards,
+    get_project_deck_ids,
+    load_milestone_names,
+    load_project_names,
+    resolve_deck_id,
+    resolve_milestone_id,
+)
+from codecks_cli.config import CliError
 
 # ---------------------------------------------------------------------------
 # _load_env_mapping / load_project_names / load_milestone_names
 # ---------------------------------------------------------------------------
 
+
 class TestLoadEnvMapping:
     def test_basic(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"MY_KEY": "id1=Alpha,id2=Beta"})
+        monkeypatch.setattr(config, "env", {"MY_KEY": "id1=Alpha,id2=Beta"})
         assert _load_env_mapping("MY_KEY") == {"id1": "Alpha", "id2": "Beta"}
 
     def test_strips_whitespace(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"K": " id1 = Alpha , id2 = Beta "})
+        monkeypatch.setattr(config, "env", {"K": " id1 = Alpha , id2 = Beta "})
         assert _load_env_mapping("K") == {"id1": "Alpha", "id2": "Beta"}
 
     def test_missing_key_returns_empty(self, monkeypatch):
@@ -44,10 +51,14 @@ class TestLoadEnvMapping:
         assert _load_env_mapping("K") == {"id1": "Name=With=Equals"}
 
     def test_delegates_correctly(self, monkeypatch):
-        monkeypatch.setattr(config, "env", {
-            "CODECKS_PROJECTS": "p1=Tea Shop",
-            "CODECKS_MILESTONES": "m1=MVP",
-        })
+        monkeypatch.setattr(
+            config,
+            "env",
+            {
+                "CODECKS_PROJECTS": "p1=Tea Shop",
+                "CODECKS_MILESTONES": "m1=MVP",
+            },
+        )
         assert load_project_names() == {"p1": "Tea Shop"}
         assert load_milestone_names() == {"m1": "MVP"}
 
@@ -73,6 +84,7 @@ class TestGetField:
 # ---------------------------------------------------------------------------
 # _parse_multi_value
 # ---------------------------------------------------------------------------
+
 
 class TestParseMultiValue:
     def test_single_value(self):
@@ -104,24 +116,32 @@ class TestParseMultiValue:
 class TestMultiValueFilter:
     """Multi-value --status and --priority filters."""
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_multi_status_client_side_filter(self, mock_query):
-        mock_query.return_value = {"card": {
-            "a": {"status": "done"},
-            "b": {"status": "started"},
-            "c": {"status": "blocked"},
-            "d": {"status": "not_started"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "a": {"status": "done"},
+                "b": {"status": "started"},
+                "c": {"status": "blocked"},
+                "d": {"status": "not_started"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(status_filter="started,blocked")
         assert set(result["card"].keys()) == {"b", "c"}
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_single_status_still_server_side(self, mock_query):
-        mock_query.return_value = {"card": {
-            "a": {"status": "done"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "a": {"status": "done"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         list_cards(status_filter="done")
         # Verify status was in the query (server-side)
         call_q = mock_query.call_args.args[0]
@@ -129,42 +149,55 @@ class TestMultiValueFilter:
         root_key = list(call_q["_root"][0]["account"][0].keys())[0]
         assert '"done"' in root_key
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_priority_filter_single(self, mock_query):
-        mock_query.return_value = {"card": {
-            "a": {"status": "done", "priority": "a"},
-            "b": {"status": "started", "priority": "b"},
-            "c": {"status": "done", "priority": None},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "a": {"status": "done", "priority": "a"},
+                "b": {"status": "started", "priority": "b"},
+                "c": {"status": "done", "priority": None},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(priority_filter="a")
         assert set(result["card"].keys()) == {"a"}
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_priority_filter_multi(self, mock_query):
-        mock_query.return_value = {"card": {
-            "a": {"status": "done", "priority": "a"},
-            "b": {"status": "started", "priority": "b"},
-            "c": {"status": "done", "priority": "c"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "a": {"status": "done", "priority": "a"},
+                "b": {"status": "started", "priority": "b"},
+                "c": {"status": "done", "priority": "c"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(priority_filter="a,b")
         assert set(result["card"].keys()) == {"a", "b"}
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_priority_filter_null(self, mock_query):
-        mock_query.return_value = {"card": {
-            "a": {"status": "done", "priority": "a"},
-            "b": {"status": "started", "priority": None},
-            "c": {"status": "done"},  # missing priority = None
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "a": {"status": "done", "priority": "a"},
+                "b": {"status": "started", "priority": None},
+                "c": {"status": "done"},  # missing priority = None
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(priority_filter="null")
         assert set(result["card"].keys()) == {"b", "c"}
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_invalid_status_raises(self, mock_query):
-        from cards import list_cards
+        from codecks_cli.cards import list_cards
+
         with pytest.raises(CliError) as exc_info:
             list_cards(status_filter="started,oops")
         assert "Invalid status 'oops'" in str(exc_info.value)
@@ -173,6 +206,7 @@ class TestMultiValueFilter:
 # ---------------------------------------------------------------------------
 # Date parsing and filtering
 # ---------------------------------------------------------------------------
+
 
 class TestDateParsing:
     def test_parse_date_valid(self):
@@ -206,71 +240,95 @@ class TestDateParsing:
 
 
 class TestDateFiltering:
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_stale_days_filter(self, mock_query):
         """--stale 30 should find cards not updated in 30 days."""
-        mock_query.return_value = {"card": {
-            "old": {"status": "started", "lastUpdatedAt": "2025-01-01T00:00:00Z"},
-            "recent": {"status": "started", "lastUpdatedAt": "2026-02-19T00:00:00Z"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "old": {"status": "started", "lastUpdatedAt": "2025-01-01T00:00:00Z"},
+                "recent": {"status": "started", "lastUpdatedAt": "2026-02-19T00:00:00Z"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(stale_days=30)
         assert "old" in result["card"]
         assert "recent" not in result["card"]
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_updated_after_filter(self, mock_query):
-        mock_query.return_value = {"card": {
-            "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
-            "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+                "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(updated_after="2026-01-15")
         assert "new" in result["card"]
         assert "old" not in result["card"]
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_updated_before_filter(self, mock_query):
-        mock_query.return_value = {"card": {
-            "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
-            "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+                "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(updated_before="2026-01-15")
         assert "old" in result["card"]
         assert "new" not in result["card"]
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_stale_handles_missing_timestamp(self, mock_query):
         """Critical fix #6: Cards with no lastUpdatedAt are excluded from date filters."""
-        mock_query.return_value = {"card": {
-            "no_ts": {"status": "started"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "no_ts": {"status": "started"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(stale_days=30)
         # No timestamp → excluded (not falsely treated as stale)
         assert len(result["card"]) == 0
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_updated_after_excludes_missing_timestamp(self, mock_query):
         """Critical fix #6: Cards with no timestamp excluded from --updated-after."""
-        mock_query.return_value = {"card": {
-            "has_ts": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
-            "no_ts": {"status": "done"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "has_ts": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+                "no_ts": {"status": "done"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(updated_after="2026-01-15")
         assert "has_ts" in result["card"]
         assert "no_ts" not in result["card"]
 
-    @patch("cards.query")
+    @patch("codecks_cli.cards.query")
     def test_updated_before_excludes_missing_timestamp(self, mock_query):
         """Critical fix #6: Cards with no timestamp excluded from --updated-before."""
-        mock_query.return_value = {"card": {
-            "has_ts": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
-            "no_ts": {"status": "done"},
-        }, "user": {}}
-        from cards import list_cards
+        mock_query.return_value = {
+            "card": {
+                "has_ts": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+                "no_ts": {"status": "done"},
+            },
+            "user": {},
+        }
+        from codecks_cli.cards import list_cards
+
         result = list_cards(updated_before="2026-01-15")
         assert "has_ts" in result["card"]
         assert "no_ts" not in result["card"]
@@ -280,13 +338,16 @@ class TestDateFiltering:
 # _filter_cards
 # ---------------------------------------------------------------------------
 
+
 class TestFilterCards:
     def test_filters_by_predicate(self):
-        result = {"card": {
-            "a": {"status": "done"},
-            "b": {"status": "started"},
-            "c": {"status": "done"},
-        }}
+        result = {
+            "card": {
+                "a": {"status": "done"},
+                "b": {"status": "started"},
+                "c": {"status": "done"},
+            }
+        }
         _filter_cards(result, lambda k, c: c["status"] == "done")
         assert set(result["card"].keys()) == {"a", "c"}
 
@@ -310,6 +371,7 @@ class TestFilterCards:
 # compute_card_stats
 # ---------------------------------------------------------------------------
 
+
 class TestComputeCardStats:
     def test_empty(self):
         stats = compute_card_stats({})
@@ -319,12 +381,21 @@ class TestComputeCardStats:
 
     def test_basic_stats(self):
         cards = {
-            "a": {"status": "done", "priority": "a", "effort": 3,
-                   "deck_name": "Features", "owner_name": "Alice"},
-            "b": {"status": "done", "priority": "b", "effort": 5,
-                   "deck_name": "Features", "owner_name": "Alice"},
-            "c": {"status": "started", "priority": "a", "effort": None,
-                   "deck_name": "Tasks"},
+            "a": {
+                "status": "done",
+                "priority": "a",
+                "effort": 3,
+                "deck_name": "Features",
+                "owner_name": "Alice",
+            },
+            "b": {
+                "status": "done",
+                "priority": "b",
+                "effort": 5,
+                "deck_name": "Features",
+                "owner_name": "Alice",
+            },
+            "c": {"status": "started", "priority": "a", "effort": None, "deck_name": "Tasks"},
         }
         stats = compute_card_stats(cards)
         assert stats["total"] == 3
@@ -353,6 +424,7 @@ class TestComputeCardStats:
 # ---------------------------------------------------------------------------
 # enrich_cards
 # ---------------------------------------------------------------------------
+
 
 class TestEnrichCards:
     def setup_method(self):
@@ -385,8 +457,7 @@ class TestEnrichCards:
         assert result["c1"]["tags"] == []
 
     def test_resolves_milestone_name(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_MILESTONES": "ms-1=MVP"})
+        monkeypatch.setattr(config, "env", {"CODECKS_MILESTONES": "ms-1=MVP"})
         cards = {"c1": {"milestoneId": "ms-1"}}
         result = enrich_cards(cards)
         assert result["c1"]["milestone_name"] == "MVP"
@@ -406,43 +477,49 @@ class TestEnrichCards:
 # _build_project_map / get_project_deck_ids
 # ---------------------------------------------------------------------------
 
+
 class TestBuildProjectMap:
     def test_groups_by_project(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        decks = {"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-            "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
-            "dk3": {"id": "d3", "title": "Other", "projectId": "p2"},
-        }}
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        decks = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+                "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
+                "dk3": {"id": "d3", "title": "Other", "projectId": "p2"},
+            }
+        }
         result = _build_project_map(decks)
         assert result["p1"]["name"] == "Tea Shop"
         assert result["p1"]["deck_ids"] == {"d1", "d2"}
         assert result["p2"]["name"] == "p2"  # no env name -> falls back to ID
 
     def testget_project_deck_ids_found(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        decks = {"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-        }}
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        decks = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+            }
+        }
         ids = get_project_deck_ids(decks, "Tea Shop")
         assert ids == {"d1"}
 
     def testget_project_deck_ids_case_insensitive(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        decks = {"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-        }}
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        decks = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+            }
+        }
         ids = get_project_deck_ids(decks, "tea shop")
         assert ids == {"d1"}
 
     def testget_project_deck_ids_not_found(self, monkeypatch):
         monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        decks = {"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-        }}
+        decks = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+            }
+        }
         assert get_project_deck_ids(decks, "Nonexistent") is None
 
 
@@ -450,40 +527,44 @@ class TestBuildProjectMap:
 # resolve_deck_id / resolve_milestone_id
 # ---------------------------------------------------------------------------
 
+
 class TestResolvers:
     def testresolve_deck_id_found(self):
-        config._cache["decks"] = {"deck": {
-            "dk1": {"id": "d-id-1", "title": "Features"},
-        }}
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-id-1", "title": "Features"},
+            }
+        }
         assert resolve_deck_id("Features") == "d-id-1"
 
     def testresolve_deck_id_case_insensitive(self):
-        config._cache["decks"] = {"deck": {
-            "dk1": {"id": "d-id-1", "title": "Features"},
-        }}
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-id-1", "title": "Features"},
+            }
+        }
         assert resolve_deck_id("features") == "d-id-1"
 
     def testresolve_deck_id_not_found_exits(self):
-        config._cache["decks"] = {"deck": {
-            "dk1": {"id": "d-id-1", "title": "Features"},
-        }}
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-id-1", "title": "Features"},
+            }
+        }
         with pytest.raises(CliError) as exc_info:
             resolve_deck_id("Nonexistent")
         assert exc_info.value.exit_code == 1
 
     def testresolve_milestone_id_found(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_MILESTONES": "ms-1=MVP"})
+        monkeypatch.setattr(config, "env", {"CODECKS_MILESTONES": "ms-1=MVP"})
         assert resolve_milestone_id("MVP") == "ms-1"
 
     def testresolve_milestone_id_case_insensitive(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_MILESTONES": "ms-1=MVP"})
+        monkeypatch.setattr(config, "env", {"CODECKS_MILESTONES": "ms-1=MVP"})
         assert resolve_milestone_id("mvp") == "ms-1"
 
     def testresolve_milestone_id_not_found_exits(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_MILESTONES": "ms-1=MVP"})
+        monkeypatch.setattr(config, "env", {"CODECKS_MILESTONES": "ms-1=MVP"})
         with pytest.raises(CliError) as exc_info:
             resolve_milestone_id("Nonexistent")
         assert exc_info.value.exit_code == 1

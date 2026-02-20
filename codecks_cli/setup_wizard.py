@@ -3,17 +3,22 @@ Interactive setup wizard for codecks-cli.
 Guides users through configuration of tokens, projects, and milestones.
 """
 
-import sys
 
-import config
-from api import _try_call, _mask_token, query, generate_report_token
-from cards import (get_account, list_decks, list_cards,
-                   load_project_names, load_milestone_names, _get_field)
-
+from codecks_cli import config
+from codecks_cli.api import _mask_token, _try_call, generate_report_token, query
+from codecks_cli.cards import (
+    _get_field,
+    get_account,
+    list_cards,
+    list_decks,
+    load_milestone_names,
+    load_project_names,
+)
 
 # ---------------------------------------------------------------------------
 # Setup discovery helpers
 # ---------------------------------------------------------------------------
+
 
 def _setup_discover_projects():
     """Discover projects from decks and save to .env."""
@@ -116,9 +121,9 @@ def _setup_discover_milestones():
 def _setup_discover_user():
     """Discover current user ID from account roles and save to .env."""
     print("Discovering your user ID...")
-    result = _try_call(query, {"_root": [{"account": [
-        {"roles": ["userId", "role", {"user": ["id", "name"]}]}
-    ]}]})
+    result = _try_call(
+        query, {"_root": [{"account": [{"roles": ["userId", "role", {"user": ["id", "name"]}]}]}]}
+    )
     if not result or not result.get("accountRole"):
         print("  Could not fetch users. Skipping user ID discovery.")
         return
@@ -138,7 +143,7 @@ def _setup_discover_user():
         config.save_env_value("CODECKS_USER_ID", user["id"])
         config.USER_ID = user["id"]
         print(f"  Found user: {user['name']} ({user['role']})")
-        print(f"  Saved to .env\n")
+        print("  Saved to .env\n")
         return
     # Multiple users — ask which one
     print(f"  Found {len(users)} user(s):")
@@ -146,7 +151,7 @@ def _setup_discover_user():
         print(f"    {i}. {u['name']} ({u['role']})")
     print()
     while True:
-        choice = input(f"  Which user are you? [1]: ").strip()
+        choice = input("  Which user are you? [1]: ").strip()
         if choice == "" or choice == "1":
             idx = 0
             break
@@ -217,6 +222,7 @@ def _setup_done():
 # Main setup entry point
 # ---------------------------------------------------------------------------
 
+
 def cmd_setup():
     """Interactive setup wizard. Creates or updates .env configuration."""
 
@@ -248,11 +254,13 @@ def cmd_setup():
             acc_name = next(iter(account_result["account"].values()), {}).get("name", "?")
             print(f"  Token is valid! Connected to: {acc_name}")
             print()
-            choice = input("What would you like to do?\n"
-                           "  1. Refresh projects and milestones\n"
-                           "  2. Update session token\n"
-                           "  3. Run full setup from scratch\n"
-                           "  Choice [1]: ").strip()
+            choice = input(
+                "What would you like to do?\n"
+                "  1. Refresh projects and milestones\n"
+                "  2. Update session token\n"
+                "  3. Run full setup from scratch\n"
+                "  Choice [1]: "
+            ).strip()
             if choice == "" or choice == "1":
                 print()
                 _setup_discover_projects()

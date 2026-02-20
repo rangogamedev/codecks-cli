@@ -1,176 +1,86 @@
 # CLAUDE.md — codecks-cli
 
-Multi-module Python CLI for managing Codecks project cards. Zero external dependencies (stdlib only).
+Python CLI + library for managing Codecks project cards. Zero runtime dependencies (stdlib only).
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 
-## Start Here
-- Read `HANDOFF.md` for the latest implementation state, shipped changes, and near-term priorities.
-- Use this `CLAUDE.md` as the canonical architecture/command reference.
-- If guidance conflicts, treat `HANDOFF.md` as most recent for active work direction.
-
 ## Environment
-- **Python**: `py` — never `python` or `python3`. Requires 3.10+.
-- **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (328 unit tests, no API calls)
-- **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
+- **Python**: `py` (never `python`/`python3`). Requires 3.10+.
+- **Run**: `py codecks_api.py` (no args = help). `--version` for version.
+- **Test**: `pwsh -File scripts/run-tests.ps1` (389 tests, no API calls)
+- **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py`
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
+- **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
+- **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
 
-## Architecture
+## Modules (`codecks_cli/`)
+| Module | Purpose |
+|--------|---------|
+| `codecks_api.py` | Backward-compat wrapper → `cli:main()` (project root) |
+| `__init__.py` | Exports `CodecksClient`, `CliError`, `SetupError`, `VERSION` |
+| `config.py` | Env, tokens, constants, `CliError`/`SetupError` exceptions |
+| `api.py` | HTTP layer: `query()`, `dispatch()`, token validation |
+| `cards.py` | Card CRUD, hand, conversations, enrichment, `_get_field()` |
+| `client.py` | **`CodecksClient` class** — public API (27 keyword-only methods returning flat dicts) |
+| `commands.py` | CLI `cmd_*()` handlers (argparse → formatters). Imports helpers from `client.py` |
+| `formatters.py` | JSON/table/CSV output dispatch |
+| `models.py` | `ObjectPayload`, `FeatureSpec` dataclasses |
+| `gdd.py` | Google OAuth2, GDD fetch/parse/sync |
+| `setup_wizard.py` | Interactive `.env` bootstrap |
+| `cli.py` | Entry point: argparse, `build_parser()`, `main()` dispatch |
 
-**Module layout** (~3150 lines across 8 files):
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `codecks_api.py` | ~380 | Entry point: help text, `_extract_global_flags()`, `build_parser()`, `main()` dispatch |
-| `config.py` | ~95 | Shared state: env, tokens, constants, `load_env()`, `save_env_value()` |
-| `models.py` | ~100 | Typed dataclass contracts for payload validation and feature reports |
-| `api.py` | ~220 | HTTP layer: `session_request`, `query`, `dispatch`, token validation |
-| `cards.py` | ~550 | Card CRUD, hand, conversations, name resolution, enrichment |
-| `commands.py` | ~475 | Command handlers: `cmd_*()` functions receiving `argparse.Namespace` |
-| `formatters.py` | ~500 | All `_format_*` functions, `output()`, `_mutation_response()` |
-| `gdd.py` | ~540 | Google OAuth2, GDD fetch/parse/sync |
-| `setup_wizard.py` | ~400 | Interactive setup wizard |
+All imports are absolute (`from codecks_cli.config import ...`). No circular deps.
 
-**Supporting files:**
-- `pyproject.toml` — build config, dev dependencies (`[project.optional-dependencies].dev`), ruff/mypy/pytest configs
-- `scripts/run-tests.ps1` — PowerShell test wrapper: pins TEMP/TMP to `.tmp/`, per-run basetemp, `py` launcher fallback via `CODECKS_PYTHON_PATH`
-
-**Dependency graph** (no circular imports):
+## Programmatic API
+```python
+from codecks_cli import CodecksClient
+client = CodecksClient()  # validates token
+cards = client.list_cards(status="started", sort="priority")
 ```
-config.py          ← pure data, no project imports
-api.py             ← config
-cards.py           ← config, api
-formatters.py      ← config, cards
-gdd.py             ← config, cards
-setup_wizard.py    ← config, api, cards
-commands.py        ← config, api, cards, formatters, gdd, setup_wizard
-codecks_api.py     ← config, api, commands
-```
+Methods use keyword-only args, return flat dicts (AI-agent-friendly). Map 1:1 to future MCP tools.
 
-**Key patterns:**
-- Module-level state lives in `config.py` — setup wizard updates via `config.SESSION_TOKEN = ...`
-- `_extract_global_flags()` pre-processes argv for `--format`/`--version` before argparse
-- `build_parser()` returns argparse parser with subparsers for each command
-- `DISPATCH` dict in `main()` maps command names → `cmd_*` handlers
-- `NO_TOKEN_COMMANDS` set for commands that skip `_check_token()`
-- `CliError(msg)` / `SetupError(msg)` exceptions in `config.py` — raised instead of `sys.exit(1)`/`sys.exit(2)`. Caught once in `main()`. Messages include `[ERROR]`/`[TOKEN_EXPIRED]`/`[SETUP_NEEDED]` prefixes.
-- `_try_call(fn)` in `api.py` wraps functions that may raise `CliError` — returns `None` on failure
-- `_http_request()` checks Content-Type on parse failure — proxy/HTML responses get a specific error message
-- `sync_gdd` uses structured exceptions: `SetupError` aborts batch, `CliError` logged per-card, unexpected errors labeled
-- `output(data, formatter, fmt, csv_formatter)` in `formatters.py` dispatches JSON/table/CSV
-- `config._cache` dict caches deck/user lookups per-invocation
-- Card lists omit `content` for token efficiency; `--search` adds it back
-- Errors/warnings → `sys.stderr`. Data → `sys.stdout`
-- `sys.stdout.reconfigure(encoding='utf-8')` for Windows Unicode support
-- `save_env_value()` uses atomic temp-file-then-rename writes; chmods `.env` to 0o600 after write (Unix only, no-op on Windows)
-- `_save_gdd_cache()` in `gdd.py` centralizes GDD cache writes with chmod 0o600
-- `_sanitize_str()` in `formatters.py` strips ANSI escape sequences and control chars from table output (not JSON)
-- Error messages never leak raw API response dicts — show only keys for diagnostic
-- `_get_field(d, snake, camel)` in `cards.py` — canonical helper for snake_case/camelCase dual lookups (API returns snake_case, queries use camelCase). Uses key-presence check (`snake in d`), not truthiness, so `False`/`0` values are preserved. Used across `cards.py`, `commands.py`, `formatters.py`, `setup_wizard.py`.
-- `get_card_tags(card)` in `cards.py` — normalizes tag access across `tags`/`master_tags`/`masterTags` keys. Used everywhere tags are read.
-- `_card_section(lines, title, items)` in `formatters.py` — shared section renderer for pm-focus and standup tables
-- `_RETRYABLE_HTTP_CODES` frozenset in `api.py` — single source of truth for `{429, 502, 503, 504}`
-- OAuth HTTP server in `gdd.py` uses try/finally for server cleanup
-- Exception chaining: `_parse_date()` uses `raise ... from e` to preserve original traceback
-- `_sort_field_value(card, sort_field)` in `commands.py` — snake/camel-safe sort field resolution via `_get_field()`. Used by `_sort_cards()`.
-- `_rollback_created_ids()` in `commands.py` — nested helper in `cmd_feature()` encapsulating rollback. Separate `except SetupError` preserves exit-code-2.
-- `_guard_duplicate_title(title, allow_duplicate, context)` in `commands.py` — preflight duplicate check. Exact match = error, near match = stderr warning. Bypassed with `--allow-duplicate`.
-- Activity limit: `list_activity(limit)` in `cards.py` owns result trimming; `cmd_activity()` only passes `limit` through.
+## Tokens (`.env`, never committed)
+- `CODECKS_TOKEN` — session cookie (`at`), **expires**. Empty 200 response = expired (not 401).
+- `CODECKS_REPORT_TOKEN` — card creation, never expires. URL param `?token=`.
+- `CODECKS_ACCESS_KEY` — generates report tokens, never expires.
+- `CODECKS_USER_ID` — hand operations. Auto-discovered if unset.
+- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `generate-token`, `--version`
 
-**Output prefixes:** `OK:` (mutation success), `[ERROR]` (exit 1), `[TOKEN_EXPIRED]` / `[SETUP_NEEDED]` (exit 2), `[WARN]` / `[INFO]` (non-fatal, stderr)
+## API Pitfalls (will cause bugs if ignored)
+- Response: snake_case. Query: camelCase. Use `_get_field(d, snake, camel)` for safe lookups.
+- Query cards: `cards({"cardId":"...", "visibility":"default"})` — never `card({"id":...})` (500).
+- 500-error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`. Use `assignee` relation instead of `assigneeId` field.
+- Card title = first line of `content` field.
+- Rate limit: 40 req / 5 sec. HTTP 429 = specific error message.
+- Hand: `queueEntries` (not `handCards`). Add via `handQueue/setCardOrders`, remove via `handQueue/removeCards`.
+- Tags: set `masterTags` (syncs `tags`). Setting `tags` alone does NOT sync.
+- Owner: `assigneeId` in `cards/update`. Set `null` to unassign.
+- **Doc cards**: no priority/effort/status (API 400). Only owner/tags/milestone/deck/title/content/hero.
 
-## Tokens (in `.env`, never committed)
-- `CODECKS_TOKEN` — session cookie (`at`), expires. Validated by `_check_token()` before every API command. Expired token returns HTTP 200 with empty data (not 401).
-- `CODECKS_REPORT_TOKEN` — card creation, never expires. Uses URL param `?token=`.
-- `CODECKS_ACCESS_KEY` — generates report tokens, never expires. Uses URL param `?accessKey=`.
-- `CODECKS_USER_ID` — current user's UUID, used for hand operations. Auto-discovered from account roles if not set.
-- Skip token check: `setup`, `gdd-auth`, `gdd-revoke`, `generate-token`, `--version`
-
-## API Pitfalls
-- Response: snake_case (`deck_id`). Query: camelCase (`deckId`)
-- Use `cards({"cardId":"...", "visibility":"default"})` — never `card({"id":...})` (500 error)
-- 500 error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`; relations: `users`/`projects`/`milestones`/`tags`/`userTags`/`projectTags`
-- `lastUpdatedAt` works on card query. `assigneeId` as a field gives 500 (use `assignee` relation instead).
-- Card title = first line of `content` field
-- Rate limit: 40 req / 5 sec. `sync_gdd` sleeps 1s every 10 cards created. HTTP 429 returns a specific guidance message.
-- Hand uses `queueEntries` (not `handCards`) for the card list. Add via `handQueue/setCardOrders` (`sessionId`, `userId`, `cardIds`, `draggedCardIds`), remove via `handQueue/removeCards` (`sessionId`, `cardIds`). `handCards` is a different model (top-7 bookmarked cards).
-- Tags: use `masterTags` field (string array). Setting `masterTags` syncs `tags` automatically. Setting `tags` alone does NOT sync `masterTags`.
-- Owner: use `assigneeId` in `cards/update`. Set to `null` to unassign. Query via `assignee` relation (returns user model).
-- Activity: `activities` on account with `type`, `createdAt`, `card`, `data.diff`, `changer`/`deck` relations.
-- `isDoc` field toggles doc card mode. `childCardInfo` returns sub-card count for hero cards.
-- **Doc cards** cannot have priority, effort, or status changed (API returns 400). Only owner, tags, milestone, deck, title, content, and hero can be set.
-- `.env name mappings`: `CODECKS_PROJECTS=uuid=Name,uuid=Name`, `CODECKS_MILESTONES=uuid=Name,uuid=Name` — auto-discovered by `setup`
-
-## GDD Google Doc Access (OAuth2)
-- Config: `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in `.env`
-- Tokens: `.gdd_tokens.json` (gitignored), auto-refreshing
-- Fetch chain: OAuth Bearer → public URL fallback → local `.gdd_cache.md`
-- Manual fallback: `--file "path/to/doc.md"` or `--file -` for stdin
-- Setup: `py codecks_api.py gdd-auth` (one-time, opens browser). Revoke: `gdd-revoke`
-
-## Paid-Only Features (do NOT use)
+## Paid-Only (do NOT use)
 Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
-
-**Critical:** Never set `dueAt` on cards — it is a paid feature we don't have access to. Do not set deadlines when creating or updating cards, and do not use date fields as part of any default card creation workflow. The `--stale`, `--updated-after`, and `--updated-before` flags only *read* the existing `lastUpdatedAt` timestamp for filtering — they never write any date field.
-
-## Validation
-| Flag | Valid values |
-|------|-------------|
-| `--status` | `not_started`, `started`, `done`, `blocked`, `in_review` (comma-separated for multi-filter) |
-| `--priority` | `a`, `b`, `c`, `null` (comma-separated for multi-filter) |
-| `--sort` | `status`, `priority`, `effort`, `deck`, `title`, `owner`, `updated`, `created` |
-| `--effort` | integer or `null` |
-| `--severity` | `critical`, `high`, `low`, `null` |
-| `--type` | `hero`, `doc` |
-
-Invalid → `[ERROR]` with valid options listed.
-
-## Commands Quick Reference
-**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --priority --sort --stats --hand --hero <id> --type hero|doc --archived --stale <days> --updated-after --updated-before`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`), `pm-focus` (`--project --owner --limit --stale-days`), `standup` (`--days --project --owner`)
-**Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
-**Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
-**Mutate:** `create <title>` (`--deck --project --content --severity --doc [--allow-duplicate]`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort] [--allow-duplicate]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
-**Feature scaffolding safety:** `feature` is transaction-safe with compensating rollback (archives created cards if later steps fail).
-**GDD:** `gdd` (`--refresh --file --save-cache`), `gdd-sync` (`--project --section --apply --quiet --refresh --file --save-cache`), `gdd-auth`, `gdd-revoke`
-**Other:** `setup`, `generate-token --label`, `query <json>`, `dispatch <path> <json>`
-**Global flags:** `--format table|csv|json` (default json), `--version`
+**Never set `dueAt`** on cards. `--stale`/`--updated-after`/`--updated-before` only *read* timestamps.
 
 ## Testing
-- Run: `pwsh -File scripts/run-tests.ps1` (328 tests, ~8 seconds)
-- `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
-- Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`
-- Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`
-- Known bug regressions have dedicated test classes (sort crashes, title bug, clear values, false warnings)
-
-### Dev Tooling
-- **Config**: `pyproject.toml` — `[project.optional-dependencies].dev` for ruff/mypy/pytest-cov
-- **Lint**: `py -m ruff check .` (rules: E, F, I, B, UP; E501 ignored; line-length 100)
-- **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy api.py cards.py commands.py formatters.py models.py`
-- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest. Matrix: Python 3.10, 3.12, 3.14
-- **Install dev deps**: `py -m pip install .[dev]`
+- `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
+- Test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`
+- Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)
-1. **False TOKEN_EXPIRED on filtered empty results** — `warn_if_empty` only called when no server-side filters applied
-2. **account table showed raw JSON** — added `_format_account_table()`
-3. **Sort by effort crashed with None** — tuple sort key `(0, val)` / `(1, "")` for blanks-last
-4. **update_card() silently dropped None values** — `if val is not None` filter broke clear operations (`--priority null`, `--milestone none`, `--owner none`, `--hero none`). Fixed: `payload.update(kwargs)` to pass None as JSON null
-5. **Doc cards reject priority/effort/status** — API returns 400. Platform limitation, not a bug. Code must skip these fields for doc cards.
-6. **Activity table showed raw UUIDs** — milestones and user IDs displayed as UUIDs. Fixed: resolve via `_load_milestone_names()` and `_load_users()`
-7. **Date sort was oldest-first** — sort by `updated`/`created` should be newest-first. Fixed: `reverse=True` for date fields, blanks-last via `(-1, "")` tuple
-8. **`_get_field()` ignored falsy values** — `d.get(snake) or d.get(camel)` treated `False`/`0`/`""` as missing. Fixed: key-presence check (`if snake in d`)
+1. `warn_if_empty` only when no server-side filters (false TOKEN_EXPIRED)
+2. Sort by effort: tuple key `(0,val)`/`(1,"")` for blanks-last; date sort = newest-first
+3. `update_card()` must pass None values through (clear ops: `--priority null` etc.)
+4. `_get_field()` uses key-presence check, not truthiness (`False`/`0` preserved)
+5. `get_card()` finds requested card by ID match, not first dict iteration result
+
+## Commands
+Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.
 
 ## Skills (`.claude/commands/`)
-- `/pm` — interactive PM session: dashboard, review/update/create cards, hand management, checklist formatting
-- `/test-all` — full regression test against live API (8 groups), plus unit tests
-- `/release` — version bump, changelog, test, commit, push, optional GitHub release
-- `/api-ref` — complete command/flag reference (loads into context)
-- `/security-audit` — scan for leaked secrets before pushing
-- `/codecks-docs <topic>` — fetch and summarize Codecks manual pages (e.g. `/codecks-docs hand`)
-- `/quality` — run full quality pipeline: ruff lint, ruff format check, mypy, pytest
+`/pm` (PM session), `/test-all` (regression), `/release` (version bump), `/api-ref` (command ref), `/security-audit` (secrets scan), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest)
 
-## Git & Releases
-- Commit style: short present tense (e.g. "Add --sort flag to cards command")
-- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md` — all gitignored
-- `.claude/` is gitignored (local settings/commands only)
-- Run `/security-audit` before pushing (repo is public)
-- Run `pwsh -File scripts/run-tests.ps1` for unit tests, `/test-all` for full regression (live API)
-- Run `/release` for version bump + changelog + test + commit + push
+## Git
+- Commit style: short present tense ("Add X", "Fix Y")
+- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
+- `.claude/` is gitignored
+- Run `/security-audit` before pushing (public repo)

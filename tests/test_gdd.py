@@ -1,16 +1,24 @@
 """Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd."""
 
-import pytest
-from unittest.mock import patch, mock_open
-import config
-from config import CliError, SetupError
-from gdd import (parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd,
-                 _save_gdd_cache, fetch_gdd)
+from unittest.mock import mock_open, patch
 
+import pytest
+
+from codecks_cli import config
+from codecks_cli.config import CliError, SetupError
+from codecks_cli.gdd import (
+    _extract_google_doc_id,
+    _fuzzy_match,
+    _save_gdd_cache,
+    fetch_gdd,
+    parse_gdd,
+    sync_gdd,
+)
 
 # ---------------------------------------------------------------------------
 # _extract_google_doc_id
 # ---------------------------------------------------------------------------
+
 
 class TestExtractGoogleDocId:
     def test_full_url(self):
@@ -18,8 +26,9 @@ class TestExtractGoogleDocId:
         assert _extract_google_doc_id(url) == "1aBcDeFgHiJkLmNoPqRs"
 
     def test_bare_id(self):
-        assert _extract_google_doc_id("1aBcDeFgHiJkLmNoPqRsTuVwXyZ") == \
-            "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+        assert (
+            _extract_google_doc_id("1aBcDeFgHiJkLmNoPqRsTuVwXyZ") == "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+        )
 
     def test_short_string_returns_none(self):
         assert _extract_google_doc_id("short") is None
@@ -33,6 +42,7 @@ class TestExtractGoogleDocId:
 # _fuzzy_match
 # ---------------------------------------------------------------------------
 
+
 class TestFuzzyMatch:
     def test_exact_match(self):
         titles = {"customer system": "c1", "economy": "c2"}
@@ -45,7 +55,10 @@ class TestFuzzyMatch:
     def test_reverse_substring(self):
         """Needle substring of haystack title — should match when both > 5 chars."""
         titles = {"complete customer system (arrival queue, requests, rating)": "c1"}
-        assert _fuzzy_match("Customer System", titles) == "complete customer system (arrival queue, requests, rating)"
+        assert (
+            _fuzzy_match("Customer System", titles)
+            == "complete customer system (arrival queue, requests, rating)"
+        )
 
     def test_no_match(self):
         titles = {"something else": "c1"}
@@ -65,6 +78,7 @@ class TestFuzzyMatch:
 # ---------------------------------------------------------------------------
 # parse_gdd
 # ---------------------------------------------------------------------------
+
 
 class TestParseGdd:
     def test_basic_structure(self):
@@ -192,15 +206,16 @@ More text
 # sync_gdd error handling
 # ---------------------------------------------------------------------------
 
+
 class TestSyncGddErrorHandling:
     """Structured exception handling in sync_gdd batch loop."""
 
     SECTIONS = [{"section": "Test", "tasks": [{"title": "Task 1"}]}]
     MOCK_DECKS = {"deck": {"dk1": {"id": "d1", "title": "Test"}}}
 
-    @patch("gdd.list_cards", return_value={"card": {}})
-    @patch("gdd.list_decks")
-    @patch("gdd.create_card")
+    @patch("codecks_cli.gdd.list_cards", return_value={"card": {}})
+    @patch("codecks_cli.gdd.list_decks")
+    @patch("codecks_cli.gdd.create_card")
     def test_setup_error_propagates(self, mock_create, mock_decks, mock_list):
         """SetupError (token expired) should abort the batch, not be swallowed."""
         mock_decks.return_value = self.MOCK_DECKS
@@ -208,9 +223,9 @@ class TestSyncGddErrorHandling:
         with pytest.raises(SetupError):
             sync_gdd(self.SECTIONS, "TestProject", apply=True)
 
-    @patch("gdd.list_cards", return_value={"card": {}})
-    @patch("gdd.list_decks")
-    @patch("gdd.create_card")
+    @patch("codecks_cli.gdd.list_cards", return_value={"card": {}})
+    @patch("codecks_cli.gdd.list_decks")
+    @patch("codecks_cli.gdd.create_card")
     def test_cli_error_caught_in_report(self, mock_create, mock_decks, mock_list):
         """CliError should be caught and logged to report['errors']."""
         mock_decks.return_value = self.MOCK_DECKS
@@ -223,20 +238,22 @@ class TestSyncGddErrorHandling:
 class TestSaveGddCache:
     """_save_gdd_cache writes content and chmods to 0o600."""
 
-    @patch("gdd.os.chmod")
+    @patch("codecks_cli.gdd.os.chmod")
     def test_writes_and_chmods(self, mock_chmod, tmp_path, monkeypatch):
         cache_path = str(tmp_path / ".gdd_cache.md")
         monkeypatch.setattr(config, "GDD_CACHE_PATH", cache_path)
         _save_gdd_cache("# GDD content")
-        with open(cache_path, "r", encoding="utf-8") as f:
+        with open(cache_path, encoding="utf-8") as f:
             assert f.read() == "# GDD content"
         mock_chmod.assert_called_once_with(cache_path, 0o600)
 
 
 class TestFetchGdd:
     def test_reads_local_file(self):
-        with patch("gdd.os.path.exists", return_value=True), \
-                patch("builtins.open", mock_open(read_data="## Core\n- Task A\n")):
+        with (
+            patch("codecks_cli.gdd.os.path.exists", return_value=True),
+            patch("builtins.open", mock_open(read_data="## Core\n- Task A\n")),
+        ):
             content = fetch_gdd(local_file="gdd.md")
         assert "Task A" in content
 
@@ -248,17 +265,22 @@ class TestFetchGdd:
     def test_uses_cache_when_available(self, monkeypatch):
         monkeypatch.setattr(config, "GDD_DOC_URL", "")
         monkeypatch.setattr(config, "GDD_CACHE_PATH", ".gdd_cache.md")
-        with patch("gdd.os.path.exists", return_value=True), \
-                patch("builtins.open", mock_open(read_data="# cached")):
+        with (
+            patch("codecks_cli.gdd.os.path.exists", return_value=True),
+            patch("builtins.open", mock_open(read_data="# cached")),
+        ):
             content = fetch_gdd()
         assert content == "# cached"
 
-    @patch("gdd._save_gdd_cache")
+    @patch("codecks_cli.gdd._save_gdd_cache")
     def test_refresh_uses_google_fetch_and_saves_cache(self, mock_save, monkeypatch):
-        monkeypatch.setattr(config, "GDD_DOC_URL",
-                            "https://docs.google.com/document/d/ABC123_def-456/edit")
-        monkeypatch.setattr("gdd.os.path.exists", lambda p: False)
-        with patch("gdd._fetch_google_doc_content", return_value="# remote") as mock_fetch:
+        monkeypatch.setattr(
+            config, "GDD_DOC_URL", "https://docs.google.com/document/d/ABC123_def-456/edit"
+        )
+        monkeypatch.setattr("codecks_cli.gdd.os.path.exists", lambda p: False)
+        with patch(
+            "codecks_cli.gdd._fetch_google_doc_content", return_value="# remote"
+        ) as mock_fetch:
             content = fetch_gdd(force_refresh=True)
         assert content == "# remote"
         mock_fetch.assert_called_once_with("ABC123_def-456")
@@ -267,7 +289,7 @@ class TestFetchGdd:
     def test_chmod_error_does_not_crash(self, tmp_path, monkeypatch):
         cache_path = str(tmp_path / ".gdd_cache.md")
         monkeypatch.setattr(config, "GDD_CACHE_PATH", cache_path)
-        with patch("gdd.os.chmod", side_effect=OSError("not supported")):
+        with patch("codecks_cli.gdd.os.chmod", side_effect=OSError("not supported")):
             _save_gdd_cache("# GDD content")
-        with open(cache_path, "r", encoding="utf-8") as f:
+        with open(cache_path, encoding="utf-8") as f:
             assert f.read() == "# GDD content"

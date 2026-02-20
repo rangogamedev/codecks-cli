@@ -7,7 +7,7 @@ name = "codecks-cli"
 version = "0.4.0"
 description = "CLI tool for managing Codecks.io project cards"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
 
@@ -19,11 +19,14 @@ dev = [
   "ruff>=0.6",
 ]
 
+[tool.setuptools.packages.find]
+include = ["codecks_cli", "codecks_cli.*"]
+
 [project.urls]
 Repository = "https://github.com/rangogamedev/codecks-cli"
 
 [project.scripts]
-codecks-cli = "codecks_api:main"
+codecks-cli = "codecks_cli.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -38,6 +41,7 @@ exclude = [
   ".pytest_cache",
   ".tmp",
   "__pycache__",
+  "build",
 ]
 
 [tool.ruff.lint]

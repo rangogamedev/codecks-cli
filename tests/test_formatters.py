@@ -1,21 +1,32 @@
 """Tests for formatters.py — _table, _trunc, output formatters."""
 
 import json
-import pytest
-import config
-from formatters import (
-    _table, _trunc, _sanitize_str, mutation_response, format_account_table,
-    format_cards_table, format_card_detail, format_stats_table,
-    format_decks_table, format_projects_table, format_milestones_table,
-    format_gdd_table, format_cards_csv, format_activity_diff,
-    resolve_activity_val, output, format_pm_focus_table,
-    format_standup_table, format_conversations_table,
-)
 
+from codecks_cli import config
+from codecks_cli.formatters import (
+    _sanitize_str,
+    _table,
+    _trunc,
+    format_account_table,
+    format_activity_diff,
+    format_card_detail,
+    format_cards_csv,
+    format_cards_table,
+    format_conversations_table,
+    format_decks_table,
+    format_gdd_table,
+    format_pm_focus_table,
+    format_standup_table,
+    format_stats_table,
+    mutation_response,
+    output,
+    resolve_activity_val,
+)
 
 # ---------------------------------------------------------------------------
 # _trunc
 # ---------------------------------------------------------------------------
+
 
 class TestTrunc:
     def test_short_string_unchanged(self):
@@ -39,6 +50,7 @@ class TestTrunc:
 # ---------------------------------------------------------------------------
 # _table
 # ---------------------------------------------------------------------------
+
 
 class TestTable:
     def test_basic_table(self):
@@ -77,11 +89,10 @@ class TestTable:
 # format_account_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatAccountTable:
     def test_formats_account(self):
-        result = format_account_table({
-            "account": {"acc-id-123": {"name": "MyAccount"}}
-        })
+        result = format_account_table({"account": {"acc-id-123": {"name": "MyAccount"}}})
         assert "MyAccount" in result
         assert "acc-id-123" in result
 
@@ -94,14 +105,25 @@ class TestFormatAccountTable:
 # format_cards_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatCardsTable:
     def test_formats_cards(self):
-        result = format_cards_table({"card": {
-            "c1": {"status": "done", "priority": "a", "effort": 3,
-                   "title": "Test Card", "deck_name": "Features",
-                   "milestone_name": "MVP",
-                   "owner_name": "Thomas", "tags": ["bug"]},
-        }})
+        result = format_cards_table(
+            {
+                "card": {
+                    "c1": {
+                        "status": "done",
+                        "priority": "a",
+                        "effort": 3,
+                        "title": "Test Card",
+                        "deck_name": "Features",
+                        "milestone_name": "MVP",
+                        "owner_name": "Thomas",
+                        "tags": ["bug"],
+                    },
+                }
+            }
+        )
         assert "done" in result
         assert "high" in result  # PRI_LABELS["a"]
         assert "Test Card" in result
@@ -116,9 +138,13 @@ class TestFormatCardsTable:
         assert "No cards" in format_cards_table({})
 
     def test_sub_card_count_shown(self):
-        result = format_cards_table({"card": {
-            "c1": {"title": "Hero", "sub_card_count": 5, "status": "started"},
-        }})
+        result = format_cards_table(
+            {
+                "card": {
+                    "c1": {"title": "Hero", "sub_card_count": 5, "status": "started"},
+                }
+            }
+        )
         assert "[5 sub]" in result
 
 
@@ -126,20 +152,31 @@ class TestFormatCardsTable:
 # format_card_detail
 # ---------------------------------------------------------------------------
 
+
 class TestFormatCardDetail:
     def test_full_card_detail(self):
-        result = format_card_detail({"card": {
-            "c1": {
-                "title": "Test Card", "status": "started",
-                "priority": "b", "effort": 5, "severity": "high",
-                "deck_name": "Features", "owner_name": "Thomas",
-                "milestone_name": "MVP", "tags": ["ui"],
-                "parentCardId": "hero-uuid-123",
-                "in_hand": True, "createdAt": "2026-01-01T00:00:00Z",
-                "lastUpdatedAt": "2026-01-02T00:00:00Z",
-                "content": "Test Card\nSome description here",
-            },
-        }})
+        result = format_card_detail(
+            {
+                "card": {
+                    "c1": {
+                        "title": "Test Card",
+                        "status": "started",
+                        "priority": "b",
+                        "effort": 5,
+                        "severity": "high",
+                        "deck_name": "Features",
+                        "owner_name": "Thomas",
+                        "milestone_name": "MVP",
+                        "tags": ["ui"],
+                        "parentCardId": "hero-uuid-123",
+                        "in_hand": True,
+                        "createdAt": "2026-01-01T00:00:00Z",
+                        "lastUpdatedAt": "2026-01-02T00:00:00Z",
+                        "content": "Test Card\nSome description here",
+                    },
+                }
+            }
+        )
         assert "Test Card" in result
         assert "started" in result
         assert "b (med)" in result
@@ -156,61 +193,65 @@ class TestFormatCardDetail:
         assert "not found" in format_card_detail({"card": {}})
 
     def test_supports_snake_case_created_and_is_closed(self):
-        result = format_card_detail({
-            "card": {
-                "c1": {
-                    "title": "Snake Card",
-                    "status": "started",
-                    "created_at": "2026-01-03T00:00:00Z",
-                    "resolvables": ["r1"],
+        result = format_card_detail(
+            {
+                "card": {
+                    "c1": {
+                        "title": "Snake Card",
+                        "status": "started",
+                        "created_at": "2026-01-03T00:00:00Z",
+                        "resolvables": ["r1"],
+                    },
                 },
-            },
-            "resolvable": {
-                "r1": {
-                    "is_closed": True,
-                    "creator": "u1",
-                    "entries": [],
+                "resolvable": {
+                    "r1": {
+                        "is_closed": True,
+                        "creator": "u1",
+                        "entries": [],
+                    },
                 },
-            },
-            "resolvableEntry": {},
-            "user": {"u1": {"name": "Alice"}},
-        })
+                "resolvableEntry": {},
+                "user": {"u1": {"name": "Alice"}},
+            }
+        )
         assert "Created:   2026-01-03T00:00:00Z" in result
         assert "0 open, 1 closed" in result
 
     def test_renders_checklist_and_subcards_and_thread_messages(self):
-        result = format_card_detail({
-            "card": {
-                "hero": {
-                    "title": "Hero Card",
-                    "status": "started",
-                    "checkboxStats": {"total": 4, "checked": 1},
-                    "childCards": ["sub1"],
-                    "resolvables": ["r1"],
+        result = format_card_detail(
+            {
+                "card": {
+                    "hero": {
+                        "title": "Hero Card",
+                        "status": "started",
+                        "checkboxStats": {"total": 4, "checked": 1},
+                        "childCards": ["sub1"],
+                        "resolvables": ["r1"],
+                    },
+                    "sub1": {
+                        "title": "Sub Task",
+                        "status": "done",
+                    },
                 },
-                "sub1": {
-                    "title": "Sub Task",
-                    "status": "done",
+                "resolvable": {
+                    "r1": {
+                        "creator": "u1",
+                        "isClosed": False,
+                        "entries": ["e1"],
+                    },
                 },
-            },
-            "resolvable": {
-                "r1": {
-                    "creator": "u1",
-                    "isClosed": False,
-                    "entries": ["e1"],
+                "resolvableEntry": {
+                    "e1": {
+                        "author": "u2",
+                        "content": "Looks good to me",
+                    },
                 },
-            },
-            "resolvableEntry": {
-                "e1": {
-                    "author": "u2",
-                    "content": "Looks good to me",
+                "user": {
+                    "u1": {"name": "Alice"},
+                    "u2": {"name": "Bob"},
                 },
-            },
-            "user": {
-                "u1": {"name": "Alice"},
-                "u2": {"name": "Bob"},
-            },
-        })
+            }
+        )
         assert "Checklist: 1/4 (25%)" in result
         assert "Sub-cards (1):" in result
         assert "[done] Sub Task" in result
@@ -222,10 +263,13 @@ class TestFormatCardDetail:
 # format_stats_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatStatsTable:
     def test_formats_stats(self):
         stats = {
-            "total": 10, "total_effort": 50, "avg_effort": 5.0,
+            "total": 10,
+            "total_effort": 50,
+            "avg_effort": 5.0,
             "by_status": {"done": 7, "started": 3},
             "by_priority": {"a": 5, "none": 5},
             "by_deck": {"Features": 10},
@@ -246,35 +290,44 @@ class TestFormatStatsTable:
 # format_decks_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatDecksTable:
     def test_formats_decks(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        result = format_decks_table({"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-        }})
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        result = format_decks_table(
+            {
+                "deck": {
+                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+                }
+            }
+        )
         assert "Features" in result
         assert "Tea Shop" in result
 
     def test_shows_card_counts(self, monkeypatch):
-        monkeypatch.setattr(config, "env",
-                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
-        result = format_decks_table({
-            "deck": {
-                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-                "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
-            },
-            "_deck_counts": {"d1": 5, "d2": 12},
-        })
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        result = format_decks_table(
+            {
+                "deck": {
+                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+                    "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
+                },
+                "_deck_counts": {"d1": 5, "d2": 12},
+            }
+        )
         assert "Cards" in result  # column header
         assert "5" in result
         assert "12" in result
 
     def test_no_counts_shows_dash(self, monkeypatch):
         monkeypatch.setattr(config, "env", {})
-        result = format_decks_table({"deck": {
-            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-        }})
+        result = format_decks_table(
+            {
+                "deck": {
+                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+                }
+            }
+        )
         # No _deck_counts key → shows "-"
         assert "Cards" in result
 
@@ -286,13 +339,17 @@ class TestFormatDecksTable:
 # format_gdd_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatGddTable:
     def test_formats_sections(self):
         sections = [
-            {"section": "Gameplay", "tasks": [
-                {"title": "Player Movement", "priority": "a", "effort": 5},
-                {"title": "Combat System", "priority": None, "effort": None},
-            ]},
+            {
+                "section": "Gameplay",
+                "tasks": [
+                    {"title": "Player Movement", "priority": "a", "effort": 5},
+                    {"title": "Combat System", "priority": None, "effort": None},
+                ],
+            },
         ]
         result = format_gdd_table(sections)
         assert "Gameplay" in result
@@ -308,14 +365,25 @@ class TestFormatGddTable:
 # format_cards_csv
 # ---------------------------------------------------------------------------
 
+
 class TestFormatCardsCsv:
     def test_csv_output(self):
-        result = format_cards_csv({"card": {
-            "c1": {"status": "done", "priority": "a", "effort": 3,
-                   "title": "Test Card", "deck_name": "Features",
-                   "milestone_name": "MVP",
-                   "owner_name": "Thomas", "tags": ["bug", "ui"]},
-        }})
+        result = format_cards_csv(
+            {
+                "card": {
+                    "c1": {
+                        "status": "done",
+                        "priority": "a",
+                        "effort": 3,
+                        "title": "Test Card",
+                        "deck_name": "Features",
+                        "milestone_name": "MVP",
+                        "owner_name": "Thomas",
+                        "tags": ["bug", "ui"],
+                    },
+                }
+            }
+        )
         lines = [l.rstrip("\r") for l in result.strip().split("\n")]
         assert lines[0] == "status,priority,effort,deck,milestone,owner,title,tags,id"
         assert "done" in lines[1]
@@ -329,77 +397,91 @@ class TestFormatCardsCsv:
 # format_activity_table
 # ---------------------------------------------------------------------------
 
+
 class TestFormatActivityTable:
     def test_shows_card_title(self, monkeypatch):
         monkeypatch.setattr(config, "env", {})
-        from formatters import format_activity_table
-        result = format_activity_table({
-            "activity": {
-                "a1": {
-                    "type": "card_update", "createdAt": "2026-01-15T10:30:00Z",
-                    "changer": "u1", "deck": "d1", "card": "c1",
-                    "data": {"diff": {"status": ["started", "done"]}},
+        from codecks_cli.formatters import format_activity_table
+
+        result = format_activity_table(
+            {
+                "activity": {
+                    "a1": {
+                        "type": "card_update",
+                        "createdAt": "2026-01-15T10:30:00Z",
+                        "changer": "u1",
+                        "deck": "d1",
+                        "card": "c1",
+                        "data": {"diff": {"status": ["started", "done"]}},
+                    },
                 },
-            },
-            "user": {"u1": {"name": "Alice"}},
-            "deck": {"d1": {"title": "Features"}},
-            "card": {"c1": {"title": "Fix login bug"}},
-        })
+                "user": {"u1": {"name": "Alice"}},
+                "deck": {"d1": {"title": "Features"}},
+                "card": {"c1": {"title": "Fix login bug"}},
+            }
+        )
         assert "Fix login bug" in result
         assert "Card" in result  # column header
 
     def test_supports_snake_case_created_timestamp(self, monkeypatch):
         monkeypatch.setattr(config, "env", {})
-        from formatters import format_activity_table
-        result = format_activity_table({
-            "activity": {
-                "a1": {
-                    "type": "card_update",
-                    "created_at": "2026-01-15T10:30:00Z",
-                    "data": {"diff": {}},
+        from codecks_cli.formatters import format_activity_table
+
+        result = format_activity_table(
+            {
+                "activity": {
+                    "a1": {
+                        "type": "card_update",
+                        "created_at": "2026-01-15T10:30:00Z",
+                        "data": {"diff": {}},
+                    },
                 },
-            },
-            "user": {},
-            "deck": {},
-            "card": {},
-        })
+                "user": {},
+                "deck": {},
+                "card": {},
+            }
+        )
         assert "2026-01-15 10:30" in result
 
 
 class TestFormatConversationsTable:
     def test_formats_threads_and_entries(self):
-        result = format_conversations_table({
-            "card": {
-                "c1": {"title": "Card A", "resolvables": ["r1"]},
-            },
-            "resolvable": {
-                "r1": {
-                    "creator": "u1",
-                    "isClosed": True,
-                    "createdAt": "2026-01-15T10:30:00Z",
-                    "entries": ["e1"],
+        result = format_conversations_table(
+            {
+                "card": {
+                    "c1": {"title": "Card A", "resolvables": ["r1"]},
                 },
-            },
-            "resolvableEntry": {
-                "e1": {
-                    "author": "u2",
-                    "createdAt": "2026-01-15T10:31:00Z",
-                    "content": "Please update copy.",
+                "resolvable": {
+                    "r1": {
+                        "creator": "u1",
+                        "isClosed": True,
+                        "createdAt": "2026-01-15T10:30:00Z",
+                        "entries": ["e1"],
+                    },
                 },
-            },
-            "user": {
-                "u1": {"name": "Alice"},
-                "u2": {"name": "Bob"},
-            },
-        })
+                "resolvableEntry": {
+                    "e1": {
+                        "author": "u2",
+                        "createdAt": "2026-01-15T10:31:00Z",
+                        "content": "Please update copy.",
+                    },
+                },
+                "user": {
+                    "u1": {"name": "Alice"},
+                    "u2": {"name": "Bob"},
+                },
+            }
+        )
         assert "Conversations on Card A:" in result
         assert "[closed] Thread r1" in result
         assert "Bob (2026-01-15T10:31:00Z): Please update copy." in result
 
     def test_handles_no_conversations_and_missing_card(self):
-        result = format_conversations_table({
-            "card": {"c1": {"title": "Card A", "resolvables": []}},
-        })
+        result = format_conversations_table(
+            {
+                "card": {"c1": {"title": "Card A", "resolvables": []}},
+            }
+        )
         assert "No conversations." in result
         assert "Card not found." in format_conversations_table({"card": {}})
 
@@ -407,6 +489,7 @@ class TestFormatConversationsTable:
 # ---------------------------------------------------------------------------
 # resolve_activity_val / format_activity_diff
 # ---------------------------------------------------------------------------
+
 
 class TestActivityHelpers:
     def test_resolve_priority(self):
@@ -454,6 +537,7 @@ class TestActivityHelpers:
 # mutation_response
 # ---------------------------------------------------------------------------
 
+
 class TestMutationResponse:
     def test_basic_output(self, capsys):
         mutation_response("Created", "card-1", "title='Test'")
@@ -466,8 +550,9 @@ class TestMutationResponse:
         assert "OK: Updated: 3 card(s)" in out
 
     def test_suppresses_empty_dispatch_data(self, capsys):
-        mutation_response("Updated", "c1", "status=done",
-                           {"payload": None, "actionId": "abc"}, fmt="json")
+        mutation_response(
+            "Updated", "c1", "status=done", {"payload": None, "actionId": "abc"}, fmt="json"
+        )
         out = capsys.readouterr().out
         # Should only have the OK line, not the JSON dump
         assert "OK:" in out
@@ -475,8 +560,7 @@ class TestMutationResponse:
 
     def test_strict_json_output(self, capsys, monkeypatch):
         monkeypatch.setattr(config, "RUNTIME_STRICT", True)
-        mutation_response("Updated", "c1", "status=done",
-                          {"ok": True}, fmt="json")
+        mutation_response("Updated", "c1", "status=done", {"ok": True}, fmt="json")
         out = capsys.readouterr().out.strip()
         payload = json.loads(out)
         assert payload["ok"] is True
@@ -488,6 +572,7 @@ class TestMutationResponse:
 # ---------------------------------------------------------------------------
 # output dispatcher
 # ---------------------------------------------------------------------------
+
 
 class TestOutput:
     def test_json_output(self, capsys):
@@ -544,7 +629,9 @@ class TestPmFocusTable:
         report = {
             "counts": {"started": 0, "blocked": 0, "in_review": 1, "hand": 0, "stale": 0},
             "blocked": [],
-            "in_review": [{"id": "c1", "title": "Review Me", "priority": "a", "effort": 5, "deck": "D"}],
+            "in_review": [
+                {"id": "c1", "title": "Review Me", "priority": "a", "effort": 5, "deck": "D"}
+            ],
             "hand": [],
             "stale": [],
             "suggested": [],
@@ -558,10 +645,16 @@ class TestPmFocusTable:
 class TestStandupTable:
     def test_standup_sections(self):
         report = {
-            "recently_done": [{"id": "c1", "title": "Fix Bug", "priority": "a", "effort": 3, "deck": "D"}],
-            "in_progress": [{"id": "c2", "title": "New Feature", "priority": "b", "effort": 5, "deck": "D"}],
+            "recently_done": [
+                {"id": "c1", "title": "Fix Bug", "priority": "a", "effort": 3, "deck": "D"}
+            ],
+            "in_progress": [
+                {"id": "c2", "title": "New Feature", "priority": "b", "effort": 5, "deck": "D"}
+            ],
             "blocked": [],
-            "hand": [{"id": "c3", "title": "Quick Task", "priority": "c", "effort": 1, "deck": "D"}],
+            "hand": [
+                {"id": "c3", "title": "Quick Task", "priority": "c", "effort": 1, "deck": "D"}
+            ],
             "filters": {"days": 2},
         }
         result = format_standup_table(report)
@@ -590,6 +683,7 @@ class TestStandupTable:
 # ---------------------------------------------------------------------------
 # _sanitize_str
 # ---------------------------------------------------------------------------
+
 
 class TestSanitizeStr:
     def test_normal_text_unchanged(self):

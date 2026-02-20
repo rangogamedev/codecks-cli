@@ -37,12 +37,12 @@ Open an issue describing:
 ### Submitting code
 
 1. Fork the repo and create a branch
-2. Make your changes in the relevant module (see `PROJECT_INDEX.md` or `CLAUDE.md` for module layout)
+2. Make your changes in the relevant module (see `CLAUDE.md` for module layout)
 3. Install dev tools: `py -m pip install .[dev]`
 4. Run quality checks:
    - `py -m ruff check .`
    - `py -m ruff format --check .`
-   - `py -m mypy api.py cards.py commands.py formatters.py models.py`
+   - `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py`
    - `pwsh -File scripts/run-tests.ps1`
 5. Test your changes with real Codecks API calls if they touch the API layer
 6. Update `README.md` if you add new commands or flags
@@ -68,7 +68,7 @@ Open an issue describing:
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
-- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 328 tests. All must pass before submitting.
+- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 389 tests. All must pass before submitting.
 
 See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
 

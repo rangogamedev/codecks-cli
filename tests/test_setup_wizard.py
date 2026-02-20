@@ -2,13 +2,12 @@
 
 from unittest.mock import patch
 
-import config
-import setup_wizard
+from codecks_cli import config, setup_wizard
 
 
 class TestSetupDiscoverProjects:
-    @patch("setup_wizard.config.save_env_value")
-    @patch("setup_wizard._try_call")
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("codecks_cli.setup_wizard._try_call")
     def test_no_projects_saves_empty_mapping(self, mock_try_call, mock_save):
         mock_try_call.return_value = {"deck": {"d1": {"id": "d1", "title": "Inbox"}}}
         setup_wizard._setup_discover_projects()
@@ -16,8 +15,8 @@ class TestSetupDiscoverProjects:
 
 
 class TestSetupDiscoverUser:
-    @patch("setup_wizard.config.save_env_value")
-    @patch("setup_wizard._try_call")
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("codecks_cli.setup_wizard._try_call")
     def test_single_user_is_saved(self, mock_try_call, mock_save):
         mock_try_call.return_value = {
             "accountRole": {
@@ -33,13 +32,13 @@ class TestSetupDiscoverUser:
 
 
 class TestSetupGddOptional:
-    @patch("setup_wizard.config.save_env_value")
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
     @patch("builtins.input", return_value="")
     def test_skip_gdd_url(self, mock_input, mock_save):
         setup_wizard._setup_gdd_optional()
         mock_save.assert_not_called()
 
-    @patch("setup_wizard.config.save_env_value")
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
     @patch("builtins.input", return_value="https://docs.google.com/document/d/abc123/edit")
     def test_save_gdd_url(self, mock_input, mock_save):
         setup_wizard._setup_gdd_optional()
@@ -50,14 +49,14 @@ class TestSetupGddOptional:
 
 
 class TestCmdSetupFastPath:
-    @patch("setup_wizard._setup_done")
-    @patch("setup_wizard._setup_gdd_optional")
-    @patch("setup_wizard._setup_discover_user")
-    @patch("setup_wizard._setup_discover_milestones")
-    @patch("setup_wizard._setup_discover_projects")
+    @patch("codecks_cli.setup_wizard._setup_done")
+    @patch("codecks_cli.setup_wizard._setup_gdd_optional")
+    @patch("codecks_cli.setup_wizard._setup_discover_user")
+    @patch("codecks_cli.setup_wizard._setup_discover_milestones")
+    @patch("codecks_cli.setup_wizard._setup_discover_projects")
     @patch("builtins.input", return_value="1")
-    @patch("setup_wizard._try_call")
-    @patch("setup_wizard.config.load_env")
+    @patch("codecks_cli.setup_wizard._try_call")
+    @patch("codecks_cli.setup_wizard.config.load_env")
     def test_existing_valid_config_refresh_path(
         self,
         mock_load_env,

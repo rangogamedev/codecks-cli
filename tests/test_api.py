@@ -1,15 +1,28 @@
 """Tests for api.py — security helpers, HTTP error handling, token validation."""
 
 import io
-import pytest
 import urllib.error
 from unittest.mock import MagicMock, patch
 
-from config import CliError, SetupError
-from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
-                 HTTPError, warn_if_empty, session_request, _http_request,
-                 _sanitize_url_for_log, _is_sampled_request, query, dispatch,
-                 generate_report_token, _check_token)
+import pytest
+
+from codecks_cli.api import (
+    HTTPError,
+    _check_token,
+    _http_request,
+    _is_sampled_request,
+    _mask_token,
+    _safe_json_parse,
+    _sanitize_error,
+    _sanitize_url_for_log,
+    _try_call,
+    dispatch,
+    generate_report_token,
+    query,
+    session_request,
+    warn_if_empty,
+)
+from codecks_cli.config import CliError, SetupError
 
 
 class TestMaskToken:
@@ -28,8 +41,10 @@ class TestMaskToken:
 
 class TestSanitizeUrlForLog:
     def test_masks_token_and_access_key(self):
-        url = ("https://api.codecks.io/user-report/v1/create-report"
-               "?token=secret-token&accessKey=secret-key&foo=bar")
+        url = (
+            "https://api.codecks.io/user-report/v1/create-report"
+            "?token=secret-token&accessKey=secret-key&foo=bar"
+        )
         safe = _sanitize_url_for_log(url)
         assert "token=%2A%2A%2A" in safe
         assert "accessKey=%2A%2A%2A" in safe
@@ -40,15 +55,15 @@ class TestSanitizeUrlForLog:
 
 class TestSampling:
     def test_sample_rate_zero_disables(self, monkeypatch):
-        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 0.0)
+        monkeypatch.setattr("codecks_cli.api.config.HTTP_LOG_SAMPLE_RATE", 0.0)
         assert _is_sampled_request("req-1") is False
 
     def test_sample_rate_one_enables(self, monkeypatch):
-        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 1.0)
+        monkeypatch.setattr("codecks_cli.api.config.HTTP_LOG_SAMPLE_RATE", 1.0)
         assert _is_sampled_request("req-1") is True
 
     def test_sampling_is_deterministic(self, monkeypatch):
-        monkeypatch.setattr("api.config.HTTP_LOG_SAMPLE_RATE", 0.5)
+        monkeypatch.setattr("codecks_cli.api.config.HTTP_LOG_SAMPLE_RATE", 0.5)
         a = _is_sampled_request("req-stable")
         b = _is_sampled_request("req-stable")
         assert a == b
@@ -59,7 +74,7 @@ class TestSafeJsonParse:
         assert _safe_json_parse('{"a": 1}') == {"a": 1}
 
     def test_valid_array(self):
-        assert _safe_json_parse('[1, 2, 3]') == [1, 2, 3]
+        assert _safe_json_parse("[1, 2, 3]") == [1, 2, 3]
 
     def test_invalid_json_exits(self):
         with pytest.raises(CliError) as exc_info:
@@ -91,6 +106,7 @@ class TestTryCall:
     def test_catches_cli_error(self):
         def raises():
             raise CliError("test error")
+
         assert _try_call(raises) is None
 
     def test_passes_args(self):
@@ -121,14 +137,14 @@ class TestWarnIfEmpty:
 
 
 class TestSessionRequest429:
-    @patch("api._http_request")
+    @patch("codecks_cli.api._http_request")
     def test_rate_limit_message(self, mock_http):
         mock_http.side_effect = HTTPError(429, "Too Many Requests", "")
         with pytest.raises(CliError) as exc_info:
             session_request("/", {"query": {}})
         assert "Rate limit" in str(exc_info.value)
 
-    @patch("api._http_request")
+    @patch("codecks_cli.api._http_request")
     def test_sends_request_id_header(self, mock_http):
         session_request("/", {"query": {}}, idempotent=True)
         headers = mock_http.call_args.args[2]
@@ -138,12 +154,15 @@ class TestSessionRequest429:
 
 
 class TestHttpRetries:
-    @patch("api.time.sleep")
-    @patch("api.urllib.request.urlopen")
+    @patch("codecks_cli.api.time.sleep")
+    @patch("codecks_cli.api.urllib.request.urlopen")
     def test_retries_429_for_idempotent_request(self, mock_urlopen, mock_sleep):
         first = urllib.error.HTTPError(
-            "https://api.codecks.io/", 429, "Too Many Requests",
-            {"Retry-After": "0"}, io.BytesIO(b"busy")
+            "https://api.codecks.io/",
+            429,
+            "Too Many Requests",
+            {"Retry-After": "0"},
+            io.BytesIO(b"busy"),
         )
         success_cm = MagicMock()
         success_resp = success_cm.__enter__.return_value
@@ -151,17 +170,19 @@ class TestHttpRetries:
         success_resp.read.return_value = b'{"ok": true}'
         mock_urlopen.side_effect = [first, success_cm]
 
-        result = _http_request("https://api.codecks.io/", {"query": {}},
-                               idempotent=True)
+        result = _http_request("https://api.codecks.io/", {"query": {}}, idempotent=True)
         assert result["ok"] is True
         assert mock_urlopen.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch("api.urllib.request.urlopen")
+    @patch("codecks_cli.api.urllib.request.urlopen")
     def test_does_not_retry_429_for_non_idempotent_request(self, mock_urlopen):
         first = urllib.error.HTTPError(
-            "https://api.codecks.io/", 429, "Too Many Requests",
-            {"Retry-After": "0"}, io.BytesIO(b"busy")
+            "https://api.codecks.io/",
+            429,
+            "Too Many Requests",
+            {"Retry-After": "0"},
+            io.BytesIO(b"busy"),
         )
         mock_urlopen.side_effect = first
 
@@ -169,9 +190,9 @@ class TestHttpRetries:
             _http_request("https://api.codecks.io/", {"x": 1}, idempotent=False)
         assert mock_urlopen.call_count == 1
 
-    @patch("api.urllib.request.urlopen")
+    @patch("codecks_cli.api.urllib.request.urlopen")
     def test_response_size_limit(self, mock_urlopen, monkeypatch):
-        monkeypatch.setattr("api.config.HTTP_MAX_RESPONSE_BYTES", 4)
+        monkeypatch.setattr("codecks_cli.api.config.HTTP_MAX_RESPONSE_BYTES", 4)
         mock_resp = mock_urlopen.return_value.__enter__.return_value
         mock_resp.headers.get.return_value = "application/json"
         mock_resp.read.return_value = b"12345"
@@ -182,31 +203,31 @@ class TestHttpRetries:
 
 
 class TestResponseShapeValidation:
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_query_rejects_non_object(self, mock_session):
         mock_session.return_value = []
         with pytest.raises(CliError) as exc_info:
             query({"_root": [{"account": ["id"]}]})
         assert "Unexpected query response shape" in str(exc_info.value)
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_dispatch_rejects_non_object(self, mock_session):
         mock_session.return_value = "ok"
         with pytest.raises(CliError) as exc_info:
             dispatch("cards/update", {"id": "x"})
         assert "Unexpected dispatch response shape" in str(exc_info.value)
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_query_strict_rejects_empty_object(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.RUNTIME_STRICT", True)
+        monkeypatch.setattr("codecks_cli.api.config.RUNTIME_STRICT", True)
         mock_session.return_value = {}
         with pytest.raises(CliError) as exc_info:
             query({"_root": [{"account": ["id"]}]})
         assert "Strict mode: query returned an empty object" in str(exc_info.value)
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_dispatch_strict_requires_ack_fields(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.RUNTIME_STRICT", True)
+        monkeypatch.setattr("codecks_cli.api.config.RUNTIME_STRICT", True)
         mock_session.return_value = {"foo": "bar"}
         with pytest.raises(CliError) as exc_info:
             dispatch("cards/update", {"id": "x"})
@@ -214,7 +235,7 @@ class TestResponseShapeValidation:
 
 
 class TestContentTypeCheck:
-    @patch("api.urllib.request.urlopen")
+    @patch("codecks_cli.api.urllib.request.urlopen")
     def test_html_content_type_gives_proxy_message(self, mock_urlopen):
         mock_resp = mock_urlopen.return_value.__enter__.return_value
         mock_resp.headers.get.return_value = "text/html; charset=utf-8"
@@ -224,7 +245,7 @@ class TestContentTypeCheck:
         assert "Content-Type" in str(exc_info.value)
         assert "proxy" in str(exc_info.value)
 
-    @patch("api.urllib.request.urlopen")
+    @patch("codecks_cli.api.urllib.request.urlopen")
     def test_json_content_type_gives_json_message(self, mock_urlopen):
         mock_resp = mock_urlopen.return_value.__enter__.return_value
         mock_resp.headers.get.return_value = "application/json"
@@ -237,9 +258,9 @@ class TestContentTypeCheck:
 class TestGenerateReportTokenLeak:
     """Error message must not leak raw API response values."""
 
-    @patch("api._http_request")
+    @patch("codecks_cli.api._http_request")
     def test_error_shows_keys_not_values(self, mock_http, monkeypatch):
-        monkeypatch.setattr("config.ACCESS_KEY", "fake-key")
+        monkeypatch.setattr("codecks_cli.config.ACCESS_KEY", "fake-key")
         mock_http.return_value = {"ok": False, "secret_field": "s3cret"}
         with pytest.raises(CliError) as exc_info:
             generate_report_token()
@@ -248,9 +269,9 @@ class TestGenerateReportTokenLeak:
         assert "keys:" in msg
         assert "ok" in msg
 
-    @patch("api._http_request")
+    @patch("codecks_cli.api._http_request")
     def test_error_on_missing_token_field(self, mock_http, monkeypatch):
-        monkeypatch.setattr("config.ACCESS_KEY", "fake-key")
+        monkeypatch.setattr("codecks_cli.config.ACCESS_KEY", "fake-key")
         mock_http.return_value = {"ok": True}
         with pytest.raises(CliError) as exc_info:
             generate_report_token()
@@ -259,28 +280,28 @@ class TestGenerateReportTokenLeak:
 
 
 class TestCheckToken:
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_raises_setup_needed_when_missing_config(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.SESSION_TOKEN", "")
-        monkeypatch.setattr("api.config.ACCOUNT", "")
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "")
         with pytest.raises(SetupError) as exc_info:
             _check_token()
         assert "[SETUP_NEEDED]" in str(exc_info.value)
         assert "setup" in str(exc_info.value).lower()
         mock_session.assert_not_called()
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_accepts_valid_account_payload(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
-        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
         mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
         _check_token()
         mock_session.assert_called_once()
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_raises_token_expired_on_empty_account(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
-        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
         mock_session.return_value = {"account": {}}
         with pytest.raises(SetupError) as exc_info:
             _check_token()
@@ -288,10 +309,10 @@ class TestCheckToken:
         assert "[TOKEN_EXPIRED]" in msg
         assert "setup" in msg.lower()
 
-    @patch("api.session_request")
+    @patch("codecks_cli.api.session_request")
     def test_wraps_setup_error_with_setup_hint(self, mock_session, monkeypatch):
-        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
-        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
         mock_session.side_effect = SetupError("[TOKEN_EXPIRED] expired")
         with pytest.raises(SetupError) as exc_info:
             _check_token()

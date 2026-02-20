@@ -2,10 +2,9 @@
 HTTP request layer, security helpers, and token validation for codecks-cli.
 """
 
-import json
 import hashlib
+import json
 import re
-import socket
 import sys
 import time
 import urllib.error
@@ -13,8 +12,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
-import config
-from config import CliError, SetupError
+from codecks_cli import config
+from codecks_cli.config import CliError, SetupError
 
 _RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
 
@@ -22,6 +21,7 @@ _RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
 # ---------------------------------------------------------------------------
 # Security helpers
 # ---------------------------------------------------------------------------
+
 
 def _mask_token(token):
     """Show only first 6 chars of a token for safe logging."""
@@ -33,16 +33,15 @@ def _safe_json_parse(text, context="input"):
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise CliError(f"[ERROR] Invalid JSON in {context}: "
-                       f"{e.msg} at position {e.pos}")
+        raise CliError(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}")
 
 
 def _sanitize_error(body, max_len=500):
     """Truncate and clean error body for safe display."""
     if not body:
         return ""
-    cleaned = re.sub(r'<[^>]+>', '', body)
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    cleaned = re.sub(r"<[^>]+>", "", body)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) > max_len:
         return cleaned[:max_len] + "... [truncated]"
     return cleaned
@@ -60,8 +59,10 @@ def _try_call(fn, *args, **kwargs):
 # HTTP request layer
 # ---------------------------------------------------------------------------
 
+
 class HTTPError(Exception):
     """Raised by _http_request for HTTP errors that callers want to handle."""
+
     def __init__(self, code, reason, body, headers=None):
         self.code = code
         self.reason = reason
@@ -91,8 +92,7 @@ def _log_http_event(**fields):
     """Emit structured HTTP logs to stderr when enabled."""
     if not config.HTTP_LOG_ENABLED:
         return
-    print("[HTTP] " + json.dumps(fields, ensure_ascii=False, sort_keys=True),
-          file=sys.stderr)
+    print("[HTTP] " + json.dumps(fields, ensure_ascii=False, sort_keys=True), file=sys.stderr)
 
 
 def _is_sampled_request(request_id):
@@ -165,8 +165,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
 
     for attempt in range(max_attempts):
         start = time.perf_counter()
-        req = urllib.request.Request(url, data=body, headers=headers or {},
-                                     method=method)
+        req = urllib.request.Request(url, data=body, headers=headers or {}, method=method)
         if sampled:
             _log_http_event(
                 phase="request",
@@ -185,7 +184,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 if len(raw) > config.HTTP_MAX_RESPONSE_BYTES:
                     raise CliError(
                         "[ERROR] Response too large from Codecks API "
-                        f"(>{config.HTTP_MAX_RESPONSE_BYTES} bytes).")
+                        f"(>{config.HTTP_MAX_RESPONSE_BYTES} bytes)."
+                    )
                 if sampled:
                     _log_http_event(
                         phase="response",
@@ -205,12 +205,15 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                         raise CliError(
                             f"[ERROR] Unexpected Content-Type from server "
                             f"({content_type}). This may be a proxy or "
-                            "network issue.")
-                    raise CliError("[ERROR] Unexpected response from Codecks API "
-                                   "(not valid JSON).")
+                            "network issue."
+                        )
+                    raise CliError("[ERROR] Unexpected response from Codecks API (not valid JSON).")
         except urllib.error.HTTPError as e:
-            error_body = (e.read(config.HTTP_MAX_RESPONSE_BYTES).decode(
-                "utf-8", errors="replace") if e.fp else "")
+            error_body = (
+                e.read(config.HTTP_MAX_RESPONSE_BYTES).decode("utf-8", errors="replace")
+                if e.fp
+                else ""
+            )
             retryable = e.code in _RETRYABLE_HTTP_CODES
             can_retry = idempotent and attempt < max_attempts - 1 and retryable
             if sampled:
@@ -228,11 +231,11 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
             if can_retry:
                 retry_after = _parse_retry_after(getattr(e, "headers", None))
                 if retry_after is None:
-                    retry_after = config.HTTP_RETRY_BASE_SECONDS * (2 ** attempt)
+                    retry_after = config.HTTP_RETRY_BASE_SECONDS * (2**attempt)
                 time.sleep(retry_after)
                 continue
             raise HTTPError(e.code, e.reason, error_body, headers=e.headers)
-        except socket.timeout:
+        except TimeoutError:
             last_timeout = True
             if sampled:
                 _log_http_event(
@@ -245,14 +248,15 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     request_id=request_id,
                 )
             if idempotent and attempt < max_attempts - 1:
-                time.sleep(config.HTTP_RETRY_BASE_SECONDS * (2 ** attempt))
+                time.sleep(config.HTTP_RETRY_BASE_SECONDS * (2**attempt))
                 continue
-            raise CliError(_error_envelope(
-                f"Request timed out after {timeout} seconds. "
-                "Is Codecks API reachable?",
-                request_id=request_id,
-                retryable=False,
-            ))
+            raise CliError(
+                _error_envelope(
+                    f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
+                    request_id=request_id,
+                    retryable=False,
+                )
+            )
         except urllib.error.URLError as e:
             last_url_error = e.reason
             if sampled:
@@ -266,27 +270,32 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     request_id=request_id,
                 )
             if idempotent and attempt < max_attempts - 1:
-                time.sleep(config.HTTP_RETRY_BASE_SECONDS * (2 ** attempt))
+                time.sleep(config.HTTP_RETRY_BASE_SECONDS * (2**attempt))
                 continue
-            raise CliError(_error_envelope(
-                f"Connection failed: {e.reason}",
-                request_id=request_id,
-                retryable=False,
-            ))
+            raise CliError(
+                _error_envelope(
+                    f"Connection failed: {e.reason}",
+                    request_id=request_id,
+                    retryable=False,
+                )
+            )
 
     if last_timeout:
-        raise CliError(_error_envelope(
-            f"Request timed out after {timeout} seconds. "
-            "Is Codecks API reachable?",
-            request_id=request_id,
-            retryable=False,
-        ))
+        raise CliError(
+            _error_envelope(
+                f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
+                request_id=request_id,
+                retryable=False,
+            )
+        )
     if last_url_error is not None:
-        raise CliError(_error_envelope(
-            f"Connection failed: {last_url_error}",
-            request_id=request_id,
-            retryable=False,
-        ))
+        raise CliError(
+            _error_envelope(
+                f"Connection failed: {last_url_error}",
+                request_id=request_id,
+                retryable=False,
+            )
+        )
     raise CliError(_error_envelope("Request failed.", request_id=request_id))
 
 
@@ -309,26 +318,31 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 "[TOKEN_EXPIRED] The Codecks session token has expired. "
                 "Please provide a fresh 'at' cookie from browser DevTools "
                 "(Brave > F12 > Network > api.codecks.io request > "
-                "Cookie header > at=...).")
+                "Cookie header > at=...)."
+            )
         if e.code == 429:
             raise CliError(
                 "[ERROR] Rate limit reached (Codecks allows ~40 req/5s). "
-                "Wait a few seconds and retry.")
-        server_req_id = (e.headers.get("X-Request-Id") if e.headers else None)
-        raise CliError(_error_envelope(
-            f"HTTP {e.code}: {e.reason}",
-            status=e.code,
-            request_id=server_req_id,
-            retryable=e.code in _RETRYABLE_HTTP_CODES,
-            detail=_sanitize_error(e.body),
-        ))
+                "Wait a few seconds and retry."
+            )
+        server_req_id = e.headers.get("X-Request-Id") if e.headers else None
+        raise CliError(
+            _error_envelope(
+                f"HTTP {e.code}: {e.reason}",
+                status=e.code,
+                request_id=server_req_id,
+                retryable=e.code in _RETRYABLE_HTTP_CODES,
+                detail=_sanitize_error(e.body),
+            )
+        )
 
 
 def report_request(content, severity=None, email=None):
     """Create a card via the Report Token endpoint (stable, no expiry)."""
     if not config.REPORT_TOKEN:
-        raise CliError("[ERROR] CODECKS_REPORT_TOKEN not set in .env. "
-                       "Run: py codecks_api.py generate-token")
+        raise CliError(
+            "[ERROR] CODECKS_REPORT_TOKEN not set in .env. Run: py codecks_api.py generate-token"
+        )
     payload = {"content": content}
     if severity:
         payload["severity"] = severity
@@ -336,8 +350,7 @@ def report_request(content, severity=None, email=None):
         payload["userEmail"] = email
     # NOTE: Token in URL query param is required by Codecks API design.
     # Mitigate by treating report tokens as rotatable credentials.
-    url = (f"{config.BASE_URL}/user-report/v1/create-report"
-           f"?token={config.REPORT_TOKEN}")
+    url = f"{config.BASE_URL}/user-report/v1/create-report?token={config.REPORT_TOKEN}"
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -347,16 +360,20 @@ def report_request(content, severity=None, email=None):
         return _http_request(url, payload, headers)
     except HTTPError as e:
         if e.code == 401:
-            raise CliError("[ERROR] Report token is invalid or disabled. "
-                           "Generate a new one: py codecks_api.py generate-token")
-        server_req_id = (e.headers.get("X-Request-Id") if e.headers else None)
-        raise CliError(_error_envelope(
-            f"HTTP {e.code}: {e.reason}",
-            status=e.code,
-            request_id=server_req_id,
-            retryable=e.code in _RETRYABLE_HTTP_CODES,
-            detail=_sanitize_error(e.body),
-        ))
+            raise CliError(
+                "[ERROR] Report token is invalid or disabled. "
+                "Generate a new one: py codecks_api.py generate-token"
+            )
+        server_req_id = e.headers.get("X-Request-Id") if e.headers else None
+        raise CliError(
+            _error_envelope(
+                f"HTTP {e.code}: {e.reason}",
+                status=e.code,
+                request_id=server_req_id,
+                retryable=e.code in _RETRYABLE_HTTP_CODES,
+                detail=_sanitize_error(e.body),
+            )
+        )
 
 
 def generate_report_token(label="claude-code"):
@@ -364,8 +381,7 @@ def generate_report_token(label="claude-code"):
     if not config.ACCESS_KEY:
         raise CliError("[ERROR] CODECKS_ACCESS_KEY not set in .env.")
     # NOTE: Access key in URL query param is required by Codecks API design.
-    url = (f"{config.BASE_URL}/user-report/v1/create-report-token"
-           f"?accessKey={config.ACCESS_KEY}")
+    url = f"{config.BASE_URL}/user-report/v1/create-report-token?accessKey={config.ACCESS_KEY}"
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -374,24 +390,28 @@ def generate_report_token(label="claude-code"):
     try:
         result = _http_request(url, {"label": label}, headers)
     except HTTPError as e:
-        server_req_id = (e.headers.get("X-Request-Id") if e.headers else None)
-        raise CliError(_error_envelope(
-            f"HTTP {e.code}: {e.reason}",
-            status=e.code,
-            request_id=server_req_id,
-            retryable=e.code in _RETRYABLE_HTTP_CODES,
-            detail=_sanitize_error(e.body),
-        ))
+        server_req_id = e.headers.get("X-Request-Id") if e.headers else None
+        raise CliError(
+            _error_envelope(
+                f"HTTP {e.code}: {e.reason}",
+                status=e.code,
+                request_id=server_req_id,
+                retryable=e.code in _RETRYABLE_HTTP_CODES,
+                detail=_sanitize_error(e.body),
+            )
+        )
     if result.get("ok") and result.get("token"):
         config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
         return result
-    raise CliError(f"[ERROR] Unexpected response from generate-token "
-                       f"(keys: {sorted(result.keys())})")
+    raise CliError(
+        f"[ERROR] Unexpected response from generate-token (keys: {sorted(result.keys())})"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Query and dispatch helpers
 # ---------------------------------------------------------------------------
+
 
 def query(q):
     """Run a Codecks query (uses session token)."""
@@ -401,8 +421,7 @@ def query(q):
     )
     if config.RUNTIME_STRICT and not result:
         raise CliError(
-            "[ERROR] Strict mode: query returned an empty object. "
-            "Treating as ambiguous response."
+            "[ERROR] Strict mode: query returned an empty object. Treating as ambiguous response."
         )
     result.pop("_root", None)
     return result
@@ -414,9 +433,7 @@ def dispatch(path, data):
         session_request(f"/dispatch/{path}", data),
         "dispatch",
     )
-    if config.RUNTIME_STRICT and not any(
-        k in result for k in ("actionId", "ok", "payload")
-    ):
+    if config.RUNTIME_STRICT and not any(k in result for k in ("actionId", "ok", "payload")):
         raise CliError(
             "[ERROR] Strict mode: dispatch response missing expected "
             "ack fields (actionId/ok/payload)."
@@ -428,29 +445,32 @@ def warn_if_empty(result, relation):
     """Warn if a query returned no results — likely means the token expired.
     Codecks silently returns empty data instead of 401 when unauthenticated."""
     if relation not in result or not result[relation]:
-        print(f"[TOKEN_EXPIRED] The Codecks session token may have expired "
-              f"(query returned 0 {relation}s). Please provide a fresh 'at' "
-              "cookie from browser DevTools "
-              "(Brave > F12 > Network > api.codecks.io request > "
-              "Cookie header > at=...).", file=sys.stderr)
+        print(
+            f"[TOKEN_EXPIRED] The Codecks session token may have expired "
+            f"(query returned 0 {relation}s). Please provide a fresh 'at' "
+            "cookie from browser DevTools "
+            "(Brave > F12 > Network > api.codecks.io request > "
+            "Cookie header > at=...).",
+            file=sys.stderr,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Token validation
 # ---------------------------------------------------------------------------
 
+
 def _check_token():
     """Validate session token before running a command. Exits if expired."""
     if not config.SESSION_TOKEN or not config.ACCOUNT:
-        raise SetupError("[SETUP_NEEDED] No configuration found.\n"
-                         "  Run: py codecks_api.py setup")
+        raise SetupError("[SETUP_NEEDED] No configuration found.\n  Run: py codecks_api.py setup")
     try:
-        result = session_request("/",
-                                 {"query": {"_root": [{"account": ["id"]}]}},
-                                 idempotent=True)
+        result = session_request("/", {"query": {"_root": [{"account": ["id"]}]}}, idempotent=True)
     except SetupError as e:
         raise SetupError(str(e) + "\n  Run: py codecks_api.py setup") from e
     if "account" not in result or not result["account"]:
-        raise SetupError("[TOKEN_EXPIRED] Your session token has expired.\n"
-                         "  Run: py codecks_api.py setup\n"
-                         "  Or update CODECKS_TOKEN in .env manually.")
+        raise SetupError(
+            "[TOKEN_EXPIRED] Your session token has expired.\n"
+            "  Run: py codecks_api.py setup\n"
+            "  Or update CODECKS_TOKEN in .env manually."
+        )

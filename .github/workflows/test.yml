@@ -25,6 +25,6 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
       - name: Mypy (core modules)
-        run: mypy api.py cards.py commands.py formatters.py models.py
+        run: mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py
       - name: Pytest with coverage
         run: pytest tests/ -v --basetemp .tmp/pytest-ci

@@ -10,13 +10,16 @@ import tempfile
 # .env path and helpers
 # ---------------------------------------------------------------------------
 
-ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
+
+ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 
 
 def load_env():
     env = {}
     if os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "r") as f:
+        with open(ENV_PATH) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -30,7 +33,7 @@ def save_env_value(key, value):
     lines = []
     found = False
     if os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "r") as f:
+        with open(ENV_PATH) as f:
             lines = f.readlines()
     for i, line in enumerate(lines):
         if line.strip().startswith(f"{key}="):
@@ -106,8 +109,7 @@ VERSION = "0.4.0"
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
-VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title",
-                     "owner", "updated", "created"}
+VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title", "owner", "updated", "created"}
 VALID_CARD_TYPES = {"hero", "doc"}
 VALID_SEVERITIES = {"critical", "high", "low", "null"}
 
@@ -136,13 +138,11 @@ HTTP_LOG_SAMPLE_RATE = min(1.0, max(0.0, _env_float("CODECKS_HTTP_LOG_SAMPLE_RAT
 # ---------------------------------------------------------------------------
 
 GDD_DOC_URL = env.get("GDD_GOOGLE_DOC_URL", "")
-GDD_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               ".gdd_cache.md")
+GDD_CACHE_PATH = os.path.join(_PROJECT_ROOT, ".gdd_cache.md")
 
 GOOGLE_CLIENT_ID = env.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = env.get("GOOGLE_CLIENT_SECRET", "")
-GDD_TOKENS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                ".gdd_tokens.json")
+GDD_TOKENS_PATH = os.path.join(_PROJECT_ROOT, ".gdd_tokens.json")
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
@@ -159,10 +159,14 @@ RUNTIME_STRICT = False
 # Custom exceptions (defined here to avoid circular imports)
 # ---------------------------------------------------------------------------
 
+
 class CliError(Exception):
     """Exit code 1 — validation, not-found, network, parse errors."""
+
     exit_code = 1
+
 
 class SetupError(CliError):
     """Exit code 2 — token expired, no config."""
+
     exit_code = 2

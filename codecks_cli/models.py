@@ -4,12 +4,13 @@ Typed models for command payloads and PM feature scaffolding.
 
 from dataclasses import dataclass
 
-from config import CliError
+from codecks_cli.config import CliError
 
 
 @dataclass(frozen=True)
 class ObjectPayload:
     """Typed wrapper for raw JSON object payloads."""
+
     data: dict
 
     @classmethod
@@ -17,14 +18,14 @@ class ObjectPayload:
         if isinstance(value, dict):
             return cls(data=value)
         raise CliError(
-            f"[ERROR] Invalid JSON in {context}: expected object, "
-            f"got {type(value).__name__}."
+            f"[ERROR] Invalid JSON in {context}: expected object, got {type(value).__name__}."
         )
 
 
 @dataclass(frozen=True)
 class FeatureSpec:
     """Validated input contract for `feature` scaffolding."""
+
     title: str
     hero_deck: str
     code_deck: str
@@ -62,6 +63,47 @@ class FeatureSpec:
             format=ns.format,
             auto_skip_art=auto_skip_art,
             allow_duplicate=bool(getattr(ns, "allow_duplicate", False)),
+        )
+
+    @classmethod
+    def from_kwargs(
+        cls,
+        title,
+        *,
+        hero_deck,
+        code_deck,
+        design_deck,
+        art_deck=None,
+        skip_art=False,
+        description=None,
+        owner=None,
+        priority=None,
+        effort=None,
+        format="json",
+        allow_duplicate=False,
+    ):
+        """Create a FeatureSpec from keyword arguments (programmatic API)."""
+        title = (title or "").strip()
+        if not title:
+            raise CliError("[ERROR] Feature title cannot be empty.")
+        if skip_art and art_deck:
+            raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
+        auto_skip_art = bool((not skip_art) and (not art_deck))
+        skip_art = bool(skip_art or auto_skip_art)
+        return cls(
+            title=title,
+            hero_deck=hero_deck,
+            code_deck=code_deck,
+            design_deck=design_deck,
+            art_deck=None if skip_art else art_deck,
+            skip_art=skip_art,
+            description=description,
+            owner=owner,
+            priority=priority,
+            effort=effort,
+            format=format,
+            auto_skip_art=auto_skip_art,
+            allow_duplicate=allow_duplicate,
         )
 
 

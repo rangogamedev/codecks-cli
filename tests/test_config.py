@@ -1,10 +1,8 @@
 """Tests for config.py — env loading, saving, and constants."""
 
-import os
-import sys
-import pytest
 from unittest.mock import patch
-import config
+
+from codecks_cli import config
 
 
 class TestLoadEnv:
@@ -139,15 +137,14 @@ class TestConstants:
         assert config.PRI_LABELS == {"a": "high", "b": "med", "c": "low"}
 
     def test_valid_sort_fields(self):
-        expected = {"status", "priority", "effort", "deck", "title",
-                    "owner", "updated", "created"}
+        expected = {"status", "priority", "effort", "deck", "title", "owner", "updated", "created"}
         assert config.VALID_SORT_FIELDS == expected
 
 
 class TestSaveEnvPermissions:
     """save_env_value() should chmod .env to 0o600 after writing."""
 
-    @patch("config.os.chmod")
+    @patch("codecks_cli.config.os.chmod")
     def test_chmod_called_after_write(self, mock_chmod, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
         monkeypatch.setattr(config, "ENV_PATH", str(env_file))
@@ -158,6 +155,6 @@ class TestSaveEnvPermissions:
         """On Windows or restricted systems, chmod failure is silently ignored."""
         env_file = tmp_path / ".env"
         monkeypatch.setattr(config, "ENV_PATH", str(env_file))
-        with patch("config.os.chmod", side_effect=OSError("not supported")):
+        with patch("codecks_cli.config.os.chmod", side_effect=OSError("not supported")):
             config.save_env_value("KEY", "val")
         assert env_file.read_text() == "KEY=val\n"
