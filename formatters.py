@@ -6,6 +6,7 @@ Table, CSV, and JSON output dispatchers.
 import csv
 import io
 import json
+import re
 import sys
 
 import config
@@ -102,6 +103,18 @@ def _trunc(s, maxlen):
     return s[:maxlen - 1] + "\u2026" if len(s) > maxlen else s
 
 
+_CONTROL_RE = re.compile(
+    r'\x1b\[[0-9;]*[A-Za-z]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
+def _sanitize_str(s):
+    """Strip ANSI escape sequences and control chars from table output.
+    Preserves newlines (\\n) and tabs (\\t)."""
+    if not s:
+        return s
+    return _CONTROL_RE.sub('', str(s))
+
+
 def _table(columns, rows, footer=None):
     """Build a formatted table string.
     columns: list of (name, width) tuples. Last column has no width (fills).
@@ -121,10 +134,11 @@ def _table(columns, rows, footer=None):
     for row in rows:
         parts = []
         for i, val in enumerate(row):
+            safe = _sanitize_str(val) if isinstance(val, str) else str(val)
             if i == len(columns) - 1:
-                parts.append(str(val))
+                parts.append(safe)
             else:
-                parts.append(f"{str(val):<{columns[i][1]}}")
+                parts.append(f"{safe:<{columns[i][1]}}")
         lines.append(" ".join(parts))
     if footer:
         lines.append(f"\n{footer}")

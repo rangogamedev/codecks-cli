@@ -40,6 +40,11 @@ def save_env_value(key, value):
         lines.append(f"{key}={value}\n")
     with open(ENV_PATH, "w") as f:
         f.writelines(lines)
+    # Restrict to owner-only on Unix/Mac. No-op on Windows.
+    try:
+        os.chmod(ENV_PATH, 0o600)
+    except (OSError, NotImplementedError):
+        pass
 
 
 def _env_bool(key, default=False):

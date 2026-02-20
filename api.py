@@ -382,7 +382,8 @@ def generate_report_token(label="claude-code"):
     if result.get("ok") and result.get("token"):
         config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
         return result
-    raise CliError(f"[ERROR] Unexpected response: {result}")
+    raise CliError(f"[ERROR] Unexpected response from generate-token "
+                       f"(keys: {sorted(result.keys())})")
 
 
 # ---------------------------------------------------------------------------

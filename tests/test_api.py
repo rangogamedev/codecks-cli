@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 from config import CliError
 from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
                  HTTPError, warn_if_empty, session_request, _http_request,
-                 _sanitize_url_for_log, _is_sampled_request, query, dispatch)
+                 _sanitize_url_for_log, _is_sampled_request, query, dispatch,
+                 generate_report_token)
 
 
 class TestMaskToken:
@@ -231,3 +232,27 @@ class TestContentTypeCheck:
         with pytest.raises(CliError) as exc_info:
             _http_request("https://api.codecks.io/", {})
         assert "not valid JSON" in str(exc_info.value)
+
+
+class TestGenerateReportTokenLeak:
+    """Error message must not leak raw API response values."""
+
+    @patch("api._http_request")
+    def test_error_shows_keys_not_values(self, mock_http, monkeypatch):
+        monkeypatch.setattr("config.ACCESS_KEY", "fake-key")
+        mock_http.return_value = {"ok": False, "secret_field": "s3cret"}
+        with pytest.raises(CliError) as exc_info:
+            generate_report_token()
+        msg = str(exc_info.value)
+        assert "s3cret" not in msg
+        assert "keys:" in msg
+        assert "ok" in msg
+
+    @patch("api._http_request")
+    def test_error_on_missing_token_field(self, mock_http, monkeypatch):
+        monkeypatch.setattr("config.ACCESS_KEY", "fake-key")
+        mock_http.return_value = {"ok": True}
+        with pytest.raises(CliError) as exc_info:
+            generate_report_token()
+        msg = str(exc_info.value)
+        assert "generate-token" in msg

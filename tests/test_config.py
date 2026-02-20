@@ -1,7 +1,9 @@
 """Tests for config.py — env loading, saving, and constants."""
 
 import os
+import sys
 import pytest
+from unittest.mock import patch
 import config
 
 
@@ -96,3 +98,22 @@ class TestConstants:
         expected = {"status", "priority", "effort", "deck", "title",
                     "owner", "updated", "created"}
         assert config.VALID_SORT_FIELDS == expected
+
+
+class TestSaveEnvPermissions:
+    """save_env_value() should chmod .env to 0o600 after writing."""
+
+    @patch("config.os.chmod")
+    def test_chmod_called_after_write(self, mock_chmod, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr(config, "ENV_PATH", str(env_file))
+        config.save_env_value("KEY", "val")
+        mock_chmod.assert_called_once_with(str(env_file), 0o600)
+
+    def test_chmod_error_does_not_crash(self, tmp_path, monkeypatch):
+        """On Windows or restricted systems, chmod failure is silently ignored."""
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr(config, "ENV_PATH", str(env_file))
+        with patch("config.os.chmod", side_effect=OSError("not supported")):
+            config.save_env_value("KEY", "val")
+        assert env_file.read_text() == "KEY=val\n"

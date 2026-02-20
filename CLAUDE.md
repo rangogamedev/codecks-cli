@@ -11,7 +11,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `py -m pytest tests/ -v` (178 unit tests, no API calls)
+- **Test**: `py -m pytest tests/ -v` (238 unit tests, no API calls)
 - **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
@@ -56,6 +56,10 @@ codecks_api.py     ← config, api, commands
 - Card lists omit `content` for token efficiency; `--search` adds it back
 - Errors/warnings → `sys.stderr`. Data → `sys.stdout`
 - `sys.stdout.reconfigure(encoding='utf-8')` for Windows Unicode support
+- `save_env_value()` chmods `.env` to 0o600 after write (Unix only, no-op on Windows)
+- `_save_gdd_cache()` in `gdd.py` centralizes GDD cache writes with chmod 0o600
+- `_sanitize_str()` in `formatters.py` strips ANSI escape sequences and control chars from table output (not JSON)
+- Error messages never leak raw API response dicts — show only keys for diagnostic
 
 **Output prefixes:** `OK:` (mutation success), `[ERROR]` (exit 1), `[TOKEN_EXPIRED]` / `[SETUP_NEEDED]` (exit 2), `[WARN]` / `[INFO]` (non-fatal, stderr)
 
@@ -114,7 +118,7 @@ Invalid → `[ERROR]` with valid options listed.
 **Global flags:** `--format table|csv|json` (default json), `--version`
 
 ## Testing
-- Run: `py -m pytest tests/ -v` (170 tests, ~6 seconds)
+- Run: `py -m pytest tests/ -v` (238 tests, ~6 seconds)
 - `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
 - Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`

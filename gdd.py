@@ -49,6 +49,16 @@ def _save_gdd_tokens(tokens):
         pass
 
 
+def _save_gdd_cache(content):
+    """Write GDD content to cache file with restricted permissions."""
+    with open(config.GDD_CACHE_PATH, "w", encoding="utf-8") as f:
+        f.write(content)
+    try:
+        os.chmod(config.GDD_CACHE_PATH, 0o600)
+    except (OSError, NotImplementedError):
+        pass
+
+
 def _google_token_request(params):
     """POST to Google's token endpoint. Returns parsed JSON or None."""
     body = urllib.parse.urlencode(params).encode("utf-8")
@@ -333,8 +343,7 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
             with open(local_file, "r", encoding="utf-8") as f:
                 content = f.read()
         if save_cache and content.strip():
-            with open(config.GDD_CACHE_PATH, "w", encoding="utf-8") as f:
-                f.write(content)
+            _save_gdd_cache(content)
             print(f"[INFO] GDD cached to {config.GDD_CACHE_PATH}", file=sys.stderr)
         return content
 
@@ -348,8 +357,7 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
                                "GDD_GOOGLE_DOC_URL.")
             content = _fetch_google_doc_content(doc_id)
             if content:
-                with open(config.GDD_CACHE_PATH, "w", encoding="utf-8") as f:
-                    f.write(content)
+                _save_gdd_cache(content)
                 return content
             # Fetch failed — try cache
             if os.path.exists(config.GDD_CACHE_PATH):

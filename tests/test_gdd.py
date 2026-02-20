@@ -1,9 +1,10 @@
 """Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd."""
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
+import config
 from config import CliError, SetupError
-from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd
+from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd, _save_gdd_cache
 
 
 # ---------------------------------------------------------------------------
@@ -216,3 +217,24 @@ class TestSyncGddErrorHandling:
         report = sync_gdd(self.SECTIONS, "TestProject", apply=True)
         assert len(report["errors"]) == 1
         assert "some API error" in report["errors"][0]["error"]
+
+
+class TestSaveGddCache:
+    """_save_gdd_cache writes content and chmods to 0o600."""
+
+    @patch("gdd.os.chmod")
+    def test_writes_and_chmods(self, mock_chmod, tmp_path, monkeypatch):
+        cache_path = str(tmp_path / ".gdd_cache.md")
+        monkeypatch.setattr(config, "GDD_CACHE_PATH", cache_path)
+        _save_gdd_cache("# GDD content")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            assert f.read() == "# GDD content"
+        mock_chmod.assert_called_once_with(cache_path, 0o600)
+
+    def test_chmod_error_does_not_crash(self, tmp_path, monkeypatch):
+        cache_path = str(tmp_path / ".gdd_cache.md")
+        monkeypatch.setattr(config, "GDD_CACHE_PATH", cache_path)
+        with patch("gdd.os.chmod", side_effect=OSError("not supported")):
+            _save_gdd_cache("# GDD content")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            assert f.read() == "# GDD content"

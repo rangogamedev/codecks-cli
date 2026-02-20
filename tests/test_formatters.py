@@ -4,7 +4,7 @@ import json
 import pytest
 import config
 from formatters import (
-    _table, _trunc, mutation_response, format_account_table,
+    _table, _trunc, _sanitize_str, mutation_response, format_account_table,
     format_cards_table, format_card_detail, format_stats_table,
     format_decks_table, format_projects_table, format_milestones_table,
     format_gdd_table, format_cards_csv, format_activity_diff,
@@ -345,3 +345,39 @@ class TestPmFocusTable:
         assert "PM Focus Dashboard" in result
         assert "Blocked (1)" in result
         assert "Suggested Next (1)" in result
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_str
+# ---------------------------------------------------------------------------
+
+class TestSanitizeStr:
+    def test_normal_text_unchanged(self):
+        assert _sanitize_str("Hello World") == "Hello World"
+
+    def test_strips_ansi_escape_bold(self):
+        assert _sanitize_str("\x1b[1mBold\x1b[0m") == "Bold"
+
+    def test_strips_ansi_color(self):
+        assert _sanitize_str("\x1b[31mRed\x1b[0m") == "Red"
+
+    def test_strips_null_and_control_chars(self):
+        assert _sanitize_str("A\x00B\x07C\x7fD") == "ABCD"
+
+    def test_preserves_newlines_and_tabs(self):
+        assert _sanitize_str("A\nB\tC") == "A\nB\tC"
+
+    def test_none_returns_none(self):
+        assert _sanitize_str(None) is None
+
+    def test_empty_returns_empty(self):
+        assert _sanitize_str("") == ""
+
+    def test_table_sanitizes_cell_values(self):
+        """ANSI sequences in table cells should be stripped."""
+        cols = [("Name", 10), ("Title", 0)]
+        rows = [("\x1b[1mEvil\x1b[0m", "Normal")]
+        result = _table(cols, rows)
+        assert "\x1b" not in result
+        assert "Evil" in result
+        assert "Normal" in result
