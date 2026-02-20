@@ -443,6 +443,7 @@ The script is optimized to minimize context window usage for AI agents:
 codecks-cli/
   codecks_api.py    # Entry point — argparse, help text, command dispatch
   config.py         # Constants, .env loading, module-level state
+  models.py         # Typed input/output contracts for feature and raw payloads
   api.py            # HTTP layer, security helpers, token validation
   cards.py          # Card CRUD, hand ops, conversations, enrichment
   commands.py       # Command handlers (one cmd_*() per CLI command)

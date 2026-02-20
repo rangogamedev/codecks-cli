@@ -16,6 +16,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 |--------|-------|---------|
 | `codecks_api.py` | ~380 | Entry point: help text, `_extract_global_flags()`, `build_parser()`, `main()` dispatch |
 | `config.py` | ~95 | Shared state: env, tokens, constants, `load_env()`, `save_env_value()` |
+| `models.py` | ~100 | Typed dataclass contracts for payload validation and feature reports |
 | `api.py` | ~220 | HTTP layer: `session_request`, `query`, `dispatch`, token validation |
 | `cards.py` | ~550 | Card CRUD, hand, conversations, name resolution, enrichment |
 | `commands.py` | ~475 | Command handlers: `cmd_*()` functions receiving `argparse.Namespace` |
@@ -109,7 +110,7 @@ Invalid → `[ERROR]` with valid options listed.
 
 ## Testing
 - Run: `py -m pytest tests/ -v` (170 tests, ~6 seconds)
-- `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache) — no real `.env` or API calls
+- `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
 - Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`
 - Known bug regressions have dedicated test classes (sort crashes, title bug, clear values, false warnings)

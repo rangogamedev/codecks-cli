@@ -30,6 +30,8 @@ from formatters import (output, mutation_response,
                         format_gdd_table, format_sync_report)
 from gdd import (_run_google_auth_flow, _revoke_google_auth,
                  fetch_gdd, parse_gdd, sync_gdd)
+from models import (ObjectPayload, FeatureSpec,
+                    FeatureSubcard, FeatureScaffoldReport)
 from setup_wizard import cmd_setup
 
 
@@ -78,16 +80,6 @@ def _normalize_dispatch_path(path):
     return normalized
 
 
-def _require_object_payload(value, context):
-    """Require a JSON object payload for raw query/dispatch commands."""
-    if isinstance(value, dict):
-        return value
-    raise CliError(
-        f"[ERROR] Invalid JSON in {context}: expected object, "
-        f"got {type(value).__name__}."
-    )
-
-
 def _resolve_owner_id(owner_name):
     """Resolve owner display name to user ID."""
     user_map = load_users()
@@ -104,7 +96,8 @@ def _resolve_owner_id(owner_name):
 # ---------------------------------------------------------------------------
 
 def cmd_query(ns):
-    q = _require_object_payload(_safe_json_parse(ns.json_query, "query"), "query")
+    q = ObjectPayload.from_value(
+        _safe_json_parse(ns.json_query, "query"), "query").data
     if config.RUNTIME_STRICT:
         root = q.get("_root")
         if not isinstance(root, list) or not root:
@@ -241,30 +234,27 @@ def cmd_create(ns):
 
 def cmd_feature(ns):
     """Scaffold one Hero feature plus Code/Design/(optional Art) sub-cards."""
-    fmt = ns.format
-    if ns.skip_art and ns.art_deck:
-        raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
-    if not ns.skip_art and not ns.art_deck:
-        raise CliError("[ERROR] --art-deck is required unless --skip-art is set.")
+    spec = FeatureSpec.from_namespace(ns)
+    fmt = spec.format
 
-    hero_deck_id = resolve_deck_id(ns.hero_deck)
-    code_deck_id = resolve_deck_id(ns.code_deck)
-    design_deck_id = resolve_deck_id(ns.design_deck)
-    art_deck_id = resolve_deck_id(ns.art_deck) if ns.art_deck else None
+    hero_deck_id = resolve_deck_id(spec.hero_deck)
+    code_deck_id = resolve_deck_id(spec.code_deck)
+    design_deck_id = resolve_deck_id(spec.design_deck)
+    art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
 
-    owner_id = _resolve_owner_id(ns.owner) if ns.owner else None
-    priority = None if ns.priority == "null" else ns.priority
+    owner_id = _resolve_owner_id(spec.owner) if spec.owner else None
+    priority = None if spec.priority == "null" else spec.priority
     common_update = {}
     if owner_id:
         common_update["assigneeId"] = owner_id
     if priority is not None:
         common_update["priority"] = priority
-    if ns.effort is not None:
-        common_update["effort"] = ns.effort
+    if spec.effort is not None:
+        common_update["effort"] = spec.effort
 
-    hero_title = f"Feature: {ns.title}"
+    hero_title = f"Feature: {spec.title}"
     hero_body = (
-        (ns.description.strip() + "\n\n" if ns.description else "")
+        (spec.description.strip() + "\n\n" if spec.description else "")
         + "Success criteria:\n"
           "- [] Lane coverage agreed (Code/Design/Art)\n"
           "- [] Acceptance criteria validated\n"
@@ -284,7 +274,7 @@ def cmd_feature(ns):
                     masterTags=["hero", "feature"], **common_update)
 
         def _make_sub(lane, deck_id, tags, checklist_lines):
-            sub_title = f"[{lane}] {ns.title}"
+            sub_title = f"[{lane}] {spec.title}"
             sub_body = (
                 "Scope:\n"
                 f"- {lane} lane execution for feature goal\n\n"
@@ -305,7 +295,7 @@ def cmd_feature(ns):
                 masterTags=tags,
                 **common_update,
             )
-            created.append({"lane": lane.lower(), "id": sub_id})
+            created.append(FeatureSubcard(lane=lane.lower(), id=sub_id))
 
         _make_sub("Code", code_deck_id, ["code", "feature"], [
             "Implement core logic",
@@ -317,7 +307,7 @@ def cmd_feature(ns):
             "Tune balance/economy parameters",
             "Run playtest and iterate",
         ])
-        if not ns.skip_art and art_deck_id:
+        if not spec.skip_art and art_deck_id:
             _make_sub("Art", art_deck_id, ["art", "feature"], [
                 "Create required assets/content",
                 "Integrate assets in game flow",
@@ -342,27 +332,25 @@ def cmd_feature(ns):
             detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
         raise CliError(detail) from err
 
-    report = {
-        "ok": True,
-        "hero": {"id": hero_id, "title": hero_title},
-        "subcards": created,
-        "decks": {
-            "hero": ns.hero_deck,
-            "code": ns.code_deck,
-            "design": ns.design_deck,
-            "art": None if ns.skip_art else ns.art_deck,
-        },
-    }
+    report = FeatureScaffoldReport(
+        hero_id=hero_id,
+        hero_title=hero_title,
+        subcards=created,
+        hero_deck=spec.hero_deck,
+        code_deck=spec.code_deck,
+        design_deck=spec.design_deck,
+        art_deck=None if spec.skip_art else spec.art_deck,
+    )
     if fmt == "table":
         lines = [
             f"Hero created: {hero_id} ({hero_title})",
             f"Sub-cards created: {len(created)}",
         ]
         for item in created:
-            lines.append(f"  - [{item['lane']}] {item['id']}")
+            lines.append(f"  - [{item.lane}] {item.id}")
         print("\n".join(lines))
     else:
-        output(report, fmt=fmt)
+        output(report.to_dict(), fmt=fmt)
 
 
 def cmd_update(ns):
@@ -635,10 +623,9 @@ def cmd_generate_token(ns):
 
 def cmd_dispatch(ns):
     path = _normalize_dispatch_path(ns.path)
-    payload = _require_object_payload(
+    payload = ObjectPayload.from_value(
         _safe_json_parse(ns.json_data, "dispatch data"),
-        "dispatch data",
-    )
+        "dispatch data").data
     if config.RUNTIME_STRICT:
         if "/" not in path:
             raise CliError(

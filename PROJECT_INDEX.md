@@ -21,6 +21,7 @@ Purpose: Python CLI for an AI agent (or human) to control Codecks (web-based pro
 - `gdd.py`: GDD fetch/parse/sync pipeline + Google OAuth support.
 - `setup_wizard.py`: Interactive bootstrap/update flow for `.env`.
 - `config.py`: Shared globals/constants, env loading/persistence, error classes.
+- `models.py`: Typed dataclass models for raw payload contracts and feature scaffolding.
 - `tests/`: Unit tests for every core module, isolated from real API.
 
 ## Runtime Flow
@@ -54,6 +55,7 @@ Purpose: Python CLI for an AI agent (or human) to control Codecks (web-based pro
 - Doc cards cannot accept priority/effort/status updates.
 - Hand operations use `handQueue/*` dispatch and `queueEntries` data.
 - `feature` command uses transaction safety with rollback (best-effort archive of created cards on partial failure).
+- Raw `query`/`dispatch` and `feature` input contracts are enforced via typed models.
 
 ## Output/Error Conventions
 - Success mutation prefix: `OK:`
@@ -71,6 +73,7 @@ Purpose: Python CLI for an AI agent (or human) to control Codecks (web-based pro
   - `tests/test_api.py` -> transport/error handling/token behavior
   - `tests/test_formatters.py` -> table/csv/json formatting
   - `tests/test_gdd.py` -> GDD parsing/sync/error handling
+  - `tests/test_models.py` -> typed model validation
   - `tests/test_config.py` -> env load/save/constants
 
 ## Suggested Orientation Order For New Agents
