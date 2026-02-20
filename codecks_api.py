@@ -14,7 +14,8 @@ from commands import (
     cmd_milestones, cmd_cards, cmd_card, cmd_create, cmd_update,
     cmd_feature,
     cmd_archive, cmd_unarchive, cmd_delete, cmd_done, cmd_start,
-    cmd_hand, cmd_unhand, cmd_activity, cmd_pm_focus, cmd_comment, cmd_conversations,
+    cmd_hand, cmd_unhand, cmd_activity, cmd_pm_focus, cmd_standup,
+    cmd_comment, cmd_conversations,
     cmd_gdd, cmd_gdd_sync, cmd_gdd_auth, cmd_gdd_revoke,
     cmd_generate_token, cmd_dispatch,
 )
@@ -34,14 +35,20 @@ Commands:
   account                 - Show account info
   cards                   - List all cards
     --deck <name>           Filter by deck name (e.g. --deck Features)
-    --status <s>            Filter: not_started, started, done, blocked
+    --status <s>            Filter: not_started, started, done, blocked, in_review
+                            (comma-separated: --status started,blocked)
+    --priority <p>          Filter: a, b, c, null
+                            (comma-separated: --priority a,b)
     --project <name>        Filter by project (e.g. --project "Tea Shop")
     --milestone <name>      Filter by milestone (e.g. --milestone MVP)
     --search <text>         Search cards by title/content
     --tag <name>            Filter by tag (e.g. --tag bug)
-    --owner <name>          Filter by owner (e.g. --owner Thomas)
+    --owner <name>          Filter by owner (e.g. --owner Thomas, --owner none)
     --sort <field>          Sort by: status, priority, effort, deck, title,
                             owner, updated, created
+    --stale <days>          Find cards not updated in N days
+    --updated-after <date>  Cards updated after date (YYYY-MM-DD)
+    --updated-before <date> Cards updated before date (YYYY-MM-DD)
     --stats                 Show card count summary instead of card list
     --hand                  Show only cards in your hand
     --hero <id>             Show only sub-cards of a hero card
@@ -57,6 +64,11 @@ Commands:
     --project <name>        Filter by project
     --owner <name>          Filter by owner
     --limit <n>             Suggested next-card count (default: 5)
+    --stale-days <n>        Days threshold for stale detection (default: 14)
+  standup                 - Daily standup summary
+    --days <n>              Lookback for recent completions (default: 2)
+    --project <name>        Filter by project
+    --owner <name>          Filter by owner
   create <title>          - Create a card via Report Token (stable, no expiry)
     --deck <name>           Place card in a specific deck
     --project <name>        Place card in first deck of a project
@@ -197,7 +209,8 @@ def build_parser():
     # --- cards ---
     p = sub.add_parser("cards")
     p.add_argument("--deck")
-    p.add_argument("--status", choices=sorted(config.VALID_STATUSES))
+    p.add_argument("--status")  # comma-separated: started,blocked
+    p.add_argument("--priority")  # comma-separated: a,b
     p.add_argument("--project")
     p.add_argument("--search")
     p.add_argument("--milestone")
@@ -206,6 +219,9 @@ def build_parser():
     p.add_argument("--sort", choices=sorted(config.VALID_SORT_FIELDS))
     p.add_argument("--type", choices=sorted(config.VALID_CARD_TYPES))
     p.add_argument("--hero")
+    p.add_argument("--stale", type=_positive_int, metavar="DAYS")
+    p.add_argument("--updated-after", dest="updated_after")
+    p.add_argument("--updated-before", dest="updated_before")
     p.add_argument("--stats", action="store_true")
     p.add_argument("--hand", action="store_true")
     p.add_argument("--archived", action="store_true")
@@ -288,6 +304,13 @@ def build_parser():
     p.add_argument("--project")
     p.add_argument("--owner")
     p.add_argument("--limit", type=_positive_int, default=5)
+    p.add_argument("--stale-days", type=_positive_int, default=14, dest="stale_days")
+
+    # --- standup ---
+    p = sub.add_parser("standup")
+    p.add_argument("--days", type=_positive_int, default=2)
+    p.add_argument("--project")
+    p.add_argument("--owner")
 
     # --- comment ---
     p = sub.add_parser("comment")
@@ -365,6 +388,7 @@ DISPATCH = {
     "unhand": cmd_unhand,
     "activity": cmd_activity,
     "pm-focus": cmd_pm_focus,
+    "standup": cmd_standup,
     "comment": cmd_comment,
     "conversations": cmd_conversations,
     "gdd": cmd_gdd,

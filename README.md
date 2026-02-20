@@ -86,26 +86,83 @@ py codecks_api.py cards --deck "Backlog"
 py codecks_api.py cards --status started
 py codecks_api.py cards --project "My Project"
 py codecks_api.py cards --search "inventory"
+py codecks_api.py cards --owner "Thomas"
+py codecks_api.py cards --owner none               # unassigned cards
+
+# Multi-value filters (comma-separated)
+py codecks_api.py cards --status started,blocked    # started OR blocked
+py codecks_api.py cards --priority a,b              # high or medium priority
+py codecks_api.py cards --priority null             # cards with no priority set
+
+# Date filters and stale detection
+py codecks_api.py cards --stale 14                  # not updated in 14 days
+py codecks_api.py cards --updated-after 2026-01-01
+py codecks_api.py cards --updated-before 2026-02-01
+py codecks_api.py cards --status started --stale 7  # combine with other filters
 
 # Combine filters
 py codecks_api.py cards --project "My Project" --status started --search "bug"
 
-# Card statistics (counts by status, priority, deck)
+# Card statistics (counts by status, priority, deck, owner)
 py codecks_api.py cards --stats
 py codecks_api.py cards --project "My Project" --stats
 
-# Single card details (includes sub-cards)
+# Single card details (includes sub-cards, severity, hero parent)
 py codecks_api.py card <card-id>
 
-# Decks, projects, milestones
+# Decks (with card counts), projects, milestones
 py codecks_api.py decks
 py codecks_api.py projects
 py codecks_api.py milestones
 
-# PM triage focus (blocked, hand, suggested next)
-py codecks_api.py pm-focus --format table
-py codecks_api.py pm-focus --project "My Project" --owner "Thomas" --limit 7
+# Recent activity (shows card titles)
+py codecks_api.py activity
+py codecks_api.py activity --limit 50
 ```
+
+### Daily standup
+
+Get a quick snapshot of what's done, in progress, blocked, and in your hand:
+
+```bash
+# Default: last 2 days of activity
+py codecks_api.py standup --format table
+
+# Look back further
+py codecks_api.py standup --days 5 --format table
+
+# Filter by project or owner
+py codecks_api.py standup --project "My Project" --format table
+py codecks_api.py standup --owner "Thomas" --format table
+```
+
+The standup report has four sections:
+- **Done** — cards marked done within the lookback period
+- **In Progress** — cards with started or in-review status
+- **Blocked** — blocked cards
+- **In Hand** — cards currently in your hand (minus completed ones)
+
+### PM focus (sprint health)
+
+Get a triage view of what needs attention:
+
+```bash
+# Sprint health overview
+py codecks_api.py pm-focus --format table
+
+# Filter by project
+py codecks_api.py pm-focus --project "My Project" --format table
+
+# Customize stale threshold (default: 14 days)
+py codecks_api.py pm-focus --stale-days 7 --format table
+```
+
+The pm-focus report shows:
+- **Blocked** — cards that are stuck
+- **Unassigned** — started cards with no owner
+- **Started** — all in-progress work
+- **In Review** — cards waiting for review
+- **Stale** — started or in-review cards not updated in N days (default 14)
 
 ### Creating cards
 
@@ -342,16 +399,16 @@ py codecks_api.py card <id> --format table
 ### Example table output
 
 ```
-Status         Pri   Eff  Deck                 Title                                    ID
-------------------------------------------------------------------------------------------------------------------------
-not_started    a     8    Core Systems         Implement save/load system               abc12345-0000-...
-started        b     3    Tasks                Fix inventory drag & drop syst…          def67890-0000-...
-done           a     5    Backlog              Database migration                       ghi24680-0000-...
+Status         Pri   Eff  Owner      Deck              Mstone     Title                                ID
+------------------------------------------------------------------------------------------------------------
+not_started    a     8    Thomas     Core Systems      MVP        Implement save/load system           abc12345-...
+started        b     3    -          Tasks             -          Fix inventory drag & drop …          def67890-...
+done           a     5    Alice      Backlog           Beta       Database migration                   ghi24680-...
 
 Total: 3 cards
 ```
 
-Long titles and deck names are truncated with `...` so the table stays readable.
+Long titles, deck names, and milestones are truncated with `…` so the table stays readable.
 
 ### Example stats output
 
@@ -374,13 +431,23 @@ By Deck:
   Backlog            4
   Tasks              6
   ...
+
+By Owner:
+  Thomas             15
+  Alice              12
+  unassigned         11
 ```
 
 ## Card enrichment
 
-All card output automatically includes resolved names:
+All card output automatically includes resolved names and extra context:
 - `deck_name` — the deck's title (instead of just `deck_id`)
+- `owner_name` — the assignee's display name (instead of raw user ID)
 - `milestone_name` — the milestone's name from `.env` mapping (instead of just `milestone_id`)
+- `tags` — normalized tag list from `masterTags`
+- `sub_card_count` — number of sub-cards for hero cards
+
+Single card detail (`card <id>`) also shows severity and parent hero card when present.
 
 These extra fields appear in both JSON and table output.
 
@@ -420,15 +487,19 @@ This script is designed to be called by an AI coding agent like Claude Code. The
 
 1. Default to JSON output (no `--format` flag) for structured parsing
 2. Use `--format table` when presenting information to a human
-3. Use `--stats` to get a quick overview without dumping every card
-4. Use `--search` to find specific cards without scanning everything
-5. Chain `--project`, `--deck`, `--status`, and `--search` filters to narrow results
-6. For non-strict mode, look for `OK:` on mutation responses; in strict JSON mode parse structured mutation JSON
-7. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
-8. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
-9. Use `remove` as a natural alias for `archive`
-10. Use `gdd-sync --project "Name"` for dry-run, add `--apply` only after reviewing the report
-11. Pipe GDD content via `--file -` if the agent has its own document access (e.g. MCP)
+3. Start sessions with `standup` for an immediate status snapshot
+4. Use `pm-focus` for sprint health checks (blocked, stale, unassigned cards)
+5. Use `--stats` to get a quick overview without dumping every card
+6. Use `--search` to find specific cards without scanning everything
+7. Use comma-separated `--status` and `--priority` for multi-value filters
+8. Use `--stale <days>` to find neglected cards, `--owner none` for unassigned work
+9. Chain `--project`, `--deck`, `--status`, `--priority`, and `--search` filters to narrow results
+10. For non-strict mode, look for `OK:` on mutation responses; in strict JSON mode parse structured mutation JSON
+11. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
+12. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
+13. Use `remove` as a natural alias for `archive`
+14. Use `gdd-sync --project "Name"` for dry-run, add `--apply` only after reviewing the report
+15. Pipe GDD content via `--file -` if the agent has its own document access (e.g. MCP)
 
 The AI agent's project memory file should include the full command reference and the project/milestone UUID mappings.
 

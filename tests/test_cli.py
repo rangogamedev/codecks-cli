@@ -94,9 +94,25 @@ class TestBuildParser:
         assert ns.deck == "Features"
         assert ns.sort == "priority"
 
-    def test_cards_status_validation(self):
-        with pytest.raises(CliError):
-            self.parser.parse_args(["cards", "--status", "invalid"])
+    def test_cards_status_accepts_free_form(self):
+        """Status validation moved to cards.py to support comma-separated values."""
+        ns = self.parser.parse_args(["cards", "--status", "started,blocked"])
+        assert ns.status == "started,blocked"
+
+    def test_cards_priority_filter(self):
+        ns = self.parser.parse_args(["cards", "--priority", "a,b"])
+        assert ns.priority == "a,b"
+
+    def test_cards_stale_flag(self):
+        ns = self.parser.parse_args(["cards", "--stale", "14"])
+        assert ns.stale == 14
+
+    def test_cards_date_filters(self):
+        ns = self.parser.parse_args(
+            ["cards", "--updated-after", "2026-01-01",
+             "--updated-before", "2026-02-01"])
+        assert ns.updated_after == "2026-01-01"
+        assert ns.updated_before == "2026-02-01"
 
     def test_cards_sort_validation(self):
         with pytest.raises(CliError):
@@ -186,6 +202,21 @@ class TestBuildParser:
         assert ns.command == "pm-focus"
         assert ns.project == "Tea"
         assert ns.limit == 7
+
+    def test_pm_focus_stale_days(self):
+        ns = self.parser.parse_args(["pm-focus", "--stale-days", "30"])
+        assert ns.stale_days == 30
+
+    def test_standup_command(self):
+        ns = self.parser.parse_args(["standup", "--days", "3", "--project", "Tea"])
+        assert ns.command == "standup"
+        assert ns.days == 3
+        assert ns.project == "Tea"
+
+    def test_standup_defaults(self):
+        ns = self.parser.parse_args(["standup"])
+        assert ns.command == "standup"
+        assert ns.days == 2
 
     def test_activity_limit_must_be_positive(self):
         with pytest.raises(CliError):

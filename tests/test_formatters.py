@@ -9,6 +9,7 @@ from formatters import (
     format_decks_table, format_projects_table, format_milestones_table,
     format_gdd_table, format_cards_csv, format_activity_diff,
     resolve_activity_val, output, format_pm_focus_table,
+    format_standup_table,
 )
 
 
@@ -98,12 +99,15 @@ class TestFormatCardsTable:
         result = format_cards_table({"card": {
             "c1": {"status": "done", "priority": "a", "effort": 3,
                    "title": "Test Card", "deck_name": "Features",
+                   "milestone_name": "MVP",
                    "owner_name": "Thomas", "tags": ["bug"]},
         }})
         assert "done" in result
         assert "high" in result  # PRI_LABELS["a"]
         assert "Test Card" in result
         assert "Features" in result
+        assert "MVP" in result
+        assert "Mstone" in result  # column header
         assert "bug" in result
         assert "Total: 1 cards" in result
 
@@ -127,9 +131,10 @@ class TestFormatCardDetail:
         result = format_card_detail({"card": {
             "c1": {
                 "title": "Test Card", "status": "started",
-                "priority": "b", "effort": 5,
+                "priority": "b", "effort": 5, "severity": "high",
                 "deck_name": "Features", "owner_name": "Thomas",
                 "milestone_name": "MVP", "tags": ["ui"],
+                "parentCardId": "hero-uuid-123",
                 "in_hand": True, "createdAt": "2026-01-01T00:00:00Z",
                 "lastUpdatedAt": "2026-01-02T00:00:00Z",
                 "content": "Test Card\nSome description here",
@@ -138,10 +143,12 @@ class TestFormatCardDetail:
         assert "Test Card" in result
         assert "started" in result
         assert "b (med)" in result
+        assert "Severity:  high" in result
         assert "Features" in result
         assert "Thomas" in result
         assert "MVP" in result
         assert "ui" in result
+        assert "Hero:      hero-uuid-123" in result
         assert "yes" in result  # in_hand
         assert "Some description" in result
 
@@ -160,6 +167,7 @@ class TestFormatStatsTable:
             "by_status": {"done": 7, "started": 3},
             "by_priority": {"a": 5, "none": 5},
             "by_deck": {"Features": 10},
+            "by_owner": {"Alice": 6, "unassigned": 4},
         }
         result = format_stats_table(stats)
         assert "Total cards: 10" in result
@@ -167,6 +175,9 @@ class TestFormatStatsTable:
         assert "Avg effort: 5.0" in result
         assert "done" in result
         assert "Features" in result
+        assert "By Owner:" in result
+        assert "Alice" in result
+        assert "unassigned" in result
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +193,28 @@ class TestFormatDecksTable:
         }})
         assert "Features" in result
         assert "Tea Shop" in result
+
+    def test_shows_card_counts(self, monkeypatch):
+        monkeypatch.setattr(config, "env",
+                            {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        result = format_decks_table({
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+                "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
+            },
+            "_deck_counts": {"d1": 5, "d2": 12},
+        })
+        assert "Cards" in result  # column header
+        assert "5" in result
+        assert "12" in result
+
+    def test_no_counts_shows_dash(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {})
+        result = format_decks_table({"deck": {
+            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+        }})
+        # No _deck_counts key → shows "-"
+        assert "Cards" in result
 
     def test_no_decks(self):
         assert "No decks" in format_decks_table({"deck": {}})
@@ -218,14 +251,40 @@ class TestFormatCardsCsv:
         result = format_cards_csv({"card": {
             "c1": {"status": "done", "priority": "a", "effort": 3,
                    "title": "Test Card", "deck_name": "Features",
+                   "milestone_name": "MVP",
                    "owner_name": "Thomas", "tags": ["bug", "ui"]},
         }})
         lines = [l.rstrip("\r") for l in result.strip().split("\n")]
-        assert lines[0] == "status,priority,effort,deck,owner,title,tags,id"
+        assert lines[0] == "status,priority,effort,deck,milestone,owner,title,tags,id"
         assert "done" in lines[1]
         assert "high" in lines[1]
+        assert "MVP" in lines[1]
         assert "Test Card" in lines[1]
         assert '"bug, ui"' in lines[1]
+
+
+# ---------------------------------------------------------------------------
+# format_activity_table
+# ---------------------------------------------------------------------------
+
+class TestFormatActivityTable:
+    def test_shows_card_title(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {})
+        from formatters import format_activity_table
+        result = format_activity_table({
+            "activity": {
+                "a1": {
+                    "type": "card_update", "createdAt": "2026-01-15T10:30:00Z",
+                    "changer": "u1", "deck": "d1", "card": "c1",
+                    "data": {"diff": {"status": ["started", "done"]}},
+                },
+            },
+            "user": {"u1": {"name": "Alice"}},
+            "deck": {"d1": {"title": "Features"}},
+            "card": {"c1": {"title": "Fix login bug"}},
+        })
+        assert "Fix login bug" in result
+        assert "Card" in result  # column header
 
 
 # ---------------------------------------------------------------------------
@@ -336,15 +395,79 @@ class TestOutput:
 class TestPmFocusTable:
     def test_pm_focus_table(self):
         report = {
-            "counts": {"started": 2, "blocked": 1, "hand": 1},
+            "counts": {"started": 2, "blocked": 1, "in_review": 0, "hand": 1, "stale": 0},
             "blocked": [{"id": "c1", "title": "A", "priority": "a", "effort": 5, "deck": "D"}],
+            "in_review": [],
             "hand": [],
+            "stale": [],
             "suggested": [{"id": "c2", "title": "B", "priority": "b", "effort": 3, "deck": "D"}],
+            "filters": {"stale_days": 14},
         }
         result = format_pm_focus_table(report)
         assert "PM Focus Dashboard" in result
         assert "Blocked (1)" in result
+        assert "In Review (0)" in result
         assert "Suggested Next (1)" in result
+
+    def test_pm_focus_shows_stale(self):
+        report = {
+            "counts": {"started": 1, "blocked": 0, "in_review": 0, "hand": 0, "stale": 1},
+            "blocked": [],
+            "in_review": [],
+            "hand": [],
+            "stale": [{"id": "c1", "title": "Old Card", "priority": "b", "effort": 3, "deck": "D"}],
+            "suggested": [],
+            "filters": {"stale_days": 14},
+        }
+        result = format_pm_focus_table(report)
+        assert "Stale (>14d) (1)" in result
+        assert "Old Card" in result
+
+    def test_pm_focus_shows_in_review(self):
+        report = {
+            "counts": {"started": 0, "blocked": 0, "in_review": 1, "hand": 0, "stale": 0},
+            "blocked": [],
+            "in_review": [{"id": "c1", "title": "Review Me", "priority": "a", "effort": 5, "deck": "D"}],
+            "hand": [],
+            "stale": [],
+            "suggested": [],
+            "filters": {"stale_days": 14},
+        }
+        result = format_pm_focus_table(report)
+        assert "In Review: 1" in result
+        assert "Review Me" in result
+
+
+class TestStandupTable:
+    def test_standup_sections(self):
+        report = {
+            "recently_done": [{"id": "c1", "title": "Fix Bug", "priority": "a", "effort": 3, "deck": "D"}],
+            "in_progress": [{"id": "c2", "title": "New Feature", "priority": "b", "effort": 5, "deck": "D"}],
+            "blocked": [],
+            "hand": [{"id": "c3", "title": "Quick Task", "priority": "c", "effort": 1, "deck": "D"}],
+            "filters": {"days": 2},
+        }
+        result = format_standup_table(report)
+        assert "Standup Summary" in result
+        assert "Done (last 2d) (1)" in result
+        assert "In Progress (1)" in result
+        assert "Blocked (0)" in result
+        assert "In Hand (1)" in result
+        assert "Fix Bug" in result
+        assert "New Feature" in result
+        assert "Quick Task" in result
+
+    def test_standup_empty(self):
+        report = {
+            "recently_done": [],
+            "in_progress": [],
+            "blocked": [],
+            "hand": [],
+            "filters": {"days": 2},
+        }
+        result = format_standup_table(report)
+        assert "Standup Summary" in result
+        assert "Done (last 2d) (0)" in result
 
 
 # ---------------------------------------------------------------------------

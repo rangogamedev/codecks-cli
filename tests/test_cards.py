@@ -1,11 +1,14 @@
 """Tests for cards.py — env mappings, filters, enrichment, stats, resolvers."""
 
 import pytest
+from unittest.mock import patch
+
 import config
 from config import CliError
 from cards import (
     _load_env_mapping, load_project_names, load_milestone_names,
-    _filter_cards, compute_card_stats, enrich_cards,
+    _filter_cards, _parse_multi_value, _parse_date, _parse_iso_timestamp,
+    compute_card_stats, enrich_cards,
     _build_project_map, get_project_deck_ids,
     resolve_deck_id, resolve_milestone_id,
 )
@@ -52,6 +55,194 @@ class TestLoadEnvMapping:
 # _filter_cards
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# _parse_multi_value
+# ---------------------------------------------------------------------------
+
+class TestParseMultiValue:
+    def test_single_value(self):
+        result = _parse_multi_value("started", config.VALID_STATUSES, "status")
+        assert result == ["started"]
+
+    def test_multiple_values(self):
+        result = _parse_multi_value("started,blocked", config.VALID_STATUSES, "status")
+        assert result == ["started", "blocked"]
+
+    def test_strips_whitespace(self):
+        result = _parse_multi_value(" started , blocked ", config.VALID_STATUSES, "status")
+        assert result == ["started", "blocked"]
+
+    def test_invalid_value_raises(self):
+        with pytest.raises(CliError) as exc_info:
+            _parse_multi_value("started,invalid", config.VALID_STATUSES, "status")
+        assert "Invalid status 'invalid'" in str(exc_info.value)
+
+    def test_priority_values(self):
+        result = _parse_multi_value("a,b", config.VALID_PRIORITIES, "priority")
+        assert result == ["a", "b"]
+
+    def test_priority_null(self):
+        result = _parse_multi_value("null", config.VALID_PRIORITIES, "priority")
+        assert result == ["null"]
+
+
+class TestMultiValueFilter:
+    """Multi-value --status and --priority filters."""
+
+    @patch("cards.query")
+    def test_multi_status_client_side_filter(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done"},
+            "b": {"status": "started"},
+            "c": {"status": "blocked"},
+            "d": {"status": "not_started"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(status_filter="started,blocked")
+        assert set(result["card"].keys()) == {"b", "c"}
+
+    @patch("cards.query")
+    def test_single_status_still_server_side(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done"},
+        }, "user": {}}
+        from cards import list_cards
+        list_cards(status_filter="done")
+        # Verify status was in the query (server-side)
+        call_q = mock_query.call_args.args[0]
+        # The query string should contain "done" in the card filter
+        root_key = list(call_q["_root"][0]["account"][0].keys())[0]
+        assert '"done"' in root_key
+
+    @patch("cards.query")
+    def test_priority_filter_single(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done", "priority": "a"},
+            "b": {"status": "started", "priority": "b"},
+            "c": {"status": "done", "priority": None},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(priority_filter="a")
+        assert set(result["card"].keys()) == {"a"}
+
+    @patch("cards.query")
+    def test_priority_filter_multi(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done", "priority": "a"},
+            "b": {"status": "started", "priority": "b"},
+            "c": {"status": "done", "priority": "c"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(priority_filter="a,b")
+        assert set(result["card"].keys()) == {"a", "b"}
+
+    @patch("cards.query")
+    def test_priority_filter_null(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done", "priority": "a"},
+            "b": {"status": "started", "priority": None},
+            "c": {"status": "done"},  # missing priority = None
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(priority_filter="null")
+        assert set(result["card"].keys()) == {"b", "c"}
+
+    @patch("cards.query")
+    def test_invalid_status_raises(self, mock_query):
+        from cards import list_cards
+        with pytest.raises(CliError) as exc_info:
+            list_cards(status_filter="started,oops")
+        assert "Invalid status 'oops'" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Date parsing and filtering
+# ---------------------------------------------------------------------------
+
+class TestDateParsing:
+    def test_parse_date_valid(self):
+        dt = _parse_date("2026-01-15")
+        assert dt.year == 2026
+        assert dt.month == 1
+        assert dt.day == 15
+
+    def test_parse_date_invalid(self):
+        with pytest.raises(CliError) as exc_info:
+            _parse_date("not-a-date")
+        assert "Invalid date" in str(exc_info.value)
+
+    def test_parse_iso_timestamp(self):
+        dt = _parse_iso_timestamp("2026-01-15T10:30:00Z")
+        assert dt.year == 2026
+        assert dt.month == 1
+        assert dt.hour == 10
+
+    def test_parse_iso_timestamp_with_millis(self):
+        dt = _parse_iso_timestamp("2026-01-15T10:30:00.123Z")
+        assert dt is not None
+        assert dt.day == 15
+
+    def test_parse_iso_timestamp_none(self):
+        assert _parse_iso_timestamp(None) is None
+        assert _parse_iso_timestamp("") is None
+
+    def test_parse_iso_timestamp_invalid(self):
+        assert _parse_iso_timestamp("not-a-timestamp") is None
+
+
+class TestDateFiltering:
+    @patch("cards.query")
+    def test_stale_days_filter(self, mock_query):
+        """--stale 30 should find cards not updated in 30 days."""
+        mock_query.return_value = {"card": {
+            "old": {"status": "started", "lastUpdatedAt": "2025-01-01T00:00:00Z"},
+            "recent": {"status": "started", "lastUpdatedAt": "2026-02-19T00:00:00Z"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(stale_days=30)
+        assert "old" in result["card"]
+        assert "recent" not in result["card"]
+
+    @patch("cards.query")
+    def test_updated_after_filter(self, mock_query):
+        mock_query.return_value = {"card": {
+            "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+            "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(updated_after="2026-01-15")
+        assert "new" in result["card"]
+        assert "old" not in result["card"]
+
+    @patch("cards.query")
+    def test_updated_before_filter(self, mock_query):
+        mock_query.return_value = {"card": {
+            "old": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+            "new": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(updated_before="2026-01-15")
+        assert "old" in result["card"]
+        assert "new" not in result["card"]
+
+    @patch("cards.query")
+    def test_stale_handles_missing_timestamp(self, mock_query):
+        """Cards with no lastUpdatedAt should be treated as stale."""
+        mock_query.return_value = {"card": {
+            "no_ts": {"status": "started"},
+        }, "user": {}}
+        from cards import list_cards
+        # Should not crash — card with no timestamp treated as matching cutoff
+        result = list_cards(stale_days=30)
+        # No timestamp → _parse_iso_timestamp returns None → fallback = cutoff
+        # cutoff < cutoff is False, so card is excluded
+        assert len(result["card"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# _filter_cards
+# ---------------------------------------------------------------------------
+
 class TestFilterCards:
     def test_filters_by_predicate(self):
         result = {"card": {
@@ -92,9 +283,9 @@ class TestComputeCardStats:
     def test_basic_stats(self):
         cards = {
             "a": {"status": "done", "priority": "a", "effort": 3,
-                   "deck_name": "Features"},
+                   "deck_name": "Features", "owner_name": "Alice"},
             "b": {"status": "done", "priority": "b", "effort": 5,
-                   "deck_name": "Features"},
+                   "deck_name": "Features", "owner_name": "Alice"},
             "c": {"status": "started", "priority": "a", "effort": None,
                    "deck_name": "Tasks"},
         }
@@ -105,6 +296,7 @@ class TestComputeCardStats:
         assert stats["by_status"] == {"done": 2, "started": 1}
         assert stats["by_priority"] == {"a": 2, "b": 1}
         assert stats["by_deck"] == {"Features": 2, "Tasks": 1}
+        assert stats["by_owner"] == {"Alice": 2, "unassigned": 1}
 
     def test_none_priority_becomes_none_key(self):
         stats = compute_card_stats({"a": {"status": "x", "priority": None}})

@@ -11,7 +11,7 @@ import config
 from config import CliError
 from commands import (cmd_cards, cmd_update, cmd_create, cmd_card,
                       cmd_dispatch, cmd_comment, cmd_activity, cmd_feature,
-                      cmd_pm_focus)
+                      cmd_pm_focus, cmd_standup, cmd_hand, cmd_decks)
 
 
 def _ns(**kwargs):
@@ -274,6 +274,34 @@ class TestFilteredEmptyResults:
         assert "[TOKEN_EXPIRED]" in err
 
 
+class TestOwnerNoneFilter:
+    """--owner none should find unassigned cards."""
+
+    @patch("cards.query")
+    def test_owner_none_filters_to_unassigned(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done", "assignee": "u1"},
+            "b": {"status": "started", "assignee": None},
+            "c": {"status": "started"},
+        }, "user": {"u1": {"name": "Alice"}}}
+        from cards import list_cards
+        result = list_cards(owner_filter="none")
+        assert "a" not in result["card"]
+        assert "b" in result["card"]
+        assert "c" in result["card"]
+
+    @patch("cards.query")
+    def test_owner_name_still_works(self, mock_query):
+        mock_query.return_value = {"card": {
+            "a": {"status": "done", "assignee": "u1"},
+            "b": {"status": "started", "assignee": None},
+        }, "user": {"u1": {"name": "Alice"}}}
+        from cards import list_cards
+        result = list_cards(owner_filter="Alice")
+        assert "a" in result["card"]
+        assert "b" not in result["card"]
+
+
 class TestDispatchPathValidation:
     @patch("commands.output")
     @patch("commands.dispatch")
@@ -328,23 +356,85 @@ class TestPmFocus:
                                     mock_extract, mock_output):
         mock_list_cards.return_value = {"card": {
             "c1": {"title": "A", "status": "blocked", "priority": "a", "effort": 5},
-            "c2": {"title": "B", "status": "started", "priority": "b", "effort": 3},
+            "c2": {"title": "B", "status": "started", "priority": "b", "effort": 3,
+                    "lastUpdatedAt": "2026-02-19T00:00:00Z"},
             "c3": {"title": "C", "status": "not_started", "priority": "a", "effort": 8},
             "c4": {"title": "D", "status": "not_started", "priority": "c", "effort": 2},
+            "c5": {"title": "E", "status": "in_review", "priority": "b", "effort": 2,
+                    "lastUpdatedAt": "2026-02-19T00:00:00Z"},
         }, "user": {}}
         mock_enrich.side_effect = lambda cards, user: cards
         mock_list_hand.return_value = {}
         mock_extract.return_value = {"c2"}
 
-        ns = argparse.Namespace(project=None, owner=None, limit=2, format="json")
+        ns = argparse.Namespace(project=None, owner=None, limit=2,
+                                stale_days=14, format="json")
         cmd_pm_focus(ns)
 
         report = mock_output.call_args.args[0]
         assert report["counts"]["blocked"] == 1
         assert report["counts"]["started"] == 1
+        assert report["counts"]["in_review"] == 1
         assert report["counts"]["hand"] == 1
         assert len(report["suggested"]) == 2
         assert report["suggested"][0]["id"] == "c3"
+
+    @patch("commands.output")
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    @patch("commands.enrich_cards")
+    @patch("commands.list_cards")
+    def test_detects_stale_cards(self, mock_list_cards, mock_enrich, mock_list_hand,
+                                  mock_extract, mock_output):
+        mock_list_cards.return_value = {"card": {
+            "stale": {"title": "Old", "status": "started", "priority": "a",
+                       "lastUpdatedAt": "2025-01-01T00:00:00Z"},
+            "fresh": {"title": "New", "status": "started", "priority": "a",
+                       "lastUpdatedAt": "2026-02-19T00:00:00Z"},
+        }, "user": {}}
+        mock_enrich.side_effect = lambda cards, user: cards
+        mock_list_hand.return_value = {}
+        mock_extract.return_value = set()
+
+        ns = argparse.Namespace(project=None, owner=None, limit=5,
+                                stale_days=14, format="json")
+        cmd_pm_focus(ns)
+
+        report = mock_output.call_args.args[0]
+        assert report["counts"]["stale"] == 1
+        assert report["stale"][0]["title"] == "Old"
+
+
+class TestStandup:
+    @patch("commands.output")
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    @patch("commands.enrich_cards")
+    @patch("commands.list_cards")
+    def test_categorizes_cards(self, mock_list_cards, mock_enrich, mock_list_hand,
+                                mock_extract, mock_output):
+        mock_list_cards.return_value = {"card": {
+            "c1": {"title": "Done Yesterday", "status": "done",
+                    "lastUpdatedAt": "2026-02-19T12:00:00Z"},
+            "c2": {"title": "Done Long Ago", "status": "done",
+                    "lastUpdatedAt": "2025-01-01T00:00:00Z"},
+            "c3": {"title": "Working On", "status": "started"},
+            "c4": {"title": "Stuck", "status": "blocked"},
+            "c5": {"title": "In Hand", "status": "started"},
+        }, "user": {}}
+        mock_enrich.side_effect = lambda cards, user: cards
+        mock_list_hand.return_value = {}
+        mock_extract.return_value = {"c5"}
+
+        ns = argparse.Namespace(project=None, owner=None, days=2, format="json")
+        cmd_standup(ns)
+
+        report = mock_output.call_args.args[0]
+        assert len(report["recently_done"]) == 1
+        assert report["recently_done"][0]["title"] == "Done Yesterday"
+        assert len(report["in_progress"]) == 2  # c3 + c5
+        assert len(report["blocked"]) == 1
+        assert len(report["hand"]) == 1  # c5 (not done)
 
 
 class TestRawCommandValidation:
@@ -525,3 +615,84 @@ class TestFeatureScaffold:
         assert mock_archive.call_count == 2
         assert mock_archive.call_args_list[0].args[0] == "code-1"
         assert mock_archive.call_args_list[1].args[0] == "hero-1"
+
+
+# ---------------------------------------------------------------------------
+# Hand sort order (item 1.7)
+# ---------------------------------------------------------------------------
+
+class TestHandSortOrder:
+    @patch("commands.output")
+    @patch("commands.enrich_cards")
+    @patch("commands.list_cards")
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    def test_hand_sorted_by_sort_index(self, mock_list_hand, mock_extract,
+                                        mock_list_cards, mock_enrich, mock_output):
+        mock_list_hand.return_value = {"queueEntry": {
+            "e1": {"card": "c1", "sortIndex": 300},
+            "e2": {"card": "c2", "sortIndex": 100},
+            "e3": {"card": "c3", "sortIndex": 200},
+        }}
+        mock_extract.return_value = {"c1", "c2", "c3"}
+        mock_list_cards.return_value = {"card": {
+            "c1": {"title": "Third", "status": "started"},
+            "c2": {"title": "First", "status": "done"},
+            "c3": {"title": "Second", "status": "started"},
+        }, "user": {}}
+        mock_enrich.side_effect = lambda cards, user: cards
+        ns = argparse.Namespace(card_ids=None, format="json")
+        cmd_hand(ns)
+        # Check the order passed to output
+        result = mock_output.call_args.args[0]
+        card_keys = list(result["card"].keys())
+        assert card_keys == ["c2", "c3", "c1"]
+
+    @patch("commands.output")
+    @patch("commands.enrich_cards")
+    @patch("commands.list_cards")
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    def test_hand_sort_handles_missing_sort_index(self, mock_list_hand, mock_extract,
+                                                    mock_list_cards, mock_enrich, mock_output):
+        mock_list_hand.return_value = {"queueEntry": {
+            "e1": {"card": "c1", "sortIndex": 200},
+            "e2": {"card": "c2"},  # no sortIndex
+        }}
+        mock_extract.return_value = {"c1", "c2"}
+        mock_list_cards.return_value = {"card": {
+            "c1": {"title": "B", "status": "started"},
+            "c2": {"title": "A", "status": "done"},
+        }, "user": {}}
+        mock_enrich.side_effect = lambda cards, user: cards
+        ns = argparse.Namespace(card_ids=None, format="json")
+        cmd_hand(ns)
+        result = mock_output.call_args.args[0]
+        card_keys = list(result["card"].keys())
+        # c2 has sortIndex 0 (default), c1 has 200
+        assert card_keys == ["c2", "c1"]
+
+
+# ---------------------------------------------------------------------------
+# Deck card counts (item 1.8)
+# ---------------------------------------------------------------------------
+
+class TestDeckCardCounts:
+    @patch("commands.output")
+    @patch("commands.list_cards")
+    @patch("commands.list_decks")
+    def test_deck_counts_passed_to_formatter(self, mock_list_decks,
+                                              mock_list_cards, mock_output):
+        mock_list_decks.return_value = {"deck": {
+            "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+            "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
+        }}
+        mock_list_cards.return_value = {"card": {
+            "c1": {"deckId": "d1"},
+            "c2": {"deckId": "d1"},
+            "c3": {"deckId": "d2"},
+        }}
+        ns = argparse.Namespace(format="json")
+        cmd_decks(ns)
+        result = mock_output.call_args.args[0]
+        assert result["_deck_counts"] == {"d1": 2, "d2": 1}

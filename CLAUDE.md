@@ -11,7 +11,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `py -m pytest tests/ -v` (238 unit tests, no API calls)
+- **Test**: `py -m pytest tests/ -v` (280 unit tests, no API calls)
 - **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
@@ -98,8 +98,8 @@ Due dates, Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, V
 ## Validation
 | Flag | Valid values |
 |------|-------------|
-| `--status` | `not_started`, `started`, `done`, `blocked`, `in_review` |
-| `--priority` | `a`, `b`, `c`, `null` |
+| `--status` | `not_started`, `started`, `done`, `blocked`, `in_review` (comma-separated for multi-filter) |
+| `--priority` | `a`, `b`, `c`, `null` (comma-separated for multi-filter) |
 | `--sort` | `status`, `priority`, `effort`, `deck`, `title`, `owner`, `updated`, `created` |
 | `--effort` | integer or `null` |
 | `--severity` | `critical`, `high`, `low`, `null` |
@@ -108,7 +108,7 @@ Due dates, Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, V
 Invalid → `[ERROR]` with valid options listed.
 
 ## Commands Quick Reference
-**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --sort --stats --hand --hero <id> --type hero|doc --archived`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`), `pm-focus` (`--project --owner --limit`)
+**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --priority --sort --stats --hand --hero <id> --type hero|doc --archived --stale <days> --updated-after --updated-before`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`), `pm-focus` (`--project --owner --limit --stale-days`), `standup` (`--days --project --owner`)
 **Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
 **Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
 **Mutate:** `create <title>` (`--deck --project --content --severity --doc`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
@@ -118,7 +118,7 @@ Invalid → `[ERROR]` with valid options listed.
 **Global flags:** `--format table|csv|json` (default json), `--version`
 
 ## Testing
-- Run: `py -m pytest tests/ -v` (238 tests, ~6 seconds)
+- Run: `py -m pytest tests/ -v` (280 tests, ~8 seconds)
 - `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
 - Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`

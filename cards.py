@@ -6,6 +6,7 @@ for codecks-cli.
 import json
 import sys
 import uuid
+from datetime import datetime, timezone, timedelta
 
 import config
 from config import CliError
@@ -79,17 +80,59 @@ def list_decks():
     return result
 
 
+def _parse_multi_value(raw, valid_set, field_name):
+    """Parse a comma-separated filter string and validate each value.
+    Returns a list of validated values."""
+    values = [v.strip() for v in raw.split(",") if v.strip()]
+    for v in values:
+        if v not in valid_set:
+            raise CliError(f"[ERROR] Invalid {field_name} '{v}'. "
+                           f"Valid: {', '.join(sorted(valid_set))}")
+    return values
+
+
+def _parse_date(date_str):
+    """Parse a YYYY-MM-DD date string into a datetime. Raises CliError on bad format."""
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise CliError(f"[ERROR] Invalid date '{date_str}'. Use YYYY-MM-DD format.")
+
+
+def _parse_iso_timestamp(ts):
+    """Parse an ISO timestamp from the API into a datetime."""
+    if not ts:
+        return None
+    try:
+        # Handle both "2026-01-15T10:30:00Z" and "2026-01-15T10:30:00.000Z"
+        clean = ts.replace("Z", "+00:00")
+        return datetime.fromisoformat(clean)
+    except (ValueError, TypeError):
+        return None
+
+
 def list_cards(deck_filter=None, status_filter=None, project_filter=None,
                search_filter=None, milestone_filter=None, tag_filter=None,
-               owner_filter=None, archived=False):
+               owner_filter=None, priority_filter=None,
+               stale_days=None, updated_after=None, updated_before=None,
+               archived=False):
     card_fields = ["title", "status", "priority", "deckId", "effort",
-                   "createdAt", "milestoneId", "masterTags", "lastUpdatedAt",
-                   "isDoc", "childCardInfo", {"assignee": ["name", "id"]}]
+                   "severity", "createdAt", "milestoneId", "masterTags",
+                   "lastUpdatedAt", "isDoc", "childCardInfo",
+                   {"assignee": ["name", "id"]}]
     if search_filter:
         card_fields.append("content")
     card_query = {"visibility": "archived" if archived else "default"}
+
+    # Parse and validate status filter (supports comma-separated values)
+    status_values = None
     if status_filter:
-        card_query["status"] = status_filter
+        status_values = _parse_multi_value(
+            status_filter, config.VALID_STATUSES, "status")
+        if len(status_values) == 1:
+            # Single value → server-side filter
+            card_query["status"] = status_values[0]
+            status_values = None  # no client-side filter needed
 
     # Resolve deck filter
     if deck_filter:
@@ -110,6 +153,23 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     # a filtered query returning 0 results is normal (e.g. no "started" cards).
     if not status_filter and not deck_filter and not archived:
         warn_if_empty(result, "card")
+
+    # Client-side multi-value status filter (when >1 status specified)
+    if status_values:
+        status_set = set(status_values)
+        _filter_cards(result, lambda k, c: c.get("status") in status_set)
+
+    # Client-side priority filter (supports comma-separated values)
+    if priority_filter:
+        pri_values = _parse_multi_value(
+            priority_filter, config.VALID_PRIORITIES, "priority")
+        # Normalize "null" → match cards with None priority
+        pri_set = set(pri_values)
+        has_null = "null" in pri_set
+        pri_set.discard("null")
+        _filter_cards(result, lambda k, c:
+                      c.get("priority") in pri_set or
+                      (has_null and not c.get("priority")))
 
     # Client-side project filter (cards don't have projectId directly)
     if project_filter:
@@ -145,26 +205,49 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     # Client-side owner filter
     if owner_filter:
         owner_lower = owner_filter.lower()
-        # Resolve owner name to user ID
-        users = result.get("user", {})
-        owner_id = None
-        for uid, udata in users.items():
-            if (udata.get("name") or "").lower() == owner_lower:
-                owner_id = uid
-                break
-        if owner_id is None:
-            user_map = load_users()
-            for uid, name in user_map.items():
-                if name.lower() == owner_lower:
+        # Special case: "none" finds unassigned cards
+        if owner_lower == "none":
+            _filter_cards(result, lambda k, c: not c.get("assignee"))
+        else:
+            # Resolve owner name to user ID
+            users = result.get("user", {})
+            owner_id = None
+            for uid, udata in users.items():
+                if (udata.get("name") or "").lower() == owner_lower:
                     owner_id = uid
                     break
-        if owner_id is None:
-            available = [u.get("name", "") for u in result.get("user", {}).values()]
-            if not available:
-                available = list(load_users().values())
-            hint = f" Available: {', '.join(available)}" if available else ""
-            raise CliError(f"[ERROR] Owner '{owner_filter}' not found.{hint}")
-        _filter_cards(result, lambda k, c: c.get("assignee") == owner_id)
+            if owner_id is None:
+                user_map = load_users()
+                for uid, name in user_map.items():
+                    if name.lower() == owner_lower:
+                        owner_id = uid
+                        break
+            if owner_id is None:
+                available = [u.get("name", "") for u in result.get("user", {}).values()]
+                if not available:
+                    available = list(load_users().values())
+                hint = f" Available: {', '.join(available)}" if available else ""
+                raise CliError(f"[ERROR] Owner '{owner_filter}' not found.{hint}")
+            _filter_cards(result, lambda k, c: c.get("assignee") == owner_id)
+
+    # Client-side date filters
+    if stale_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+        _filter_cards(result, lambda k, c:
+                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
+                       or c.get("last_updated_at")) or cutoff) < cutoff)
+
+    if updated_after:
+        after_dt = _parse_date(updated_after)
+        _filter_cards(result, lambda k, c:
+                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
+                       or c.get("last_updated_at")) or after_dt) >= after_dt)
+
+    if updated_before:
+        before_dt = _parse_date(updated_before)
+        _filter_cards(result, lambda k, c:
+                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
+                       or c.get("last_updated_at")) or before_dt) < before_dt)
 
     return result
 
@@ -202,8 +285,8 @@ def get_card(card_id):
     card_filter = json.dumps({"cardId": card_id, "visibility": "default"})
     q = {"_root": [{"account": [{f"cards({card_filter})": [
         "title", "status", "priority", "content", "deckId",
-        "effort", "createdAt", "milestoneId", "masterTags",
-        "lastUpdatedAt", "isDoc", "checkboxStats",
+        "effort", "severity", "createdAt", "milestoneId", "masterTags",
+        "lastUpdatedAt", "isDoc", "checkboxStats", "parentCardId",
         {"assignee": ["name", "id"]},
         {"childCards": ["title", "status"]},
         {"resolvables": [
@@ -238,7 +321,8 @@ def list_milestones():
 def list_activity(limit=20):
     """Query recent account activity."""
     q = {"_root": [{"account": [{"activities": [
-        "type", "createdAt", "card", "data",
+        "type", "createdAt", "data",
+        {"card": ["title"]},
         {"changer": ["name"]},
         {"deck": ["title"]},
     ]}]}]}
@@ -316,6 +400,7 @@ def compute_card_stats(cards_dict):
         "by_status": {},
         "by_priority": {},
         "by_deck": {},
+        "by_owner": {},
     }
     total_effort = 0
     effort_count = 0
@@ -328,6 +413,9 @@ def compute_card_stats(cards_dict):
 
         deck = card.get("deck_name", card.get("deck_id", "unknown"))
         stats["by_deck"][deck] = stats["by_deck"].get(deck, 0) + 1
+
+        owner = card.get("owner_name") or "unassigned"
+        stats["by_owner"][owner] = stats["by_owner"].get(owner, 0) + 1
 
         effort = card.get("effort")
         if effort is not None:

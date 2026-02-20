@@ -28,7 +28,7 @@ from formatters import (output, mutation_response,
                         format_milestones_table, format_stats_table,
                         format_activity_table, format_cards_csv,
                         format_gdd_table, format_sync_report,
-                        format_pm_focus_table)
+                        format_pm_focus_table, format_standup_table)
 from gdd import (_run_google_auth_flow, _revoke_google_auth,
                  fetch_gdd, parse_gdd, sync_gdd)
 from models import (ObjectPayload, FeatureSpec,
@@ -126,7 +126,16 @@ def cmd_account(ns):
 
 
 def cmd_decks(ns):
-    output(list_decks(), format_decks_table, ns.format)
+    decks_result = list_decks()
+    # Count cards per deck
+    cards_result = list_cards()
+    deck_counts = {}
+    for card in cards_result.get("card", {}).values():
+        did = card.get("deck_id") or card.get("deckId")
+        if did:
+            deck_counts[did] = deck_counts.get(did, 0) + 1
+    decks_result["_deck_counts"] = deck_counts
+    output(decks_result, format_decks_table, ns.format)
 
 
 def cmd_projects(ns):
@@ -147,6 +156,10 @@ def cmd_cards(ns):
         milestone_filter=ns.milestone,
         tag_filter=ns.tag,
         owner_filter=ns.owner,
+        priority_filter=getattr(ns, "priority", None),
+        stale_days=getattr(ns, "stale", None),
+        updated_after=getattr(ns, "updated_after", None),
+        updated_before=getattr(ns, "updated_before", None),
         archived=ns.archived,
     )
     # Filter to hand cards if requested
@@ -516,6 +529,14 @@ def cmd_hand(ns):
         filtered = {k: v for k, v in result.get("card", {}).items()
                     if k in hand_card_ids}
         result["card"] = enrich_cards(filtered, result.get("user"))
+        # Sort by hand sort order (sortIndex from queueEntries)
+        sort_map = {}
+        for entry in (hand_result.get("queueEntry") or {}).values():
+            cid = entry.get("card") or entry.get("cardId")
+            if cid:
+                sort_map[cid] = entry.get("sortIndex", 0) or 0
+        result["card"] = dict(sorted(result["card"].items(),
+                                      key=lambda item: sort_map.get(item[0], 0)))
         output(result, format_cards_table, fmt,
                csv_formatter=format_cards_csv)
     else:
@@ -547,14 +568,20 @@ def cmd_activity(ns):
 
 
 def cmd_pm_focus(ns):
-    """Show focused PM dashboard: blocked, hand, and suggested next tasks."""
+    """Show focused PM dashboard: blocked, in_review, hand, stale, and suggested."""
+    from datetime import datetime, timezone, timedelta
     result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
     cards = enrich_cards(result.get("card", {}), result.get("user"))
     hand_ids = extract_hand_card_ids(list_hand())
 
+    stale_days = getattr(ns, "stale_days", 14) or 14
+    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
     started = []
     blocked = []
+    in_review = []
     hand = []
+    stale = []
     candidates = []
 
     for cid, card in cards.items():
@@ -564,10 +591,19 @@ def cmd_pm_focus(ns):
             started.append(row)
         if status == "blocked":
             blocked.append(row)
+        if status == "in_review":
+            in_review.append(row)
         if cid in hand_ids:
             hand.append(row)
         if status == "not_started" and cid not in hand_ids:
             candidates.append(row)
+        # Stale: started or in_review cards not updated in stale_days
+        if status in ("started", "in_review"):
+            from cards import _parse_iso_timestamp
+            updated = _parse_iso_timestamp(
+                card.get("lastUpdatedAt") or card.get("last_updated_at"))
+            if updated and updated < cutoff:
+                stale.append(row)
 
     pri_rank = {"a": 0, "b": 1, "c": 2, None: 3, "": 3}
     candidates.sort(key=lambda c: (
@@ -582,14 +618,64 @@ def cmd_pm_focus(ns):
         "counts": {
             "started": len(started),
             "blocked": len(blocked),
+            "in_review": len(in_review),
             "hand": len(hand),
+            "stale": len(stale),
         },
         "blocked": blocked,
+        "in_review": in_review,
         "hand": hand,
+        "stale": stale,
         "suggested": suggested,
-        "filters": {"project": ns.project, "owner": ns.owner, "limit": ns.limit},
+        "filters": {"project": ns.project, "owner": ns.owner, "limit": ns.limit,
+                     "stale_days": stale_days},
     }
     output(report, format_pm_focus_table, ns.format)
+
+
+def cmd_standup(ns):
+    """Show daily standup summary: recently done, in progress, blocked, hand."""
+    from datetime import datetime, timezone, timedelta
+    from cards import _parse_iso_timestamp
+    days = ns.days
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
+    cards = enrich_cards(result.get("card", {}), result.get("user"))
+    hand_ids = extract_hand_card_ids(list_hand())
+
+    recently_done = []
+    in_progress = []
+    blocked = []
+    hand = []
+
+    for cid, card in cards.items():
+        status = card.get("status")
+        row = _card_row(cid, card)
+
+        if status == "done":
+            updated = _parse_iso_timestamp(
+                card.get("lastUpdatedAt") or card.get("last_updated_at"))
+            if updated and updated >= cutoff:
+                recently_done.append(row)
+
+        elif status in ("started", "in_review"):
+            in_progress.append(row)
+
+        if status == "blocked":
+            blocked.append(row)
+
+        if cid in hand_ids and status != "done":
+            hand.append(row)
+
+    report = {
+        "recently_done": recently_done,
+        "in_progress": in_progress,
+        "blocked": blocked,
+        "hand": hand,
+        "filters": {"project": ns.project, "owner": ns.owner, "days": days},
+    }
+    output(report, format_standup_table, ns.format)
 
 
 # ---------------------------------------------------------------------------

@@ -65,12 +65,16 @@ def mutation_response(action, card_id=None, details=None, data=None, fmt="json")
 
 def format_pm_focus_table(report):
     """Format pm-focus report for human reading."""
+    counts = report.get("counts", {})
+    stale_days = report.get("filters", {}).get("stale_days", 14)
     lines = [
         "PM Focus Dashboard",
         "=" * 50,
-        f"Started: {report['counts']['started']}  "
-        f"Blocked: {report['counts']['blocked']}  "
-        f"In hand: {report['counts']['hand']}",
+        f"Started: {counts.get('started', 0)}  "
+        f"Blocked: {counts.get('blocked', 0)}  "
+        f"In Review: {counts.get('in_review', 0)}  "
+        f"In hand: {counts.get('hand', 0)}  "
+        f"Stale: {counts.get('stale', 0)}",
         "",
     ]
 
@@ -91,8 +95,43 @@ def format_pm_focus_table(report):
         lines.append("")
 
     _section("Blocked", report.get("blocked", []))
+    _section("In Review", report.get("in_review", []))
     _section("In Hand", report.get("hand", []))
+    if report.get("stale"):
+        _section(f"Stale (>{stale_days}d)", report.get("stale", []))
     _section("Suggested Next", report.get("suggested", []))
+    return "\n".join(lines)
+
+
+def format_standup_table(report):
+    """Format standup report for human reading."""
+    days = report.get("filters", {}).get("days", 2)
+    lines = [
+        "Standup Summary",
+        "=" * 50,
+        "",
+    ]
+
+    def _section(title, items):
+        lines.append(f"{title} ({len(items)}):")
+        if not items:
+            lines.append("  - none")
+            lines.append("")
+            return
+        for c in items:
+            pri = c.get("priority") or "-"
+            effort = c.get("effort")
+            eff = "-" if effort is None else str(effort)
+            lines.append(
+                f"  - [{pri}] E:{eff} {c['title']} "
+                f"({c.get('deck_name') or c.get('deck') or '-'}) {c['id']}"
+            )
+        lines.append("")
+
+    _section(f"Done (last {days}d)", report.get("recently_done", []))
+    _section("In Progress", report.get("in_progress", []))
+    _section("Blocked", report.get("blocked", []))
+    _section("In Hand", report.get("hand", []))
     return "\n".join(lines)
 
 
@@ -164,7 +203,7 @@ def format_cards_table(result):
     if not cards:
         return "No cards found."
     cols = [("Status", 14), ("Pri", 5), ("Eff", 4), ("Owner", 10),
-            ("Deck", 18), ("Title", 36), ("Tags", 16), ("ID", 0)]
+            ("Deck", 16), ("Mstone", 10), ("Title", 34), ("Tags", 14), ("ID", 0)]
     rows = []
     for key, card in cards.items():
         title_text = card.get("title", "")
@@ -177,9 +216,10 @@ def format_cards_table(result):
             config.PRI_LABELS.get(card.get("priority"), "-"),
             str(card.get("effort") or "-"),
             _trunc(card.get("owner_name", "") or "-", 10),
-            _trunc(card.get("deck_name") or card.get("deck_id", ""), 18),
-            _trunc(title_text, 36),
-            _trunc(", ".join(tags), 16) if tags else "-",
+            _trunc(card.get("deck_name") or card.get("deck_id", ""), 16),
+            _trunc(card.get("milestone_name") or "-", 10),
+            _trunc(title_text, 34),
+            _trunc(", ".join(tags), 14) if tags else "-",
             key,
         ))
     return _table(cols, rows, f"Total: {len(cards)} cards")
@@ -201,6 +241,9 @@ def format_card_detail(result):
         pri_raw = card.get("priority")
         pri_display = f"{pri_raw} ({config.PRI_LABELS[pri_raw]})" if pri_raw in config.PRI_LABELS else "none"
         lines.append(f"Priority:  {pri_display}")
+        sev = card.get("severity")
+        if sev:
+            lines.append(f"Severity:  {sev}")
         lines.append(f"Effort:    {card.get('effort') or '-'}")
         lines.append(f"Deck:      {card.get('deck_name', card.get('deck_id', ''))}")
         lines.append(f"Owner:     {card.get('owner_name') or '-'}")
@@ -208,6 +251,9 @@ def format_card_detail(result):
         lines.append(f"Milestone: {ms or '-'}")
         tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
         lines.append(f"Tags:      {', '.join(tags) if tags else '-'}")
+        parent = card.get("parent_card_id") or card.get("parentCardId")
+        if parent:
+            lines.append(f"Hero:      {parent}")
         lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
         lines.append(f"Created:   {card.get('createdAt', '')}")
         updated = card.get("last_updated_at") or card.get("lastUpdatedAt") or ""
@@ -314,14 +360,18 @@ def format_decks_table(result):
     if not decks:
         return "No decks found."
     project_names = load_project_names()
-    cols = [("Title", 30), ("Project", 20), ("ID", 0)]
+    deck_counts = result.get("_deck_counts", {})
+    cols = [("Title", 30), ("Project", 20), ("Cards", 6), ("ID", 0)]
     rows = []
     for key, deck in decks.items():
         pid = deck.get("project_id") or deck.get("projectId") or ""
+        did = deck.get("id", key)
+        count = deck_counts.get(did, 0)
         rows.append((
             _trunc(deck.get("title", ""), 30),
             project_names.get(pid, pid[:12]),
-            deck.get("id", key),
+            str(count) if deck_counts else "-",
+            did,
         ))
     return _table(cols, rows, f"Total: {len(decks)} decks")
 
@@ -375,6 +425,11 @@ def format_stats_table(stats):
     lines.append("By Deck:")
     for deck, count in sorted(stats["by_deck"].items()):
         lines.append(f"  {deck:<24} {count}")
+    if stats.get("by_owner"):
+        lines.append("")
+        lines.append("By Owner:")
+        for owner, count in sorted(stats["by_owner"].items()):
+            lines.append(f"  {owner:<24} {count}")
     return "\n".join(lines)
 
 
@@ -398,9 +453,11 @@ def format_activity_table(result):
         return "No activity found."
     users = result.get("user", {})
     decks = result.get("deck", {})
+    card_data = result.get("card", {})
     ms_names = load_milestone_names()
     user_names = load_users()
-    cols = [("Time", 18), ("Type", 18), ("By", 12), ("Deck", 16), ("Details", 0)]
+    cols = [("Time", 18), ("Type", 18), ("By", 12), ("Deck", 14),
+            ("Card", 20), ("Details", 0)]
     rows = []
     for key, act in activities.items():
         ts = (act.get("createdAt") or "")[:16].replace("T", " ")
@@ -408,10 +465,15 @@ def format_activity_table(result):
         changer = users.get(changer_id, {}).get("name", "") if changer_id else ""
         deck_id = act.get("deck")
         deck_name = decks.get(deck_id, {}).get("title", "") if deck_id else ""
+        card_id = act.get("card")
+        card_title = ""
+        if card_id and card_data:
+            card_title = card_data.get(card_id, {}).get("title", "")
         diff = act.get("data", {}).get("diff", {})
         details = format_activity_diff(diff, ms_names, user_names)
         rows.append((ts, act.get("type", "?"), changer,
-                      _trunc(deck_name, 16), details))
+                      _trunc(deck_name, 14), _trunc(card_title, 20),
+                      details))
     return _table(cols, rows, f"Total: {len(activities)} events")
 
 
@@ -541,8 +603,8 @@ def format_cards_csv(result):
     cards = result.get("card", {})
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["status", "priority", "effort", "deck", "owner", "title",
-                     "tags", "id"])
+    writer.writerow(["status", "priority", "effort", "deck", "milestone",
+                     "owner", "title", "tags", "id"])
     for key, card in cards.items():
         tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
         writer.writerow([
@@ -550,6 +612,7 @@ def format_cards_csv(result):
             config.PRI_LABELS.get(card.get("priority"), ""),
             card.get("effort") or "",
             card.get("deck_name") or card.get("deck_id", ""),
+            card.get("milestone_name", ""),
             card.get("owner_name", ""),
             card.get("title", ""),
             ", ".join(tags) if tags else "",
