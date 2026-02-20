@@ -29,6 +29,10 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 | `gdd.py` | ~540 | Google OAuth2, GDD fetch/parse/sync |
 | `setup_wizard.py` | ~400 | Interactive setup wizard |
 
+**Supporting files:**
+- `pyproject.toml` — build config, dev dependencies (`[project.optional-dependencies].dev`), ruff/mypy/pytest configs
+- `scripts/run-tests.ps1` — PowerShell test wrapper: pins TEMP/TMP to `.tmp/`, per-run basetemp, `py` launcher fallback via `CODECKS_PYTHON_PATH`
+
 **Dependency graph** (no circular imports):
 ```
 config.py          ← pure data, no project imports
@@ -60,12 +64,16 @@ codecks_api.py     ← config, api, commands
 - `_save_gdd_cache()` in `gdd.py` centralizes GDD cache writes with chmod 0o600
 - `_sanitize_str()` in `formatters.py` strips ANSI escape sequences and control chars from table output (not JSON)
 - Error messages never leak raw API response dicts — show only keys for diagnostic
-- `_get_field(d, snake, camel)` in `cards.py` — canonical helper for snake_case/camelCase dual lookups (API returns snake_case, queries use camelCase). Used across `cards.py`, `commands.py`, `formatters.py`, `setup_wizard.py`.
+- `_get_field(d, snake, camel)` in `cards.py` — canonical helper for snake_case/camelCase dual lookups (API returns snake_case, queries use camelCase). Uses key-presence check (`snake in d`), not truthiness, so `False`/`0` values are preserved. Used across `cards.py`, `commands.py`, `formatters.py`, `setup_wizard.py`.
 - `get_card_tags(card)` in `cards.py` — normalizes tag access across `tags`/`master_tags`/`masterTags` keys. Used everywhere tags are read.
 - `_card_section(lines, title, items)` in `formatters.py` — shared section renderer for pm-focus and standup tables
 - `_RETRYABLE_HTTP_CODES` frozenset in `api.py` — single source of truth for `{429, 502, 503, 504}`
 - OAuth HTTP server in `gdd.py` uses try/finally for server cleanup
 - Exception chaining: `_parse_date()` uses `raise ... from e` to preserve original traceback
+- `_sort_field_value(card, sort_field)` in `commands.py` — snake/camel-safe sort field resolution via `_get_field()`. Used by `_sort_cards()`.
+- `_rollback_created_ids()` in `commands.py` — nested helper in `cmd_feature()` encapsulating rollback. Separate `except SetupError` preserves exit-code-2.
+- `_guard_duplicate_title(title, allow_duplicate, context)` in `commands.py` — preflight duplicate check. Exact match = error, near match = stderr warning. Bypassed with `--allow-duplicate`.
+- Activity limit: `list_activity(limit)` in `cards.py` owns result trimming; `cmd_activity()` only passes `limit` through.
 
 **Output prefixes:** `OK:` (mutation success), `[ERROR]` (exit 1), `[TOKEN_EXPIRED]` / `[SETUP_NEEDED]` (exit 2), `[WARN]` / `[INFO]` (non-fatal, stderr)
 
@@ -128,9 +136,17 @@ Invalid → `[ERROR]` with valid options listed.
 ## Testing
 - Run: `pwsh -File scripts/run-tests.ps1` (328 tests, ~8 seconds)
 - `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
-- Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
+- Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`
 - Known bug regressions have dedicated test classes (sort crashes, title bug, clear values, false warnings)
+
+### Dev Tooling
+- **Config**: `pyproject.toml` — `[project.optional-dependencies].dev` for ruff/mypy/pytest-cov
+- **Lint**: `py -m ruff check .` (rules: E, F, I, B, UP; E501 ignored; line-length 100)
+- **Format**: `py -m ruff format --check .`
+- **Type check**: `py -m mypy api.py cards.py commands.py formatters.py models.py`
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest. Matrix: Python 3.10, 3.12, 3.14
+- **Install dev deps**: `py -m pip install .[dev]`
 
 ## Known Bugs Fixed (do not reintroduce)
 1. **False TOKEN_EXPIRED on filtered empty results** — `warn_if_empty` only called when no server-side filters applied
@@ -140,6 +156,7 @@ Invalid → `[ERROR]` with valid options listed.
 5. **Doc cards reject priority/effort/status** — API returns 400. Platform limitation, not a bug. Code must skip these fields for doc cards.
 6. **Activity table showed raw UUIDs** — milestones and user IDs displayed as UUIDs. Fixed: resolve via `_load_milestone_names()` and `_load_users()`
 7. **Date sort was oldest-first** — sort by `updated`/`created` should be newest-first. Fixed: `reverse=True` for date fields, blanks-last via `(-1, "")` tuple
+8. **`_get_field()` ignored falsy values** — `d.get(snake) or d.get(camel)` treated `False`/`0`/`""` as missing. Fixed: key-presence check (`if snake in d`)
 
 ## Skills (`.claude/commands/`)
 - `/pm` — interactive PM session: dashboard, review/update/create cards, hand management, checklist formatting
@@ -148,6 +165,7 @@ Invalid → `[ERROR]` with valid options listed.
 - `/api-ref` — complete command/flag reference (loads into context)
 - `/security-audit` — scan for leaked secrets before pushing
 - `/codecks-docs <topic>` — fetch and summarize Codecks manual pages (e.g. `/codecks-docs hand`)
+- `/quality` — run full quality pipeline: ruff lint, ruff format check, mypy, pytest
 
 ## Git & Releases
 - Commit style: short present tense (e.g. "Add --sort flag to cards command")
