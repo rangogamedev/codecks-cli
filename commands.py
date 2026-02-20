@@ -27,7 +27,8 @@ from formatters import (output, mutation_response,
                         format_decks_table, format_projects_table,
                         format_milestones_table, format_stats_table,
                         format_activity_table, format_cards_csv,
-                        format_gdd_table, format_sync_report)
+                        format_gdd_table, format_sync_report,
+                        format_pm_focus_table)
 from gdd import (_run_google_auth_flow, _revoke_google_auth,
                  fetch_gdd, parse_gdd, sync_gdd)
 from models import (ObjectPayload, FeatureSpec,
@@ -89,6 +90,18 @@ def _resolve_owner_id(owner_name):
     available = list(user_map.values())
     hint = f" Available: {', '.join(available)}" if available else ""
     raise CliError(f"[ERROR] Owner '{owner_name}' not found.{hint}")
+
+
+def _card_row(cid, card):
+    return {
+        "id": cid,
+        "title": card.get("title", ""),
+        "status": card.get("status"),
+        "priority": card.get("priority"),
+        "effort": card.get("effort"),
+        "deck_name": card.get("deck_name") or card.get("deck"),
+        "owner_name": card.get("owner_name"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -529,6 +542,52 @@ def cmd_activity(ns):
         trimmed = dict(list(activities.items())[:limit])
         result["activity"] = trimmed
     output(result, format_activity_table, ns.format)
+
+
+def cmd_pm_focus(ns):
+    """Show focused PM dashboard: blocked, hand, and suggested next tasks."""
+    result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
+    cards = enrich_cards(result.get("card", {}), result.get("user"))
+    hand_ids = extract_hand_card_ids(list_hand())
+
+    started = []
+    blocked = []
+    hand = []
+    candidates = []
+
+    for cid, card in cards.items():
+        status = card.get("status")
+        row = _card_row(cid, card)
+        if status == "started":
+            started.append(row)
+        if status == "blocked":
+            blocked.append(row)
+        if cid in hand_ids:
+            hand.append(row)
+        if status == "not_started" and cid not in hand_ids:
+            candidates.append(row)
+
+    pri_rank = {"a": 0, "b": 1, "c": 2, None: 3, "": 3}
+    candidates.sort(key=lambda c: (
+        pri_rank.get(c.get("priority"), 3),
+        0 if c.get("effort") is not None else 1,
+        -(c.get("effort") or 0),
+        c.get("title", "").lower(),
+    ))
+    suggested = candidates[:ns.limit]
+
+    report = {
+        "counts": {
+            "started": len(started),
+            "blocked": len(blocked),
+            "hand": len(hand),
+        },
+        "blocked": blocked,
+        "hand": hand,
+        "suggested": suggested,
+        "filters": {"project": ns.project, "owner": ns.owner, "limit": ns.limit},
+    }
+    output(report, format_pm_focus_table, ns.format)
 
 
 # ---------------------------------------------------------------------------

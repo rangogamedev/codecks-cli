@@ -8,7 +8,7 @@ from formatters import (
     format_cards_table, format_card_detail, format_stats_table,
     format_decks_table, format_projects_table, format_milestones_table,
     format_gdd_table, format_cards_csv, format_activity_diff,
-    resolve_activity_val, output,
+    resolve_activity_val, output, format_pm_focus_table,
 )
 
 
@@ -297,6 +297,17 @@ class TestMutationResponse:
         assert "OK:" in out
         assert '"actionId"' not in out
 
+    def test_strict_json_output(self, capsys, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
+        mutation_response("Updated", "c1", "status=done",
+                          {"ok": True}, fmt="json")
+        out = capsys.readouterr().out.strip()
+        payload = json.loads(out)
+        assert payload["ok"] is True
+        assert payload["mutation"]["action"] == "Updated"
+        assert payload["mutation"]["card_id"] == "c1"
+        assert payload["data"]["ok"] is True
+
 
 # ---------------------------------------------------------------------------
 # output dispatcher
@@ -320,3 +331,17 @@ class TestOutput:
         output({"data": 1}, fmt="table")
         out = capsys.readouterr().out
         assert '"data": 1' in out
+
+
+class TestPmFocusTable:
+    def test_pm_focus_table(self):
+        report = {
+            "counts": {"started": 2, "blocked": 1, "hand": 1},
+            "blocked": [{"id": "c1", "title": "A", "priority": "a", "effort": 5, "deck": "D"}],
+            "hand": [],
+            "suggested": [{"id": "c2", "title": "B", "priority": "b", "effort": 3, "deck": "D"}],
+        }
+        result = format_pm_focus_table(report)
+        assert "PM Focus Dashboard" in result
+        assert "Blocked (1)" in result
+        assert "Suggested Next (1)" in result

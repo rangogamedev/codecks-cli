@@ -32,6 +32,22 @@ def output(data, formatter=None, fmt="json", csv_formatter=None):
 
 def mutation_response(action, card_id=None, details=None, data=None, fmt="json"):
     """Print a mutation confirmation."""
+    if fmt == "json" and config.RUNTIME_STRICT:
+        payload = {
+            "ok": True,
+            "mutation": {
+                "action": action,
+                "card_id": card_id,
+                "details": details,
+            },
+        }
+        if data and data != {}:
+            if not (set(data.keys()) <= {"payload", "actionId"} and
+                    data.get("payload") in (None, {})):
+                payload["data"] = data
+        print(json.dumps(payload, ensure_ascii=False))
+        return
+
     parts = [action]
     if card_id:
         parts.append(f"card {card_id}")
@@ -44,6 +60,39 @@ def mutation_response(action, card_id=None, details=None, data=None, fmt="json")
         if set(data.keys()) <= {"payload", "actionId"} and data.get("payload") in (None, {}):
             return
         print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def format_pm_focus_table(report):
+    """Format pm-focus report for human reading."""
+    lines = [
+        "PM Focus Dashboard",
+        "=" * 50,
+        f"Started: {report['counts']['started']}  "
+        f"Blocked: {report['counts']['blocked']}  "
+        f"In hand: {report['counts']['hand']}",
+        "",
+    ]
+
+    def _section(title, items):
+        lines.append(f"{title} ({len(items)}):")
+        if not items:
+            lines.append("  - none")
+            lines.append("")
+            return
+        for c in items:
+            pri = c.get("priority") or "-"
+            effort = c.get("effort")
+            eff = "-" if effort is None else str(effort)
+            lines.append(
+                f"  - [{pri}] E:{eff} {c['title']} "
+                f"({c.get('deck_name') or c.get('deck') or '-'}) {c['id']}"
+            )
+        lines.append("")
+
+    _section("Blocked", report.get("blocked", []))
+    _section("In Hand", report.get("hand", []))
+    _section("Suggested Next", report.get("suggested", []))
+    return "\n".join(lines)
 
 
 def _trunc(s, maxlen):

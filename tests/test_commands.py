@@ -10,7 +10,8 @@ from unittest.mock import patch, MagicMock
 import config
 from config import CliError
 from commands import (cmd_cards, cmd_update, cmd_create, cmd_card,
-                      cmd_dispatch, cmd_comment, cmd_activity, cmd_feature)
+                      cmd_dispatch, cmd_comment, cmd_activity, cmd_feature,
+                      cmd_pm_focus)
 
 
 def _ns(**kwargs):
@@ -315,6 +316,35 @@ class TestActivityValidation:
         ns = argparse.Namespace(limit=0, format="json")
         with pytest.raises(CliError):
             cmd_activity(ns)
+
+
+class TestPmFocus:
+    @patch("commands.output")
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    @patch("commands.enrich_cards")
+    @patch("commands.list_cards")
+    def test_generates_focus_report(self, mock_list_cards, mock_enrich, mock_list_hand,
+                                    mock_extract, mock_output):
+        mock_list_cards.return_value = {"card": {
+            "c1": {"title": "A", "status": "blocked", "priority": "a", "effort": 5},
+            "c2": {"title": "B", "status": "started", "priority": "b", "effort": 3},
+            "c3": {"title": "C", "status": "not_started", "priority": "a", "effort": 8},
+            "c4": {"title": "D", "status": "not_started", "priority": "c", "effort": 2},
+        }, "user": {}}
+        mock_enrich.side_effect = lambda cards, user: cards
+        mock_list_hand.return_value = {}
+        mock_extract.return_value = {"c2"}
+
+        ns = argparse.Namespace(project=None, owner=None, limit=2, format="json")
+        cmd_pm_focus(ns)
+
+        report = mock_output.call_args.args[0]
+        assert report["counts"]["blocked"] == 1
+        assert report["counts"]["started"] == 1
+        assert report["counts"]["hand"] == 1
+        assert len(report["suggested"]) == 2
+        assert report["suggested"][0]["id"] == "c3"
 
 
 class TestRawCommandValidation:

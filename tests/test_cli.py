@@ -181,6 +181,12 @@ class TestBuildParser:
         ns = self.parser.parse_args(["activity", "--limit", "5"])
         assert ns.limit == 5
 
+    def test_pm_focus_command(self):
+        ns = self.parser.parse_args(["pm-focus", "--project", "Tea", "--limit", "7"])
+        assert ns.command == "pm-focus"
+        assert ns.project == "Tea"
+        assert ns.limit == 7
+
     def test_activity_limit_must_be_positive(self):
         with pytest.raises(CliError):
             self.parser.parse_args(["activity", "--limit", "0"])

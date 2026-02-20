@@ -14,7 +14,7 @@ from commands import (
     cmd_milestones, cmd_cards, cmd_card, cmd_create, cmd_update,
     cmd_feature,
     cmd_archive, cmd_unarchive, cmd_delete, cmd_done, cmd_start,
-    cmd_hand, cmd_unhand, cmd_activity, cmd_comment, cmd_conversations,
+    cmd_hand, cmd_unhand, cmd_activity, cmd_pm_focus, cmd_comment, cmd_conversations,
     cmd_gdd, cmd_gdd_sync, cmd_gdd_auth, cmd_gdd_revoke,
     cmd_generate_token, cmd_dispatch,
 )
@@ -53,6 +53,10 @@ Commands:
   milestones              - List all milestones
   activity                - Show recent activity feed
     --limit <n>             Number of events to show (default: 20)
+  pm-focus                - Focus dashboard for PM triage
+    --project <name>        Filter by project
+    --owner <name>          Filter by owner
+    --limit <n>             Suggested next-card count (default: 5)
   create <title>          - Create a card via Report Token (stable, no expiry)
     --deck <name>           Place card in a specific deck
     --project <name>        Place card in first deck of a project
@@ -279,6 +283,12 @@ def build_parser():
     p = sub.add_parser("activity")
     p.add_argument("--limit", type=_positive_int, default=20)
 
+    # --- pm-focus ---
+    p = sub.add_parser("pm-focus")
+    p.add_argument("--project")
+    p.add_argument("--owner")
+    p.add_argument("--limit", type=_positive_int, default=5)
+
     # --- comment ---
     p = sub.add_parser("comment")
     p.add_argument("card_id")
@@ -354,6 +364,7 @@ DISPATCH = {
     "hand": cmd_hand,
     "unhand": cmd_unhand,
     "activity": cmd_activity,
+    "pm-focus": cmd_pm_focus,
     "comment": cmd_comment,
     "conversations": cmd_conversations,
     "gdd": cmd_gdd,

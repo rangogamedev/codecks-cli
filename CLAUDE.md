@@ -99,7 +99,7 @@ Due dates, Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, V
 Invalid → `[ERROR]` with valid options listed.
 
 ## Commands Quick Reference
-**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --sort --stats --hand --hero <id> --type hero|doc --archived`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`)
+**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --sort --stats --hand --hero <id> --type hero|doc --archived`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`), `pm-focus` (`--project --owner --limit`)
 **Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
 **Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
 **Mutate:** `create <title>` (`--deck --project --content --severity --doc`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`

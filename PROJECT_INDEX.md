@@ -33,7 +33,7 @@ Purpose: Python CLI for an AI agent (or human) to control Codecks (web-based pro
 
 ## Command Surface (Subcommands)
 - Setup/auth/config: `setup`, `generate-token`, `gdd-auth`, `gdd-revoke`
-- Read/list: `account`, `decks`, `projects`, `milestones`, `cards`, `card`, `activity`, `conversations`, `hand`
+- Read/list: `account`, `decks`, `projects`, `milestones`, `cards`, `card`, `activity`, `pm-focus`, `conversations`, `hand`
 - Mutations: `create`, `feature`, `update`, `archive`, `remove`, `unarchive`, `delete`, `done`, `start`, `comment`, `unhand`
 - Raw API: `query`, `dispatch`
 - GDD: `gdd`, `gdd-sync`

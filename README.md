@@ -101,6 +101,10 @@ py codecks_api.py card <card-id>
 py codecks_api.py decks
 py codecks_api.py projects
 py codecks_api.py milestones
+
+# PM triage focus (blocked, hand, suggested next)
+py codecks_api.py pm-focus --format table
+py codecks_api.py pm-focus --project "My Project" --owner "Thomas" --limit 7
 ```
 
 ### Creating cards
@@ -419,7 +423,7 @@ This script is designed to be called by an AI coding agent like Claude Code. The
 3. Use `--stats` to get a quick overview without dumping every card
 4. Use `--search` to find specific cards without scanning everything
 5. Chain `--project`, `--deck`, `--status`, and `--search` filters to narrow results
-6. Look for the `OK:` prefix on mutation responses to confirm success
+6. For non-strict mode, look for `OK:` on mutation responses; in strict JSON mode parse structured mutation JSON
 7. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
 8. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
 9. Use `remove` as a natural alias for `archive`
@@ -433,7 +437,7 @@ The AI agent's project memory file should include the full command reference and
 The script is optimized to minimize context window usage for AI agents:
 
 - **Card lists omit descriptions** — the `content` field is only included when using `--search` (which needs it for matching). Use `card <id>` to get full details for a specific card.
-- **Mutation responses are clean** — `update`, `archive`, `done`, `start` print only `OK: ...` with no redundant data. `create` still returns the new card ID.
+- **Mutation responses are clean** — non-strict mode prints `OK: ...`; strict+JSON mode emits structured JSON mutation envelopes for agent parsing.
 - **API metadata is stripped** — internal `_root` keys are removed from all query responses.
 - **Deck lookups are cached** — commands that need deck data make only one API call per invocation, even if multiple filters reference decks.
 
