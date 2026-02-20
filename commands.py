@@ -353,6 +353,8 @@ def cmd_feature(ns):
         code_deck=spec.code_deck,
         design_deck=spec.design_deck,
         art_deck=None if spec.skip_art else spec.art_deck,
+        notes=(["Art lane auto-skipped (no --art-deck provided)."]
+               if spec.auto_skip_art else None),
     )
     if fmt == "table":
         lines = [

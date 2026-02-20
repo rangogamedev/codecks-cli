@@ -430,8 +430,18 @@ class TestFeatureScaffold:
         assert art_kwargs["deckId"] == "d-art"
         mock_output.assert_called_once()
 
+    @patch("commands.output")
+    @patch("commands.update_card")
+    @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
-    def test_requires_art_deck_unless_skip_art(self, mock_resolve_deck):
+    def test_auto_skips_art_when_art_deck_missing(self, mock_resolve_deck, mock_create,
+                                                  mock_update, mock_output):
+        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
+        mock_create.side_effect = [
+            {"cardId": "hero-1"},
+            {"cardId": "code-1"},
+            {"cardId": "design-1"},
+        ]
         ns = argparse.Namespace(
             title="Audio Mix",
             hero_deck="Features",
@@ -445,9 +455,11 @@ class TestFeatureScaffold:
             effort=None,
             format="json",
         )
-        with pytest.raises(CliError) as exc_info:
-            cmd_feature(ns)
-        assert "--art-deck is required" in str(exc_info.value)
+        cmd_feature(ns)
+        assert mock_create.call_count == 3
+        assert mock_update.call_count == 3
+        report = mock_output.call_args.args[0]
+        assert report["decks"]["art"] is None
 
     @patch("commands.output")
     @patch("commands.update_card")

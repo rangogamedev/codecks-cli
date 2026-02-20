@@ -51,8 +51,10 @@ class TestFeatureSpec:
             FeatureSpec.from_namespace(self._ns(skip_art=True, art_deck="Art"))
 
     def test_requires_art_deck_unless_skip(self):
-        with pytest.raises(CliError):
-            FeatureSpec.from_namespace(self._ns(art_deck=None, skip_art=False))
+        spec = FeatureSpec.from_namespace(self._ns(art_deck=None, skip_art=False))
+        assert spec.skip_art is True
+        assert spec.auto_skip_art is True
+        assert spec.art_deck is None
 
 
 class TestFeatureScaffoldReport:
@@ -70,3 +72,17 @@ class TestFeatureScaffoldReport:
         assert data["ok"] is True
         assert data["hero"]["id"] == "h1"
         assert data["subcards"][0]["lane"] == "code"
+
+    def test_to_dict_with_notes(self):
+        rep = FeatureScaffoldReport(
+            hero_id="h1",
+            hero_title="Feature: Combat",
+            subcards=[],
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            notes=["Art lane auto-skipped"],
+        )
+        data = rep.to_dict()
+        assert data["notes"] == ["Art lane auto-skipped"]
