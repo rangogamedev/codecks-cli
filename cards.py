@@ -16,30 +16,25 @@ from api import (query, warn_if_empty, session_request, report_request,
 # Config helpers (.env name mappings)
 # ---------------------------------------------------------------------------
 
-def _load_project_names():
-    """Load project name mapping from CODECKS_PROJECTS env var.
+def _load_env_mapping(env_key):
+    """Load an id=Name mapping from a comma-separated .env value.
     Format: id1=Name1,id2=Name2"""
     mapping = {}
-    raw = config.env.get("CODECKS_PROJECTS", "")
+    raw = config.env.get(env_key, "")
     for pair in raw.split(","):
         pair = pair.strip()
         if "=" in pair:
-            pid, name = pair.split("=", 1)
-            mapping[pid.strip()] = name.strip()
+            k, name = pair.split("=", 1)
+            mapping[k.strip()] = name.strip()
     return mapping
+
+
+def _load_project_names():
+    return _load_env_mapping("CODECKS_PROJECTS")
 
 
 def _load_milestone_names():
-    """Load milestone name mapping from CODECKS_MILESTONES env var.
-    Format: id1=Name1,id2=Name2"""
-    mapping = {}
-    raw = config.env.get("CODECKS_MILESTONES", "")
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if "=" in pair:
-            mid, name = pair.split("=", 1)
-            mapping[mid.strip()] = name.strip()
-    return mapping
+    return _load_env_mapping("CODECKS_MILESTONES")
 
 
 def _load_users():
@@ -60,6 +55,13 @@ def _load_users():
 # ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
+
+def _filter_cards(result, predicate):
+    """Filter result['card'] dict by predicate(key, card). Returns result."""
+    result["card"] = {k: v for k, v in result.get("card", {}).items()
+                      if predicate(k, v)}
+    return result
+
 
 def get_account():
     q = {"_root": [{"account": ["name", "id"]}]}
@@ -119,43 +121,28 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             print(f"[ERROR] Project '{project_filter}' not found.{hint}",
                   file=sys.stderr)
             sys.exit(1)
-        filtered_cards = {}
-        for key, card in result.get("card", {}).items():
-            card_deck_id = card.get("deck_id") or card.get("deckId")
-            if card_deck_id in project_deck_ids:
-                filtered_cards[key] = card
-        result["card"] = filtered_cards
+        _filter_cards(result, lambda k, c:
+                      (c.get("deck_id") or c.get("deckId")) in project_deck_ids)
 
     # Client-side text search
     if search_filter:
         search_lower = search_filter.lower()
-        filtered_cards = {}
-        for key, card in result.get("card", {}).items():
-            title = (card.get("title", "") or "").lower()
-            content = (card.get("content", "") or "").lower()
-            if search_lower in title or search_lower in content:
-                filtered_cards[key] = card
-        result["card"] = filtered_cards
+        _filter_cards(result, lambda k, c:
+                      search_lower in (c.get("title", "") or "").lower() or
+                      search_lower in (c.get("content", "") or "").lower())
 
     # Client-side milestone filter
     if milestone_filter:
         milestone_id = _resolve_milestone_id(milestone_filter)
-        filtered_cards = {}
-        for key, card in result.get("card", {}).items():
-            mid = card.get("milestone_id") or card.get("milestoneId")
-            if mid == milestone_id:
-                filtered_cards[key] = card
-        result["card"] = filtered_cards
+        _filter_cards(result, lambda k, c:
+                      (c.get("milestone_id") or c.get("milestoneId")) == milestone_id)
 
     # Client-side tag filter
     if tag_filter:
         tag_lower = tag_filter.lower()
-        filtered_cards = {}
-        for key, card in result.get("card", {}).items():
-            card_tags = card.get("master_tags") or card.get("masterTags") or []
-            if any(t.lower() == tag_lower for t in card_tags):
-                filtered_cards[key] = card
-        result["card"] = filtered_cards
+        _filter_cards(result, lambda k, c:
+                      any(t.lower() == tag_lower
+                          for t in (c.get("master_tags") or c.get("masterTags") or [])))
 
     # Client-side owner filter
     if owner_filter:
@@ -168,7 +155,6 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
                 owner_id = uid
                 break
         if owner_id is None:
-            # Try loading users from account roles
             user_map = _load_users()
             for uid, name in user_map.items():
                 if name.lower() == owner_lower:
@@ -182,12 +168,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             print(f"[ERROR] Owner '{owner_filter}' not found.{hint}",
                   file=sys.stderr)
             sys.exit(1)
-        filtered_cards = {}
-        for key, card in result.get("card", {}).items():
-            assignee = card.get("assignee")
-            if assignee == owner_id:
-                filtered_cards[key] = card
-        result["card"] = filtered_cards
+        _filter_cards(result, lambda k, c: c.get("assignee") == owner_id)
 
     return result
 

@@ -56,6 +56,35 @@ def _trunc(s, maxlen):
     return s[:maxlen - 1] + "\u2026" if len(s) > maxlen else s
 
 
+def _table(columns, rows, footer=None):
+    """Build a formatted table string.
+    columns: list of (name, width) tuples. Last column has no width (fills).
+    rows: list of tuples matching columns.
+    footer: optional footer line."""
+    # Header
+    parts = []
+    for i, (name, width) in enumerate(columns):
+        if i == len(columns) - 1:
+            parts.append(name)
+        else:
+            parts.append(f"{name:<{width}}")
+    header = " ".join(parts)
+    sep = "-" * max(len(header), 90)
+    # Rows
+    lines = [header, sep]
+    for row in rows:
+        parts = []
+        for i, val in enumerate(row):
+            if i == len(columns) - 1:
+                parts.append(str(val))
+            else:
+                parts.append(f"{str(val):<{columns[i][1]}}")
+        lines.append(" ".join(parts))
+    if footer:
+        lines.append(f"\n{footer}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Table formatters
 # ---------------------------------------------------------------------------
@@ -74,25 +103,26 @@ def _format_cards_table(result):
     cards = result.get("card", {})
     if not cards:
         return "No cards found."
-    lines = []
-    lines.append(f"{'Status':<14} {'Pri':<5} {'Eff':<4} {'Owner':<10} {'Deck':<18} {'Title':<36} {'Tags':<16} {'ID'}")
-    lines.append("-" * 140)
+    cols = [("Status", 14), ("Pri", 5), ("Eff", 4), ("Owner", 10),
+            ("Deck", 18), ("Title", 36), ("Tags", 16), ("ID", 0)]
+    rows = []
     for key, card in cards.items():
-        status = card.get("status", "")
-        pri = config.PRI_LABELS.get(card.get("priority"), "-")
-        effort = str(card.get("effort") or "-")
-        owner = _trunc(card.get("owner_name", "") or "-", 10)
-        deck = _trunc(card.get("deck_name") or card.get("deck_id", ""), 18)
         title_text = card.get("title", "")
         sub_count = card.get("sub_card_count")
         if sub_count:
             title_text = f"{title_text} [{sub_count} sub]"
-        title = _trunc(title_text, 36)
         tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
-        tag_str = _trunc(", ".join(tags), 16) if tags else "-"
-        lines.append(f"{status:<14} {pri:<5} {effort:<4} {owner:<10} {deck:<18} {title:<36} {tag_str:<16} {key}")
-    lines.append(f"\nTotal: {len(cards)} cards")
-    return "\n".join(lines)
+        rows.append((
+            card.get("status", ""),
+            config.PRI_LABELS.get(card.get("priority"), "-"),
+            str(card.get("effort") or "-"),
+            _trunc(card.get("owner_name", "") or "-", 10),
+            _trunc(card.get("deck_name") or card.get("deck_id", ""), 18),
+            _trunc(title_text, 36),
+            _trunc(", ".join(tags), 16) if tags else "-",
+            key,
+        ))
+    return _table(cols, rows, f"Total: {len(cards)} cards")
 
 
 def _format_card_detail(result):
@@ -224,16 +254,16 @@ def _format_decks_table(result):
     if not decks:
         return "No decks found."
     project_names = _load_project_names()
-    lines = []
-    lines.append(f"{'Title':<30} {'Project':<20} {'ID'}")
-    lines.append("-" * 90)
+    cols = [("Title", 30), ("Project", 20), ("ID", 0)]
+    rows = []
     for key, deck in decks.items():
-        title = _trunc(deck.get("title", ""), 30)
         pid = deck.get("project_id") or deck.get("projectId") or ""
-        proj = project_names.get(pid, pid[:12])
-        lines.append(f"{title:<30} {proj:<20} {deck.get('id', key)}")
-    lines.append(f"\nTotal: {len(decks)} decks")
-    return "\n".join(lines)
+        rows.append((
+            _trunc(deck.get("title", ""), 30),
+            project_names.get(pid, pid[:12]),
+            deck.get("id", key),
+        ))
+    return _table(cols, rows, f"Total: {len(decks)} decks")
 
 
 def _format_projects_table(result):
@@ -310,55 +340,54 @@ def _format_activity_table(result):
     decks = result.get("deck", {})
     ms_names = _load_milestone_names()
     user_names = _load_users()
-    cards = result.get("card", {})
-    lines = []
-    lines.append(f"{'Time':<18} {'Type':<18} {'By':<12} {'Deck':<16} {'Details'}")
-    lines.append("-" * 120)
+    cols = [("Time", 18), ("Type", 18), ("By", 12), ("Deck", 16), ("Details", 0)]
+    rows = []
     for key, act in activities.items():
         ts = (act.get("createdAt") or "")[:16].replace("T", " ")
-        atype = act.get("type", "?")
         changer_id = act.get("changer")
         changer = users.get(changer_id, {}).get("name", "") if changer_id else ""
         deck_id = act.get("deck")
         deck_name = decks.get(deck_id, {}).get("title", "") if deck_id else ""
-        data = act.get("data", {})
-        diff = data.get("diff", {})
-        # Build details string
-        details = ""
-        if diff:
-            parts = []
-            for field, change in diff.items():
-                if field == "tags":
-                    continue  # Skip — masterTags is authoritative
-                if field == "masterTags":
-                    if isinstance(change, dict):
-                        added = change.get("+", [])
-                        removed = change.get("-", [])
-                        if added:
-                            parts.append(f"tags +[{', '.join(added)}]")
-                        if removed:
-                            parts.append(f"tags -[{', '.join(removed)}]")
-                    continue
-                label = field.replace("Id", "").replace("_", " ")
-                if isinstance(change, list) and len(change) == 2:
-                    old, new = change
-                    old = _resolve_activity_val(field, old, ms_names, user_names)
-                    new = _resolve_activity_val(field, new, ms_names, user_names)
-                    parts.append(f"{label}: {old} -> {new}")
-                elif isinstance(change, dict):
-                    added = change.get("+", [])
-                    removed = change.get("-", [])
-                    if added:
-                        parts.append(f"{label} +[{', '.join(str(v) for v in added)}]")
-                    if removed:
-                        parts.append(f"{label} -[{', '.join(str(v) for v in removed)}]")
-                else:
-                    parts.append(f"{label}: {change}")
-            details = "; ".join(parts)
-        details = _trunc(details, 60) if details else ""
-        lines.append(f"{ts:<18} {atype:<18} {changer:<12} {_trunc(deck_name, 16):<16} {details}")
-    lines.append(f"\nTotal: {len(activities)} events")
-    return "\n".join(lines)
+        diff = act.get("data", {}).get("diff", {})
+        details = _format_activity_diff(diff, ms_names, user_names)
+        rows.append((ts, act.get("type", "?"), changer,
+                      _trunc(deck_name, 16), details))
+    return _table(cols, rows, f"Total: {len(activities)} events")
+
+
+def _format_activity_diff(diff, ms_names, user_names):
+    """Format an activity diff dict into a human-readable string."""
+    if not diff:
+        return ""
+    parts = []
+    for field, change in diff.items():
+        if field == "tags":
+            continue  # Skip — masterTags is authoritative
+        if field == "masterTags":
+            if isinstance(change, dict):
+                added = change.get("+", [])
+                removed = change.get("-", [])
+                if added:
+                    parts.append(f"tags +[{', '.join(added)}]")
+                if removed:
+                    parts.append(f"tags -[{', '.join(removed)}]")
+            continue
+        label = field.replace("Id", "").replace("_", " ")
+        if isinstance(change, list) and len(change) == 2:
+            old, new = change
+            old = _resolve_activity_val(field, old, ms_names, user_names)
+            new = _resolve_activity_val(field, new, ms_names, user_names)
+            parts.append(f"{label}: {old} -> {new}")
+        elif isinstance(change, dict):
+            added = change.get("+", [])
+            removed = change.get("-", [])
+            if added:
+                parts.append(f"{label} +[{', '.join(str(v) for v in added)}]")
+            if removed:
+                parts.append(f"{label} -[{', '.join(str(v) for v in removed)}]")
+        else:
+            parts.append(f"{label}: {change}")
+    return _trunc("; ".join(parts), 60)
 
 
 # ---------------------------------------------------------------------------
@@ -369,20 +398,18 @@ def _format_gdd_table(sections):
     """Format parsed GDD sections as a readable table."""
     if not sections:
         return "No tasks found in GDD."
-    lines = []
-    lines.append(f"{'Section':<24} {'Pri':<5} {'Eff':<5} {'Title'}")
-    lines.append("-" * 90)
-    total_tasks = 0
+    cols = [("Section", 24), ("Pri", 5), ("Eff", 5), ("Title", 0)]
+    rows = []
     for section in sections:
         for task in section["tasks"]:
-            total_tasks += 1
-            sec = _trunc(section["section"], 24)
-            pri = task.get("priority") or "-"
-            eff = str(task.get("effort") or "-")
-            title = _trunc(task["title"], 50)
-            lines.append(f"{sec:<24} {pri:<5} {eff:<5} {title}")
-    lines.append(f"\nTotal: {total_tasks} tasks across {len(sections)} sections")
-    return "\n".join(lines)
+            rows.append((
+                _trunc(section["section"], 24),
+                task.get("priority") or "-",
+                str(task.get("effort") or "-"),
+                _trunc(task["title"], 50),
+            ))
+    return _table(cols, rows,
+                  f"Total: {len(rows)} tasks across {len(sections)} sections")
 
 
 def _format_sync_report(report):
