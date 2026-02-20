@@ -4,6 +4,7 @@ import json
 import pytest
 import sys
 
+from config import CliError
 from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
                  HTTPError, warn_if_empty)
 
@@ -30,9 +31,9 @@ class TestSafeJsonParse:
         assert _safe_json_parse('[1, 2, 3]') == [1, 2, 3]
 
     def test_invalid_json_exits(self):
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             _safe_json_parse("not json")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
 
 class TestSanitizeError:
@@ -56,10 +57,10 @@ class TestTryCall:
     def test_returns_value(self):
         assert _try_call(lambda: 42) == 42
 
-    def test_catches_sys_exit(self):
-        def exits():
-            sys.exit(1)
-        assert _try_call(exits) is None
+    def test_catches_cli_error(self):
+        def raises():
+            raise CliError("test error")
+        assert _try_call(raises) is None
 
     def test_passes_args(self):
         assert _try_call(lambda x, y: x + y, 3, 4) == 7

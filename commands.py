@@ -7,6 +7,7 @@ import json
 import sys
 
 import config
+from config import CliError
 from api import (_safe_json_parse, _mask_token,
                  query, dispatch, generate_report_token)
 from cards import (get_account, list_decks, list_cards, get_card,
@@ -212,23 +213,19 @@ def cmd_update(ns):
             try:
                 update_kwargs["effort"] = int(ns.effort)
             except ValueError:
-                print(f"[ERROR] Invalid effort value '{ns.effort}': "
-                      "must be a number or 'null'", file=sys.stderr)
-                sys.exit(1)
+                raise CliError(f"[ERROR] Invalid effort value '{ns.effort}': "
+                               "must be a number or 'null'")
 
     if ns.deck is not None:
         update_kwargs["deckId"] = resolve_deck_id(ns.deck)
 
     if ns.title is not None:
         if len(card_ids) > 1:
-            print("[ERROR] --title can only be used with a single card.",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise CliError("[ERROR] --title can only be used with a single card.")
         card_data = get_card(card_ids[0])
         cards = card_data.get("card", {})
         if not cards:
-            print(f"[ERROR] Card '{card_ids[0]}' not found.", file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] Card '{card_ids[0]}' not found.")
         for k, c in cards.items():
             old_content = c.get("content", "")
             parts = old_content.split("\n", 1)
@@ -238,9 +235,7 @@ def cmd_update(ns):
 
     if ns.content is not None:
         if len(card_ids) > 1:
-            print("[ERROR] --content can only be used with a single card.",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise CliError("[ERROR] --content can only be used with a single card.")
         update_kwargs["content"] = ns.content
 
     if ns.milestone is not None:
@@ -268,9 +263,7 @@ def cmd_update(ns):
             if owner_id is None:
                 available = list(user_map.values())
                 hint = f" Available: {', '.join(available)}" if available else ""
-                print(f"[ERROR] Owner '{ns.owner}' not found.{hint}",
-                      file=sys.stderr)
-                sys.exit(1)
+                raise CliError(f"[ERROR] Owner '{ns.owner}' not found.{hint}")
             update_kwargs["assigneeId"] = owner_id
 
     if ns.tag is not None:
@@ -287,15 +280,12 @@ def cmd_update(ns):
         elif val in ("false", "no", "0"):
             update_kwargs["isDoc"] = False
         else:
-            print(f"[ERROR] Invalid --doc value '{ns.doc}'. Use true or false.",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] Invalid --doc value '{ns.doc}'. "
+                           "Use true or false.")
 
     if not update_kwargs:
-        print("[ERROR] No update flags provided. Use --status, --priority, "
-              "--effort, --owner, --tag, --doc, etc.",
-              file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] No update flags provided. Use --status, "
+                       "--priority, --effort, --owner, --tag, --doc, etc.")
 
     last_result = None
     for cid in card_ids:
@@ -396,14 +386,12 @@ def cmd_comment(ns):
         mutation_response("Reopened thread", ns.reopen, "", result, fmt)
     elif ns.thread:
         if not ns.message:
-            print("[ERROR] Reply message is required.", file=sys.stderr)
-            sys.exit(1)
+            raise CliError("[ERROR] Reply message is required.")
         result = reply_comment(ns.thread, ns.message)
         mutation_response("Replied to thread", ns.thread, "", result, fmt)
     else:
         if not ns.message:
-            print("[ERROR] Comment message is required.", file=sys.stderr)
-            sys.exit(1)
+            raise CliError("[ERROR] Comment message is required.")
         result = create_comment(card_id, ns.message)
         mutation_response("Created thread on", card_id, "", result, fmt)
 
@@ -432,9 +420,7 @@ def cmd_gdd_sync(ns):
     if not ns.project:
         available = [n for n in load_project_names().values()]
         hint = f" Available: {', '.join(available)}" if available else ""
-        print(f"[ERROR] --project is required for gdd-sync.{hint}",
-              file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] --project is required for gdd-sync.{hint}")
     content = fetch_gdd(
         force_refresh=ns.refresh,
         local_file=ns.file,

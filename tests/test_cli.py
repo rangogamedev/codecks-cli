@@ -2,6 +2,7 @@
 
 import pytest
 import sys
+from config import CliError
 from codecks_api import _extract_global_flags, build_parser
 
 
@@ -37,9 +38,9 @@ class TestExtractGlobalFlags:
         assert exc_info.value.code == 0
 
     def test_invalid_format_exits(self):
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             _extract_global_flags(["--format", "xml"])
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_format_without_value(self):
         """--format at end of argv with no value should be kept as-is."""
@@ -79,11 +80,11 @@ class TestBuildParser:
         assert ns.sort == "priority"
 
     def test_cards_status_validation(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(CliError):
             self.parser.parse_args(["cards", "--status", "invalid"])
 
     def test_cards_sort_validation(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(CliError):
             self.parser.parse_args(["cards", "--sort", "invalid"])
 
     def test_update_command(self):
@@ -99,7 +100,7 @@ class TestBuildParser:
         assert ns.card_ids == ["id1", "id2", "id3"]
 
     def test_update_priority_validation(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(CliError):
             self.parser.parse_args(["update", "id", "--priority", "x"])
 
     def test_create_command(self):

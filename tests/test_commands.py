@@ -8,6 +8,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 import config
+from config import CliError
 from commands import cmd_cards, cmd_update, cmd_create, cmd_card
 
 
@@ -104,9 +105,9 @@ class TestUpdateTitleBug:
             milestone=None, hero=None, owner=None, tag=None, doc=None,
             format="json",
         )
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     @patch("commands.update_card")
     @patch("commands.get_card")
@@ -212,9 +213,9 @@ class TestUpdateNoFlags:
             milestone=None, hero=None, owner=None, tag=None, doc=None,
             format="table",
         )
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
 
 # ---------------------------------------------------------------------------

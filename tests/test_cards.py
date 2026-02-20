@@ -2,6 +2,7 @@
 
 import pytest
 import config
+from config import CliError
 from cards import (
     _load_env_mapping, load_project_names, load_milestone_names,
     _filter_cards, compute_card_stats, enrich_cards,
@@ -237,9 +238,9 @@ class TestResolvers:
         config._cache["decks"] = {"deck": {
             "dk1": {"id": "d-id-1", "title": "Features"},
         }}
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             resolve_deck_id("Nonexistent")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def testresolve_milestone_id_found(self, monkeypatch):
         monkeypatch.setattr(config, "env",
@@ -254,6 +255,6 @@ class TestResolvers:
     def testresolve_milestone_id_not_found_exits(self, monkeypatch):
         monkeypatch.setattr(config, "env",
                             {"CODECKS_MILESTONES": "ms-1=MVP"})
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CliError) as exc_info:
             resolve_milestone_id("Nonexistent")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1

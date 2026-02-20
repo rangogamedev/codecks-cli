@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 
 import config
+from config import CliError, SetupError
 
 
 # ---------------------------------------------------------------------------
@@ -27,9 +28,8 @@ def _safe_json_parse(text, context="input"):
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        print(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}",
-              file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] Invalid JSON in {context}: "
+                       f"{e.msg} at position {e.pos}")
 
 
 def _sanitize_error(body, max_len=500):
@@ -44,10 +44,10 @@ def _sanitize_error(body, max_len=500):
 
 
 def _try_call(fn, *args, **kwargs):
-    """Call a function that might sys.exit(), returning None on failure."""
+    """Call a function that might raise CliError, returning None on failure."""
     try:
         return fn(*args, **kwargs)
-    except SystemExit:
+    except CliError:
         return None
 
 
@@ -76,19 +76,16 @@ def _http_request(url, data=None, headers=None, method="POST"):
             try:
                 return json.loads(resp.read().decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
-                print("[ERROR] Unexpected response from Codecks API "
-                      "(not valid JSON).", file=sys.stderr)
-                sys.exit(1)
+                raise CliError("[ERROR] Unexpected response from Codecks API "
+                               "(not valid JSON).")
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""
         raise HTTPError(e.code, e.reason, error_body)
     except socket.timeout:
-        print("[ERROR] Request timed out after 30 seconds. "
-              "Is Codecks API reachable?", file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] Request timed out after 30 seconds. "
+                       "Is Codecks API reachable?")
     except urllib.error.URLError as e:
-        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] Connection failed: {e.reason}")
 
 
 def session_request(path="/", data=None, method="POST"):
@@ -104,22 +101,20 @@ def session_request(path="/", data=None, method="POST"):
         return _http_request(url, data, headers, method)
     except HTTPError as e:
         if e.code in (401, 403):
-            print("[TOKEN_EXPIRED] The Codecks session token has expired. "
-                  "Please provide a fresh 'at' cookie from browser DevTools "
-                  "(Brave > F12 > Network > api.codecks.io request > "
-                  "Cookie header > at=...).", file=sys.stderr)
-            sys.exit(2)
-        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
-        print(_sanitize_error(e.body), file=sys.stderr)
-        sys.exit(1)
+            raise SetupError(
+                "[TOKEN_EXPIRED] The Codecks session token has expired. "
+                "Please provide a fresh 'at' cookie from browser DevTools "
+                "(Brave > F12 > Network > api.codecks.io request > "
+                "Cookie header > at=...).")
+        raise CliError(f"[ERROR] HTTP {e.code}: {e.reason}\n"
+                       f"{_sanitize_error(e.body)}")
 
 
 def report_request(content, severity=None, email=None):
     """Create a card via the Report Token endpoint (stable, no expiry)."""
     if not config.REPORT_TOKEN:
-        print("[ERROR] CODECKS_REPORT_TOKEN not set in .env. "
-              "Run: py codecks_api.py generate-token", file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] CODECKS_REPORT_TOKEN not set in .env. "
+                       "Run: py codecks_api.py generate-token")
     payload = {"content": content}
     if severity:
         payload["severity"] = severity
@@ -134,20 +129,16 @@ def report_request(content, severity=None, email=None):
         return _http_request(url, payload, headers)
     except HTTPError as e:
         if e.code == 401:
-            print("[ERROR] Report token is invalid or disabled. "
-                  "Generate a new one: py codecks_api.py generate-token",
-                  file=sys.stderr)
-            sys.exit(1)
-        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
-        print(_sanitize_error(e.body), file=sys.stderr)
-        sys.exit(1)
+            raise CliError("[ERROR] Report token is invalid or disabled. "
+                           "Generate a new one: py codecks_api.py generate-token")
+        raise CliError(f"[ERROR] HTTP {e.code}: {e.reason}\n"
+                       f"{_sanitize_error(e.body)}")
 
 
 def generate_report_token(label="claude-code"):
     """Use the Access Key to create a new Report Token and save it to .env."""
     if not config.ACCESS_KEY:
-        print("[ERROR] CODECKS_ACCESS_KEY not set in .env.", file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] CODECKS_ACCESS_KEY not set in .env.")
     # NOTE: Access key in URL query param is required by Codecks API design.
     url = (f"{config.BASE_URL}/user-report/v1/create-report-token"
            f"?accessKey={config.ACCESS_KEY}")
@@ -155,14 +146,12 @@ def generate_report_token(label="claude-code"):
     try:
         result = _http_request(url, {"label": label}, headers)
     except HTTPError as e:
-        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
-        print(_sanitize_error(e.body), file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] HTTP {e.code}: {e.reason}\n"
+                       f"{_sanitize_error(e.body)}")
     if result.get("ok") and result.get("token"):
         config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
         return result
-    print("[ERROR] Unexpected response:", result, file=sys.stderr)
-    sys.exit(1)
+    raise CliError(f"[ERROR] Unexpected response: {result}")
 
 
 # ---------------------------------------------------------------------------
@@ -199,20 +188,14 @@ def warn_if_empty(result, relation):
 def _check_token():
     """Validate session token before running a command. Exits if expired."""
     if not config.SESSION_TOKEN or not config.ACCOUNT:
-        print("[SETUP_NEEDED] No configuration found.\n"
-              "  Run: py codecks_api.py setup",
-              file=sys.stderr)
-        sys.exit(2)
+        raise SetupError("[SETUP_NEEDED] No configuration found.\n"
+                         "  Run: py codecks_api.py setup")
     try:
         result = session_request("/",
                                  {"query": {"_root": [{"account": ["id"]}]}})
-    except SystemExit:
-        # session_request already printed TOKEN_EXPIRED for 401/403
-        print("  Run: py codecks_api.py setup", file=sys.stderr)
-        raise
+    except SetupError as e:
+        raise SetupError(str(e) + "\n  Run: py codecks_api.py setup") from e
     if "account" not in result or not result["account"]:
-        print("[TOKEN_EXPIRED] Your session token has expired.\n"
-              "  Run: py codecks_api.py setup\n"
-              "  Or update CODECKS_TOKEN in .env manually.",
-              file=sys.stderr)
-        sys.exit(2)
+        raise SetupError("[TOKEN_EXPIRED] Your session token has expired.\n"
+                         "  Run: py codecks_api.py setup\n"
+                         "  Or update CODECKS_TOKEN in .env manually.")

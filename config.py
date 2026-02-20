@@ -91,3 +91,15 @@ GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 # ---------------------------------------------------------------------------
 
 _cache = {}
+
+# ---------------------------------------------------------------------------
+# Custom exceptions (defined here to avoid circular imports)
+# ---------------------------------------------------------------------------
+
+class CliError(Exception):
+    """Exit code 1 — validation, not-found, network, parse errors."""
+    exit_code = 1
+
+class SetupError(CliError):
+    """Exit code 2 — token expired, no config."""
+    exit_code = 2

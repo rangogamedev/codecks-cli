@@ -8,6 +8,7 @@ import sys
 import uuid
 
 import config
+from config import CliError
 from api import (query, warn_if_empty, session_request, report_request,
                  _try_call)
 
@@ -101,8 +102,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         if deck_id:
             card_query["deckId"] = deck_id
         else:
-            print(f"[ERROR] Deck '{deck_filter}' not found.", file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] Deck '{deck_filter}' not found.")
 
     q = {"_root": [{"account": [{f"cards({json.dumps(card_query)})": card_fields}]}]}
     result = query(q)
@@ -118,9 +118,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         if project_deck_ids is None:
             available = [n for n in load_project_names().values()]
             hint = f" Available: {', '.join(available)}" if available else ""
-            print(f"[ERROR] Project '{project_filter}' not found.{hint}",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] Project '{project_filter}' not found.{hint}")
         _filter_cards(result, lambda k, c:
                       (c.get("deck_id") or c.get("deckId")) in project_deck_ids)
 
@@ -165,9 +163,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             if not available:
                 available = list(load_users().values())
             hint = f" Available: {', '.join(available)}" if available else ""
-            print(f"[ERROR] Owner '{owner_filter}' not found.{hint}",
-                  file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] Owner '{owner_filter}' not found.{hint}")
         _filter_cards(result, lambda k, c: c.get("assignee") == owner_id)
 
     return result
@@ -392,7 +388,7 @@ def delete_card(card_id):
             "visibility": "deleted",
             "deleteFiles": False,
         })
-    except SystemExit:
+    except CliError:
         print(f"Warning: Card {card_id} was archived but delete failed. "
               f"Use 'unarchive' to recover.", file=sys.stderr)
         raise
@@ -426,9 +422,8 @@ def _get_user_id():
         uid = entry.get("userId") or entry.get("user_id")
         if uid:
             return uid
-    print("[ERROR] Could not determine your user ID. "
-          "Run: py codecks_api.py setup", file=sys.stderr)
-    sys.exit(1)
+    raise CliError("[ERROR] Could not determine your user ID. "
+                   "Run: py codecks_api.py setup")
 
 
 def list_hand():
@@ -541,8 +536,7 @@ def resolve_deck_id(deck_name):
             return deck.get("id")
         available.append(title)
     hint = f" Available: {', '.join(available)}" if available else ""
-    print(f"[ERROR] Deck '{deck_name}' not found.{hint}", file=sys.stderr)
-    sys.exit(1)
+    raise CliError(f"[ERROR] Deck '{deck_name}' not found.{hint}")
 
 
 def resolve_milestone_id(milestone_name):
@@ -553,6 +547,5 @@ def resolve_milestone_id(milestone_name):
             return mid
     available = list(milestone_names.values())
     hint = f" Available: {', '.join(available)}" if available else ""
-    print(f"[ERROR] Milestone '{milestone_name}' not found.{hint} "
-          "Add milestones to .env: CODECKS_MILESTONES=<id>=<name>", file=sys.stderr)
-    sys.exit(1)
+    raise CliError(f"[ERROR] Milestone '{milestone_name}' not found.{hint} "
+                   "Add milestones to .env: CODECKS_MILESTONES=<id>=<name>")

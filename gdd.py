@@ -16,6 +16,7 @@ import urllib.request
 import webbrowser
 
 import config
+from config import CliError
 from cards import list_cards, list_decks, create_card, update_card
 
 
@@ -143,10 +144,9 @@ def _run_google_auth_flow():
     """Run the OAuth2 authorization code flow with a localhost callback.
     Opens the browser for user consent, captures the code, exchanges for tokens."""
     if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
-        print("[ERROR] Google OAuth not configured. Add GOOGLE_CLIENT_ID and "
-              "GOOGLE_CLIENT_SECRET to .env", file=sys.stderr)
-        print("  See README for setup instructions.", file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] Google OAuth not configured. Add GOOGLE_CLIENT_ID "
+                       "and GOOGLE_CLIENT_SECRET to .env\n"
+                       "  See README for setup instructions.")
 
     # Find a free port
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -213,13 +213,10 @@ def _run_google_auth_flow():
     server.server_close()
 
     if server_error[0]:
-        print(f"[ERROR] Authorization denied: {server_error[0]}",
-              file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] Authorization denied: {server_error[0]}")
     if not auth_code[0]:
-        print("[ERROR] No authorization code received (timed out after 120s).",
-              file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] No authorization code received "
+                       "(timed out after 120s).")
 
     # Exchange code for tokens
     result = _google_token_request({
@@ -230,8 +227,7 @@ def _run_google_auth_flow():
         "grant_type": "authorization_code",
     })
     if not result or "access_token" not in result:
-        print("[ERROR] Token exchange failed.", file=sys.stderr)
-        sys.exit(1)
+        raise CliError("[ERROR] Token exchange failed.")
 
     tokens = {
         "access_token": result["access_token"],
@@ -298,8 +294,7 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
         if local_file == "-":
             content = sys.stdin.read()
         elif not os.path.exists(local_file):
-            print(f"[ERROR] File not found: {local_file}", file=sys.stderr)
-            sys.exit(1)
+            raise CliError(f"[ERROR] File not found: {local_file}")
         else:
             with open(local_file, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -315,9 +310,8 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
         if not use_cache:
             doc_id = _extract_google_doc_id(config.GDD_DOC_URL)
             if not doc_id:
-                print("[ERROR] Invalid Google Doc URL in GDD_GOOGLE_DOC_URL.",
-                      file=sys.stderr)
-                sys.exit(1)
+                raise CliError("[ERROR] Invalid Google Doc URL in "
+                               "GDD_GOOGLE_DOC_URL.")
             content = _fetch_google_doc_content(doc_id)
             if content:
                 with open(config.GDD_CACHE_PATH, "w", encoding="utf-8") as f:
@@ -328,7 +322,8 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
                 print("[WARN] Google Doc fetch failed, using cache.",
                       file=sys.stderr)
             else:
-                sys.exit(1)
+                raise CliError("[ERROR] Google Doc fetch failed and "
+                               "no cache available.")
 
         # Use cache
         if os.path.exists(config.GDD_CACHE_PATH):
@@ -341,9 +336,8 @@ def fetch_gdd(force_refresh=False, local_file=None, save_cache=False):
             return f.read()
 
     # 4. No source configured
-    print("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL in .env, "
-          "use --file <path>, or pipe via --file -", file=sys.stderr)
-    sys.exit(1)
+    raise CliError("[ERROR] No GDD source configured. Set GDD_GOOGLE_DOC_URL "
+                   "in .env, use --file <path>, or pipe via --file -")
 
 
 def parse_gdd(content):

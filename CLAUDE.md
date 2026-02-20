@@ -41,7 +41,8 @@ codecks_api.py     ← config, api, commands
 - `build_parser()` returns argparse parser with subparsers for each command
 - `DISPATCH` dict in `main()` maps command names → `cmd_*` handlers
 - `NO_TOKEN_COMMANDS` set for commands that skip `_check_token()`
-- `_try_call(fn)` in `api.py` wraps functions that may `sys.exit()` — returns `None` on failure
+- `CliError(msg)` / `SetupError(msg)` exceptions in `config.py` — raised instead of `sys.exit(1)`/`sys.exit(2)`. Caught once in `main()`. Messages include `[ERROR]`/`[TOKEN_EXPIRED]`/`[SETUP_NEEDED]` prefixes.
+- `_try_call(fn)` in `api.py` wraps functions that may raise `CliError` — returns `None` on failure
 - `output(data, formatter, fmt, csv_formatter)` in `formatters.py` dispatches JSON/table/CSV
 - `config._cache` dict caches deck/user lookups per-invocation
 - Card lists omit `content` for token efficiency; `--search` adds it back

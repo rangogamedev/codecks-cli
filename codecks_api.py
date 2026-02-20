@@ -6,6 +6,7 @@ import argparse
 import sys
 
 import config
+from config import CliError
 from api import _check_token
 from commands import (
     cmd_setup, cmd_query, cmd_account, cmd_decks, cmd_projects,
@@ -117,9 +118,8 @@ def _extract_global_flags(argv):
         elif argv[i] == "--format" and i + 1 < len(argv):
             fmt = argv[i + 1]
             if fmt not in ("json", "table", "csv"):
-                print(f"[ERROR] Invalid format '{fmt}'. Use: json, table, csv",
-                      file=sys.stderr)
-                sys.exit(1)
+                raise CliError(f"[ERROR] Invalid format '{fmt}'. "
+                               "Use: json, table, csv")
             i += 2
             continue
         else:
@@ -133,10 +133,9 @@ def _extract_global_flags(argv):
 # ---------------------------------------------------------------------------
 
 class _SubcommandParser(argparse.ArgumentParser):
-    """Subparser that prints concise errors instead of full help text."""
+    """Subparser that raises CliError instead of printing full help text."""
     def error(self, message):
-        print(f"[ERROR] {message}", file=sys.stderr)
-        sys.exit(1)
+        raise CliError(f"[ERROR] {message}")
 
 
 def build_parser():
@@ -337,42 +336,43 @@ def main():
         print(HELP_TEXT)
         sys.exit(0)
 
-    parser = build_parser()
-    ns = parser.parse_args(remaining_argv)
-    ns.format = fmt  # inject global format flag
+    try:
+        parser = build_parser()
+        ns = parser.parse_args(remaining_argv)
+        ns.format = fmt  # inject global format flag
 
-    if ns.show_help or not ns.command:
-        print(HELP_TEXT)
-        sys.exit(0)
+        if ns.show_help or not ns.command:
+            print(HELP_TEXT)
+            sys.exit(0)
 
-    cmd = ns.command
+        cmd = ns.command
 
-    if cmd == "version":
-        print(f"codecks-cli {config.VERSION}")
-        sys.exit(0)
+        if cmd == "version":
+            print(f"codecks-cli {config.VERSION}")
+            sys.exit(0)
 
-    if cmd == "setup":
-        cmd_setup()
-        sys.exit(0)
+        if cmd == "setup":
+            cmd_setup()
+            sys.exit(0)
 
-    if cmd == "delete" and not ns.confirm:
-        print("[ERROR] Permanent deletion requires --confirm flag.",
-              file=sys.stderr)
-        print(f"Did you mean: py codecks_api.py archive {ns.card_id}",
-              file=sys.stderr)
-        sys.exit(1)
+        if cmd == "delete" and not ns.confirm:
+            raise CliError(
+                "[ERROR] Permanent deletion requires --confirm flag.\n"
+                f"Did you mean: py codecks_api.py archive {ns.card_id}")
 
-    # Validate token before any API command
-    if cmd not in NO_TOKEN_COMMANDS:
-        _check_token()
+        # Validate token before any API command
+        if cmd not in NO_TOKEN_COMMANDS:
+            _check_token()
 
-    handler = DISPATCH.get(cmd)
-    if handler:
-        handler(ns)
-    else:
-        print(f"[ERROR] Unknown command: {cmd}", file=sys.stderr)
-        print(HELP_TEXT)
-        sys.exit(1)
+        handler = DISPATCH.get(cmd)
+        if handler:
+            handler(ns)
+        else:
+            raise CliError(f"[ERROR] Unknown command: {cmd}")
+
+    except CliError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(e.exit_code)
 
 
 if __name__ == "__main__":
