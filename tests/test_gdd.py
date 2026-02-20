@@ -1,0 +1,184 @@
+"""Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id."""
+
+import pytest
+from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id
+
+
+# ---------------------------------------------------------------------------
+# _extract_google_doc_id
+# ---------------------------------------------------------------------------
+
+class TestExtractGoogleDocId:
+    def test_full_url(self):
+        url = "https://docs.google.com/document/d/1aBcDeFgHiJkLmNoPqRs/edit"
+        assert _extract_google_doc_id(url) == "1aBcDeFgHiJkLmNoPqRs"
+
+    def test_bare_id(self):
+        assert _extract_google_doc_id("1aBcDeFgHiJkLmNoPqRsTuVwXyZ") == \
+            "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+
+    def test_short_string_returns_none(self):
+        assert _extract_google_doc_id("short") is None
+
+    def test_url_with_params(self):
+        url = "https://docs.google.com/document/d/ABC123_def-456/edit?usp=sharing"
+        assert _extract_google_doc_id(url) == "ABC123_def-456"
+
+
+# ---------------------------------------------------------------------------
+# _fuzzy_match
+# ---------------------------------------------------------------------------
+
+class TestFuzzyMatch:
+    def test_exact_match(self):
+        titles = {"customer system": "c1", "economy": "c2"}
+        assert _fuzzy_match("Customer System", titles) == "customer system"
+
+    def test_substring_match(self):
+        titles = {"flavor map system": "c1"}
+        assert _fuzzy_match("Flavor Map System (2D)", titles) == "flavor map system"
+
+    def test_reverse_substring(self):
+        """Needle substring of haystack title — should match when both > 5 chars."""
+        titles = {"complete customer system (arrival queue, requests, rating)": "c1"}
+        assert _fuzzy_match("Customer System", titles) == "complete customer system (arrival queue, requests, rating)"
+
+    def test_no_match(self):
+        titles = {"something else": "c1"}
+        assert _fuzzy_match("Totally Different", titles) is None
+
+    def test_short_strings_exact_only(self):
+        """Strings <= 5 chars should only match exactly, not by substring."""
+        titles = {"abc": "c1", "abcdef": "c2"}
+        assert _fuzzy_match("abc", titles) == "abc"
+        assert _fuzzy_match("ab", titles) is None
+
+    def test_case_insensitive(self):
+        titles = {"dialogue system": "c1"}
+        assert _fuzzy_match("DIALOGUE SYSTEM", titles) == "dialogue system"
+
+
+# ---------------------------------------------------------------------------
+# parse_gdd
+# ---------------------------------------------------------------------------
+
+class TestParseGdd:
+    def test_basic_structure(self):
+        content = """# Game Design Doc
+
+## Core Gameplay
+- Player movement
+- Combat system
+
+## Economy
+- Currency
+"""
+        sections = parse_gdd(content)
+        assert len(sections) == 2
+        assert sections[0]["section"] == "Core Gameplay"
+        assert len(sections[0]["tasks"]) == 2
+        assert sections[0]["tasks"][0]["title"] == "Player movement"
+        assert sections[0]["tasks"][1]["title"] == "Combat system"
+        assert sections[1]["section"] == "Economy"
+        assert len(sections[1]["tasks"]) == 1
+
+    def test_priority_tag(self):
+        sections = parse_gdd("## S\n- Task [P:a]\n")
+        assert sections[0]["tasks"][0]["priority"] == "a"
+        assert sections[0]["tasks"][0]["title"] == "Task"
+
+    def test_effort_tag(self):
+        sections = parse_gdd("## S\n- Task [E:5]\n")
+        assert sections[0]["tasks"][0]["effort"] == 5
+
+    def test_combined_tag(self):
+        sections = parse_gdd("## S\n- Task [P:b E:3]\n")
+        task = sections[0]["tasks"][0]
+        assert task["priority"] == "b"
+        assert task["effort"] == 3
+        assert task["title"] == "Task"
+
+    def test_separate_tags(self):
+        sections = parse_gdd("## S\n- Task [P:c] [E:8]\n")
+        task = sections[0]["tasks"][0]
+        assert task["priority"] == "c"
+        assert task["effort"] == 8
+
+    def test_sub_items_become_content(self):
+        content = """## S
+- Main task
+  - Sub item 1
+  - Sub item 2
+"""
+        sections = parse_gdd(content)
+        task = sections[0]["tasks"][0]
+        assert task["title"] == "Main task"
+        assert "Sub item 1" in task["content"]
+        assert "Sub item 2" in task["content"]
+
+    def test_blank_lines_separate_tasks(self):
+        content = """## S
+- Task A
+
+- Task B
+"""
+        sections = parse_gdd(content)
+        assert len(sections[0]["tasks"]) == 2
+
+    def test_asterisk_bullets(self):
+        content = """## S
+* Task with asterisk
+"""
+        sections = parse_gdd(content)
+        assert sections[0]["tasks"][0]["title"] == "Task with asterisk"
+
+    def test_h1_ignored(self):
+        content = """# Title
+## Section
+- Task
+"""
+        sections = parse_gdd(content)
+        assert len(sections) == 1
+        assert sections[0]["section"] == "Section"
+
+    def test_empty_content(self):
+        assert parse_gdd("") == []
+
+    def test_no_sections(self):
+        assert parse_gdd("Just some text\nNo structure here") == []
+
+    def test_tasks_before_section_go_to_uncategorized(self):
+        content = "- Orphan task\n## Real Section\n- Normal task\n"
+        sections = parse_gdd(content)
+        assert sections[0]["section"] == "Uncategorized"
+        assert sections[0]["tasks"][0]["title"] == "Orphan task"
+        assert sections[1]["section"] == "Real Section"
+
+    def test_plain_text_after_task_appended_to_content(self):
+        content = """## S
+- Main task
+Some continuation text
+More text
+"""
+        sections = parse_gdd(content)
+        task = sections[0]["tasks"][0]
+        assert "continuation text" in task["content"]
+        assert "More text" in task["content"]
+
+    def test_priority_case_insensitive(self):
+        sections = parse_gdd("## S\n- Task [P:A]\n")
+        assert sections[0]["tasks"][0]["priority"] == "a"
+
+    def test_empty_section_no_crash(self):
+        content = "## Empty Section\n## Another\n- Task\n"
+        sections = parse_gdd(content)
+        assert sections[0]["section"] == "Empty Section"
+        assert sections[0]["tasks"] == []
+        assert sections[1]["tasks"][0]["title"] == "Task"
+
+    def test_tag_stripped_from_title(self):
+        """Tags should be removed from the title text."""
+        sections = parse_gdd("## S\n- Build system [P:a E:5]\n")
+        assert sections[0]["tasks"][0]["title"] == "Build system"
+        assert "[P:" not in sections[0]["tasks"][0]["title"]
+        assert "[E:" not in sections[0]["tasks"][0]["title"]
