@@ -1,0 +1,226 @@
+"""
+HTTP request layer, security helpers, and token validation for codecks-cli.
+"""
+
+import json
+import re
+import socket
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import config
+
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+def _mask_token(token):
+    """Show only first 6 chars of a token for safe logging."""
+    return token[:6] + "..." if len(token) > 6 else token
+
+
+def _safe_json_parse(text, context="input"):
+    """Parse JSON with friendly error message on failure."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def _sanitize_error(body, max_len=500):
+    """Truncate and clean error body for safe display."""
+    if not body:
+        return ""
+    cleaned = re.sub(r'<[^>]+>', '', body)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    if len(cleaned) > max_len:
+        return cleaned[:max_len] + "... [truncated]"
+    return cleaned
+
+
+def _try_call(fn, *args, **kwargs):
+    """Call a function that might sys.exit(), returning None on failure."""
+    try:
+        return fn(*args, **kwargs)
+    except SystemExit:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# HTTP request layer
+# ---------------------------------------------------------------------------
+
+def session_request(path="/", data=None, method="POST"):
+    """Make an authenticated request using the session token (at cookie).
+    Used for reading data and dispatch mutations."""
+    url = config.BASE_URL + path
+    headers = {
+        "X-Auth-Token": config.SESSION_TOKEN,
+        "X-Account": config.ACCOUNT,
+        "Content-Type": "application/json",
+    }
+    body = json.dumps(data).encode("utf-8") if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                return json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else ""
+        if e.code in (401, 403):
+            print("[TOKEN_EXPIRED] The Codecks session token has expired. "
+                  "Please provide a fresh 'at' cookie from browser DevTools "
+                  "(Brave > F12 > Network > api.codecks.io request > Cookie header > at=...).",
+                  file=sys.stderr)
+            sys.exit(2)
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
+        print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+
+def report_request(content, severity=None, email=None):
+    """Create a card via the Report Token endpoint (stable, no expiry)."""
+    if not config.REPORT_TOKEN:
+        print("[ERROR] CODECKS_REPORT_TOKEN not set in .env. Run: py codecks_api.py generate-token",
+              file=sys.stderr)
+        sys.exit(1)
+    payload = {"content": content}
+    if severity:
+        payload["severity"] = severity
+    if email:
+        payload["userEmail"] = email
+    # NOTE: Token in URL query param is required by Codecks API design.
+    # Mitigate by treating report tokens as rotatable credentials.
+    url = f"{config.BASE_URL}/user-report/v1/create-report?token={config.REPORT_TOKEN}"
+    headers = {"Content-Type": "application/json"}
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                return json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else ""
+        if e.code == 401:
+            print("[ERROR] Report token is invalid or disabled. Generate a new one: "
+                  "py codecks_api.py generate-token", file=sys.stderr)
+            sys.exit(1)
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
+        print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+
+def generate_report_token(label="claude-code"):
+    """Use the Access Key to create a new Report Token and save it to .env."""
+    if not config.ACCESS_KEY:
+        print("[ERROR] CODECKS_ACCESS_KEY not set in .env.", file=sys.stderr)
+        sys.exit(1)
+    # NOTE: Access key in URL query param is required by Codecks API design.
+    url = f"{config.BASE_URL}/user-report/v1/create-report-token?accessKey={config.ACCESS_KEY}"
+    headers = {"Content-Type": "application/json"}
+    body = json.dumps({"label": label}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            try:
+                result = json.loads(resp.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                print("[ERROR] Unexpected response from Codecks API (not valid JSON).",
+                      file=sys.stderr)
+                sys.exit(1)
+            if result.get("ok") and result.get("token"):
+                config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
+                return result
+            print("[ERROR] Unexpected response:", result, file=sys.stderr)
+            sys.exit(1)
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else ""
+        print(f"[ERROR] HTTP {e.code}: {e.reason}", file=sys.stderr)
+        print(_sanitize_error(error_body), file=sys.stderr)
+        sys.exit(1)
+    except socket.timeout:
+        print("[ERROR] Request timed out after 30 seconds. Is Codecks API reachable?",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"[ERROR] Connection failed: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Query and dispatch helpers
+# ---------------------------------------------------------------------------
+
+def query(q):
+    """Run a Codecks query (uses session token)."""
+    result = session_request("/", {"query": q})
+    result.pop("_root", None)
+    return result
+
+
+def dispatch(path, data):
+    """Generic dispatch call for mutations (uses session token)."""
+    return session_request(f"/dispatch/{path}", data)
+
+
+def warn_if_empty(result, relation):
+    """Warn if a query returned no results — likely means the token expired.
+    Codecks silently returns empty data instead of 401 when unauthenticated."""
+    if relation not in result or not result[relation]:
+        print(f"[TOKEN_EXPIRED] The Codecks session token may have expired "
+              f"(query returned 0 {relation}s). Please provide a fresh 'at' "
+              "cookie from browser DevTools "
+              "(Brave > F12 > Network > api.codecks.io request > Cookie header > at=...).",
+              file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Token validation
+# ---------------------------------------------------------------------------
+
+def _check_token():
+    """Validate session token before running a command. Exits if expired."""
+    if not config.SESSION_TOKEN or not config.ACCOUNT:
+        print("[SETUP_NEEDED] No configuration found.\n"
+              "  Run: py codecks_api.py setup",
+              file=sys.stderr)
+        sys.exit(2)
+    try:
+        result = session_request("/", {"query": {"_root": [{"account": ["id"]}]}})
+    except SystemExit:
+        # session_request already printed TOKEN_EXPIRED for 401/403
+        print("  Run: py codecks_api.py setup", file=sys.stderr)
+        raise
+    if "account" not in result or not result["account"]:
+        print("[TOKEN_EXPIRED] Your session token has expired.\n"
+              "  Run: py codecks_api.py setup\n"
+              "  Or update CODECKS_TOKEN in .env manually.",
+              file=sys.stderr)
+        sys.exit(2)

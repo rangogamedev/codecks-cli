@@ -1,36 +1,41 @@
 # CLAUDE.md — codecks-cli
 
-Single-file Python CLI (`codecks_api.py`, ~2500 lines) for managing Codecks project cards. Zero external dependencies (stdlib only). Public repo, MIT license.
+Multi-module Python CLI for managing Codecks project cards. Zero external dependencies (stdlib only). Public repo, MIT license.
 
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Version**: `VERSION` constant in `codecks_api.py` (currently 0.4.0)
+- **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
 
-**File layout** (single file, top-to-bottom):
-1. Module docstring (doubles as CLI help) → imports → `load_env`/`save_env_value`
-2. `VERSION` + module globals (tokens, constants, `_cache`)
-3. Security helpers (`_mask_token`, `_safe_json_parse`, `_sanitize_error`, `_try_call`, `_check_token`)
-4. Google OAuth2 helpers
-5. HTTP layer (`session_request`, `report_request`, `generate_report_token`)
-6. Config helpers (`_load_project_names`, `_load_milestone_names`, `_load_users`)
-7. Query helpers (`query`, `get_account`, `list_decks`, `list_cards`, `get_card`, `list_activity`, etc.)
-8. Enrichment (`_enrich_cards` — resolves deck/milestone/owner names, normalizes tags)
-9. Mutations (`create_card`, `update_card`, `archive_card`, `delete_card`, `bulk_status`, `dispatch`)
-9b. Hand helpers (`_get_user_id`, `list_hand`, `add_to_hand`, `remove_from_hand`)
-10. Resolution (`_resolve_deck_id`, `_resolve_milestone_id` — case-insensitive, exit on not-found)
-10. Setup wizard (`_setup_discover_projects/milestones`, `cmd_setup`)
-11. GDD helpers (`fetch_gdd`, `parse_gdd`, `sync_gdd`)
-12. Output formatters (`output`, `_format_*_table`, `_format_cards_csv`, `_mutation_response`)
-13. `parse_flags` → `main()` if/elif dispatch
+**Module layout** (~3000 lines across 7 files):
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `codecks_api.py` | ~700 | Entry point: `__doc__`, `parse_flags()`, `main()` dispatch |
+| `config.py` | ~95 | Shared state: env, tokens, constants, `load_env()`, `save_env_value()` |
+| `api.py` | ~225 | HTTP layer: `session_request`, `query`, `dispatch`, token validation |
+| `cards.py` | ~570 | Card CRUD, hand, conversations, name resolution, enrichment |
+| `formatters.py` | ~470 | All `_format_*` functions, `output()`, `_mutation_response()` |
+| `gdd.py` | ~540 | Google OAuth2, GDD fetch/parse/sync |
+| `setup_wizard.py` | ~400 | Interactive setup wizard |
+
+**Dependency graph** (no circular imports):
+```
+config.py          ← pure data, no project imports
+api.py             ← config
+cards.py           ← config, api
+formatters.py      ← config, cards
+gdd.py             ← config, cards
+setup_wizard.py    ← config, api, cards
+codecks_api.py     ← all modules
+```
 
 **Key patterns:**
-- Module-level globals for tokens — `cmd_setup()` uses `global` declarations to update them
-- `_try_call(fn)` wraps functions that may `sys.exit()` — returns `None` on failure
-- `output(data, formatter, fmt, csv_formatter)` dispatches JSON (default) / table / CSV
-- `_cache` dict caches deck lookups per-invocation
+- Module-level state lives in `config.py` — setup wizard updates via `config.SESSION_TOKEN = ...`
+- `_try_call(fn)` in `api.py` wraps functions that may `sys.exit()` — returns `None` on failure
+- `output(data, formatter, fmt, csv_formatter)` in `formatters.py` dispatches JSON/table/CSV
+- `config._cache` dict caches deck lookups per-invocation
 - Card lists omit `content` for token efficiency; `--search` adds it back
 - Errors/warnings → `sys.stderr`. Data → `sys.stdout`
 - `sys.stdout.reconfigure(encoding='utf-8')` for Windows Unicode support
@@ -72,8 +77,9 @@ Due dates, Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, V
 Invalid → `[ERROR]` with valid options listed.
 
 ## Commands Quick Reference
-**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --sort --stats --hand --archived`), `card <id>`, `decks`, `projects`, `milestones`, `activity` (`--limit`)
+**Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --sort --stats --hand --hero <id> --type hero|doc --archived`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`)
 **Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
+**Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
 **Mutate:** `create <title>` (`--deck --project --content --severity --doc`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
 **GDD:** `gdd` (`--refresh --file --save-cache`), `gdd-sync` (`--project --section --apply --quiet --refresh --file`), `gdd-auth`, `gdd-revoke`
 **Other:** `setup`, `generate-token --label`, `query <json>`, `dispatch <path> <json>`
