@@ -4,6 +4,7 @@ Standalone module — no imports from other project files.
 """
 
 import os
+import tempfile
 
 # ---------------------------------------------------------------------------
 # .env path and helpers
@@ -25,7 +26,7 @@ def load_env():
 
 
 def save_env_value(key, value):
-    """Update or add a key in the .env file."""
+    """Update or add a key in the .env file (atomic write-then-rename)."""
     lines = []
     found = False
     if os.path.exists(ENV_PATH):
@@ -38,8 +39,27 @@ def save_env_value(key, value):
             break
     if not found:
         lines.append(f"{key}={value}\n")
-    with open(ENV_PATH, "w") as f:
-        f.writelines(lines)
+    # Write to temp file then rename for crash-safety.
+    env_dir = os.path.dirname(ENV_PATH) or "."
+    fd, tmp_path = tempfile.mkstemp(dir=env_dir, prefix=".env_tmp_")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.writelines(lines)
+        # Atomic rename (overwrites on POSIX; Windows needs remove first).
+        try:
+            os.replace(tmp_path, ENV_PATH)
+        except OSError:
+            # Fallback for very old Windows versions without os.replace().
+            if os.path.exists(ENV_PATH):
+                os.remove(ENV_PATH)
+            os.rename(tmp_path, ENV_PATH)
+    except Exception:
+        # Clean up temp file on any failure.
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
     # Restrict to owner-only on Unix/Mac. No-op on Windows.
     try:
         os.chmod(ENV_PATH, 0o600)

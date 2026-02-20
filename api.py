@@ -16,6 +16,8 @@ import uuid
 import config
 from config import CliError, SetupError
 
+_RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
+
 
 # ---------------------------------------------------------------------------
 # Security helpers
@@ -209,7 +211,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
         except urllib.error.HTTPError as e:
             error_body = (e.read(config.HTTP_MAX_RESPONSE_BYTES).decode(
                 "utf-8", errors="replace") if e.fp else "")
-            retryable = e.code in (429, 502, 503, 504)
+            retryable = e.code in _RETRYABLE_HTTP_CODES
             can_retry = idempotent and attempt < max_attempts - 1 and retryable
             if sampled:
                 _log_http_event(
@@ -317,7 +319,7 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
             f"HTTP {e.code}: {e.reason}",
             status=e.code,
             request_id=server_req_id,
-            retryable=e.code in (429, 502, 503, 504),
+            retryable=e.code in _RETRYABLE_HTTP_CODES,
             detail=_sanitize_error(e.body),
         ))
 
@@ -352,7 +354,7 @@ def report_request(content, severity=None, email=None):
             f"HTTP {e.code}: {e.reason}",
             status=e.code,
             request_id=server_req_id,
-            retryable=e.code in (429, 502, 503, 504),
+            retryable=e.code in _RETRYABLE_HTTP_CODES,
             detail=_sanitize_error(e.body),
         ))
 
@@ -377,7 +379,7 @@ def generate_report_token(label="claude-code"):
             f"HTTP {e.code}: {e.reason}",
             status=e.code,
             request_id=server_req_id,
-            retryable=e.code in (429, 502, 503, 504),
+            retryable=e.code in _RETRYABLE_HTTP_CODES,
             detail=_sanitize_error(e.body),
         ))
     if result.get("ok") and result.get("token"):

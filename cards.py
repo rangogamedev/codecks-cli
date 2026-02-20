@@ -58,6 +58,16 @@ def load_users():
 # Query helpers
 # ---------------------------------------------------------------------------
 
+def _get_field(d, snake, camel):
+    """Get a value from a dict trying snake_case then camelCase key."""
+    return d.get(snake) or d.get(camel)
+
+
+def get_card_tags(card):
+    """Get normalized tag list from a card dict (handles API key variants)."""
+    return card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+
+
 def _filter_cards(result, predicate):
     """Filter result['card'] dict by predicate(key, card). Returns result."""
     result["card"] = {k: v for k, v in result.get("card", {}).items()
@@ -95,8 +105,8 @@ def _parse_date(date_str):
     """Parse a YYYY-MM-DD date string into a datetime. Raises CliError on bad format."""
     try:
         return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except ValueError:
-        raise CliError(f"[ERROR] Invalid date '{date_str}'. Use YYYY-MM-DD format.")
+    except ValueError as e:
+        raise CliError(f"[ERROR] Invalid date '{date_str}'. Use YYYY-MM-DD format.") from e
 
 
 def _parse_iso_timestamp(ts):
@@ -180,7 +190,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             hint = f" Available: {', '.join(available)}" if available else ""
             raise CliError(f"[ERROR] Project '{project_filter}' not found.{hint}")
         _filter_cards(result, lambda k, c:
-                      (c.get("deck_id") or c.get("deckId")) in project_deck_ids)
+                      _get_field(c, "deck_id", "deckId") in project_deck_ids)
 
     # Client-side text search
     if search_filter:
@@ -193,14 +203,14 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
     if milestone_filter:
         milestone_id = resolve_milestone_id(milestone_filter)
         _filter_cards(result, lambda k, c:
-                      (c.get("milestone_id") or c.get("milestoneId")) == milestone_id)
+                      _get_field(c, "milestone_id", "milestoneId") == milestone_id)
 
     # Client-side tag filter
     if tag_filter:
         tag_lower = tag_filter.lower()
         _filter_cards(result, lambda k, c:
                       any(t.lower() == tag_lower
-                          for t in (c.get("master_tags") or c.get("masterTags") or [])))
+                          for t in get_card_tags(c)))
 
     # Client-side owner filter
     if owner_filter:
@@ -236,7 +246,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
         def _stale_pred(k, c):
             ts = _parse_iso_timestamp(
-                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+                _get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts < cutoff
         _filter_cards(result, _stale_pred)
 
@@ -244,7 +254,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         after_dt = _parse_date(updated_after)
         def _after_pred(k, c):
             ts = _parse_iso_timestamp(
-                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+                _get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts >= after_dt
         _filter_cards(result, _after_pred)
 
@@ -252,7 +262,7 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
         before_dt = _parse_date(updated_before)
         def _before_pred(k, c):
             ts = _parse_iso_timestamp(
-                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+                _get_field(c, "last_updated_at", "lastUpdatedAt"))
             return ts is not None and ts < before_dt
         _filter_cards(result, _before_pred)
 
@@ -274,7 +284,7 @@ def _build_project_map(decks_result):
     project_names = load_project_names()
     project_decks = {}
     for key, deck in decks_result.get("deck", {}).items():
-        pid = deck.get("project_id") or deck.get("projectId")
+        pid = _get_field(deck, "project_id", "projectId")
         if pid:
             if pid not in project_decks:
                 project_decks[pid] = {"deck_ids": set(), "deck_titles": []}
@@ -311,7 +321,7 @@ def list_milestones():
     result = list_cards()
     used_ids = {}
     for key, card in result.get("card", {}).items():
-        mid = card.get("milestone_id") or card.get("milestoneId")
+        mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
             if mid not in used_ids:
                 used_ids[mid] = []
@@ -373,10 +383,10 @@ def enrich_cards(cards_dict, user_data=None):
         user_names = load_users()
 
     for key, card in cards_dict.items():
-        did = card.get("deck_id") or card.get("deckId")
+        did = _get_field(card, "deck_id", "deckId")
         if did:
             card["deck_name"] = deck_names.get(did, did)
-        mid = card.get("milestone_id") or card.get("milestoneId")
+        mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
             card["milestone_name"] = milestone_names.get(mid, mid)
         # Resolve owner name
@@ -384,10 +394,9 @@ def enrich_cards(cards_dict, user_data=None):
         if assignee:
             card["owner_name"] = user_names.get(assignee, assignee)
         # Normalize tags field
-        tags = card.get("master_tags") or card.get("masterTags") or []
-        card["tags"] = tags
+        card["tags"] = get_card_tags(card)
         # Sub-card info
-        child_info = card.get("child_card_info") or card.get("childCardInfo")
+        child_info = _get_field(card, "child_card_info", "childCardInfo")
         if child_info:
             if isinstance(child_info, str):
                 try:
@@ -511,10 +520,10 @@ def _get_user_id():
     ]}]})
     for entry in (result.get("accountRole") or {}).values():
         if entry.get("role") == "owner":
-            return entry.get("userId") or entry.get("user_id")
+            return _get_field(entry, "user_id", "userId")
     # Fallback: first role found
     for entry in (result.get("accountRole") or {}).values():
-        uid = entry.get("userId") or entry.get("user_id")
+        uid = _get_field(entry, "user_id", "userId")
         if uid:
             return uid
     raise CliError("[ERROR] Could not determine your user ID. "

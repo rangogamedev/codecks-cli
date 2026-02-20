@@ -8,7 +8,7 @@ import sys
 import config
 from api import _try_call, _mask_token, query, generate_report_token
 from cards import (get_account, list_decks, list_cards,
-                   load_project_names, load_milestone_names)
+                   load_project_names, load_milestone_names, _get_field)
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ def _setup_discover_projects():
 
     project_decks = {}
     for key, deck in decks_result.get("deck", {}).items():
-        pid = deck.get("project_id") or deck.get("projectId")
+        pid = _get_field(deck, "project_id", "projectId")
         if pid:
             if pid not in project_decks:
                 project_decks[pid] = []
@@ -73,7 +73,7 @@ def _setup_discover_milestones():
     # Group cards by milestone
     milestone_cards = {}
     for key, card in cards_result.get("card", {}).items():
-        mid = card.get("milestone_id") or card.get("milestoneId")
+        mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
             if mid not in milestone_cards:
                 milestone_cards[mid] = []

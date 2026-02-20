@@ -5,6 +5,7 @@ Each cmd_*() function receives an argparse.Namespace and handles one CLI command
 
 import json
 import sys
+from datetime import datetime, timezone, timedelta
 
 import config
 from config import CliError
@@ -20,7 +21,8 @@ from cards import (get_account, list_decks, list_cards, get_card,
                    create_comment, reply_comment, close_comment,
                    reopen_comment, get_conversations,
                    resolve_deck_id, resolve_milestone_id,
-                   get_project_deck_ids, load_users, load_project_names)
+                   get_project_deck_ids, load_users, load_project_names,
+                   _parse_iso_timestamp, _get_field)
 from formatters import (output, mutation_response,
                         format_account_table, format_cards_table,
                         format_card_detail, format_conversations_table,
@@ -131,7 +133,7 @@ def cmd_decks(ns):
     cards_result = list_cards()
     deck_counts = {}
     for card in cards_result.get("card", {}).values():
-        did = card.get("deck_id") or card.get("deckId")
+        did = _get_field(card, "deck_id", "deckId")
         if did:
             deck_counts[did] = deck_counts.get(did, 0) + 1
     decks_result["_deck_counts"] = deck_counts
@@ -185,7 +187,7 @@ def cmd_cards(ns):
     if card_type:
         if card_type == "doc":
             result["card"] = {k: v for k, v in result.get("card", {}).items()
-                              if v.get("is_doc") or v.get("isDoc")}
+                              if _get_field(v, "is_doc", "isDoc")}
         elif card_type == "hero":
             card_filter = json.dumps({"visibility": "default"})
             hero_q = {"_root": [{"account": [{
@@ -441,17 +443,7 @@ def cmd_update(ns):
         if ns.owner.lower() == "none":
             update_kwargs["assigneeId"] = None
         else:
-            user_map = load_users()
-            owner_id = None
-            for uid, name in user_map.items():
-                if name.lower() == ns.owner.lower():
-                    owner_id = uid
-                    break
-            if owner_id is None:
-                available = list(user_map.values())
-                hint = f" Available: {', '.join(available)}" if available else ""
-                raise CliError(f"[ERROR] Owner '{ns.owner}' not found.{hint}")
-            update_kwargs["assigneeId"] = owner_id
+            update_kwargs["assigneeId"] = _resolve_owner_id(ns.owner)
 
     if ns.tag is not None:
         if ns.tag.lower() == "none":
@@ -533,7 +525,7 @@ def cmd_hand(ns):
         # Sort by hand sort order (sortIndex from queueEntries)
         sort_map = {}
         for entry in (hand_result.get("queueEntry") or {}).values():
-            cid = entry.get("card") or entry.get("cardId")
+            cid = _get_field(entry, "card", "cardId")
             if cid:
                 sort_map[cid] = entry.get("sortIndex", 0) or 0
         result["card"] = dict(sorted(result["card"].items(),
@@ -570,7 +562,6 @@ def cmd_activity(ns):
 
 def cmd_pm_focus(ns):
     """Show focused PM dashboard: blocked, in_review, hand, stale, and suggested."""
-    from datetime import datetime, timezone, timedelta
     result = list_cards(project_filter=ns.project, owner_filter=ns.owner)
     cards = enrich_cards(result.get("card", {}), result.get("user"))
     hand_ids = extract_hand_card_ids(list_hand())
@@ -600,9 +591,8 @@ def cmd_pm_focus(ns):
             candidates.append(row)
         # Stale: started or in_review cards not updated in stale_days
         if status in ("started", "in_review"):
-            from cards import _parse_iso_timestamp
             updated = _parse_iso_timestamp(
-                card.get("lastUpdatedAt") or card.get("last_updated_at"))
+                _get_field(card, "last_updated_at", "lastUpdatedAt"))
             if updated and updated < cutoff:
                 stale.append(row)
 
@@ -636,8 +626,6 @@ def cmd_pm_focus(ns):
 
 def cmd_standup(ns):
     """Show daily standup summary: recently done, in progress, blocked, hand."""
-    from datetime import datetime, timezone, timedelta
-    from cards import _parse_iso_timestamp
     days = ns.days
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -656,7 +644,7 @@ def cmd_standup(ns):
 
         if status == "done":
             updated = _parse_iso_timestamp(
-                card.get("lastUpdatedAt") or card.get("last_updated_at"))
+                _get_field(card, "last_updated_at", "lastUpdatedAt"))
             if updated and updated >= cutoff:
                 recently_done.append(row)
 

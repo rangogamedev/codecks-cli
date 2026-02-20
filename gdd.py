@@ -265,8 +265,10 @@ def _run_google_auth_flow():
     webbrowser.open(auth_url)
 
     # Wait for the callback (one request only)
-    server.handle_request()
-    server.server_close()
+    try:
+        server.handle_request()
+    finally:
+        server.server_close()
 
     if server_error[0]:
         raise CliError(f"[ERROR] Authorization denied: {server_error[0]}")

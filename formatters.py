@@ -10,7 +10,8 @@ import re
 import sys
 
 import config
-from cards import load_project_names, load_milestone_names, load_users
+from cards import (load_project_names, load_milestone_names, load_users,
+                    get_card_tags, _get_field)
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +64,24 @@ def mutation_response(action, card_id=None, details=None, data=None, fmt="json")
         print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _card_section(lines, title, items):
+    """Append a titled card section to *lines*. Shared by pm-focus and standup."""
+    lines.append(f"{title} ({len(items)}):")
+    if not items:
+        lines.append("  - none")
+        lines.append("")
+        return
+    for c in items:
+        pri = c.get("priority") or "-"
+        effort = c.get("effort")
+        eff = "-" if effort is None else str(effort)
+        lines.append(
+            f"  - [{pri}] E:{eff} {c['title']} "
+            f"({c.get('deck_name') or c.get('deck') or '-'}) {c['id']}"
+        )
+    lines.append("")
+
+
 def format_pm_focus_table(report):
     """Format pm-focus report for human reading."""
     counts = report.get("counts", {})
@@ -77,29 +96,12 @@ def format_pm_focus_table(report):
         f"Stale: {counts.get('stale', 0)}",
         "",
     ]
-
-    def _section(title, items):
-        lines.append(f"{title} ({len(items)}):")
-        if not items:
-            lines.append("  - none")
-            lines.append("")
-            return
-        for c in items:
-            pri = c.get("priority") or "-"
-            effort = c.get("effort")
-            eff = "-" if effort is None else str(effort)
-            lines.append(
-                f"  - [{pri}] E:{eff} {c['title']} "
-                f"({c.get('deck_name') or c.get('deck') or '-'}) {c['id']}"
-            )
-        lines.append("")
-
-    _section("Blocked", report.get("blocked", []))
-    _section("In Review", report.get("in_review", []))
-    _section("In Hand", report.get("hand", []))
+    _card_section(lines, "Blocked", report.get("blocked", []))
+    _card_section(lines, "In Review", report.get("in_review", []))
+    _card_section(lines, "In Hand", report.get("hand", []))
     if report.get("stale"):
-        _section(f"Stale (>{stale_days}d)", report.get("stale", []))
-    _section("Suggested Next", report.get("suggested", []))
+        _card_section(lines, f"Stale (>{stale_days}d)", report.get("stale", []))
+    _card_section(lines, "Suggested Next", report.get("suggested", []))
     return "\n".join(lines)
 
 
@@ -111,27 +113,10 @@ def format_standup_table(report):
         "=" * 50,
         "",
     ]
-
-    def _section(title, items):
-        lines.append(f"{title} ({len(items)}):")
-        if not items:
-            lines.append("  - none")
-            lines.append("")
-            return
-        for c in items:
-            pri = c.get("priority") or "-"
-            effort = c.get("effort")
-            eff = "-" if effort is None else str(effort)
-            lines.append(
-                f"  - [{pri}] E:{eff} {c['title']} "
-                f"({c.get('deck_name') or c.get('deck') or '-'}) {c['id']}"
-            )
-        lines.append("")
-
-    _section(f"Done (last {days}d)", report.get("recently_done", []))
-    _section("In Progress", report.get("in_progress", []))
-    _section("Blocked", report.get("blocked", []))
-    _section("In Hand", report.get("hand", []))
+    _card_section(lines, f"Done (last {days}d)", report.get("recently_done", []))
+    _card_section(lines, "In Progress", report.get("in_progress", []))
+    _card_section(lines, "Blocked", report.get("blocked", []))
+    _card_section(lines, "In Hand", report.get("hand", []))
     return "\n".join(lines)
 
 
@@ -210,7 +195,7 @@ def format_cards_table(result):
         sub_count = card.get("sub_card_count")
         if sub_count:
             title_text = f"{title_text} [{sub_count} sub]"
-        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+        tags = get_card_tags(card)
         rows.append((
             card.get("status", ""),
             config.PRI_LABELS.get(card.get("priority"), "-"),
@@ -234,7 +219,7 @@ def format_card_detail(result):
     for key, card in cards.items():
         lines.append(f"Card:      {key}")
         lines.append(f"Title:     {card.get('title', '')}")
-        is_doc = card.get("is_doc") or card.get("isDoc")
+        is_doc = _get_field(card, "is_doc", "isDoc")
         if is_doc:
             lines.append(f"Type:      doc card")
         lines.append(f"Status:    {card.get('status', '')}")
@@ -249,14 +234,14 @@ def format_card_detail(result):
         lines.append(f"Owner:     {card.get('owner_name') or '-'}")
         ms = card.get("milestone_name", card.get("milestone_id"))
         lines.append(f"Milestone: {ms or '-'}")
-        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+        tags = get_card_tags(card)
         lines.append(f"Tags:      {', '.join(tags) if tags else '-'}")
-        parent = card.get("parent_card_id") or card.get("parentCardId")
+        parent = _get_field(card, "parent_card_id", "parentCardId")
         if parent:
             lines.append(f"Hero:      {parent}")
         lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
         lines.append(f"Created:   {card.get('createdAt', '')}")
-        updated = card.get("last_updated_at") or card.get("lastUpdatedAt") or ""
+        updated = _get_field(card, "last_updated_at", "lastUpdatedAt") or ""
         if updated:
             lines.append(f"Updated:   {updated}")
         content = card.get("content", "")
@@ -266,7 +251,7 @@ def format_card_detail(result):
             if body:
                 lines.append(f"Content:   {body[:300]}")
         # Checklist progress
-        cb_stats = card.get("checkbox_stats") or card.get("checkboxStats")
+        cb_stats = _get_field(card, "checkbox_stats", "checkboxStats")
         if cb_stats and isinstance(cb_stats, dict) and cb_stats.get("total", 0) > 0:
             total = cb_stats["total"]
             checked = cb_stats.get("checked", 0)
@@ -300,7 +285,7 @@ def format_card_detail(result):
                 r = resolvable_data.get(rid, {})
                 creator_id = r.get("creator")
                 creator_name = user_data.get(creator_id, {}).get("name", "?") if creator_id else "?"
-                status = "closed" if (r.get("is_closed") or r.get("isClosed")) else "open"
+                status = "closed" if _get_field(r, "is_closed", "isClosed") else "open"
                 lines.append(f"  Thread {rid[:8]}.. ({status}, by {creator_name}):")
                 entries = r.get("entries") or []
                 for eid in entries[:3]:
@@ -337,9 +322,9 @@ def format_conversations_table(result):
             creator_id = r.get("creator")
             creator_name = (user_data.get(creator_id, {}).get("name", "?")
                             if creator_id else "?")
-            is_closed = r.get("is_closed") or r.get("isClosed")
+            is_closed = _get_field(r, "is_closed", "isClosed")
             status = "closed" if is_closed else "open"
-            created = r.get("created_at") or r.get("createdAt") or ""
+            created = _get_field(r, "created_at", "createdAt") or ""
             lines.append(f"  [{status}] Thread {rid} (by {creator_name}, {created})")
             entries = r.get("entries") or []
             for eid in entries:
@@ -348,7 +333,7 @@ def format_conversations_table(result):
                 author_name = (user_data.get(author_id, {}).get("name", "?")
                                if author_id else "?")
                 msg = e.get("content") or ""
-                ts = e.get("created_at") or e.get("createdAt") or ""
+                ts = _get_field(e, "created_at", "createdAt") or ""
                 lines.append(f"    {author_name} ({ts}): {msg[:200]}")
         lines.append("")
     return "\n".join(lines)
@@ -364,7 +349,7 @@ def format_decks_table(result):
     cols = [("Title", 30), ("Project", 20), ("Cards", 6), ("ID", 0)]
     rows = []
     for key, deck in decks.items():
-        pid = deck.get("project_id") or deck.get("projectId") or ""
+        pid = _get_field(deck, "project_id", "projectId") or ""
         did = deck.get("id", key)
         count = deck_counts.get(did, 0)
         rows.append((
@@ -606,7 +591,7 @@ def format_cards_csv(result):
     writer.writerow(["status", "priority", "effort", "deck", "milestone",
                      "owner", "title", "tags", "id"])
     for key, card in cards.items():
-        tags = card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
+        tags = get_card_tags(card)
         writer.writerow([
             card.get("status", ""),
             config.PRI_LABELS.get(card.get("priority"), ""),
