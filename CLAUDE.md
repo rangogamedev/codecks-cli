@@ -3,6 +3,11 @@
 Multi-module Python CLI for managing Codecks project cards. Zero external dependencies (stdlib only).
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 
+## Start Here
+- Read `HANDOFF.md` for the latest implementation state, shipped changes, and near-term priorities.
+- Use this `CLAUDE.md` as the canonical architecture/command reference.
+- If guidance conflicts, treat `HANDOFF.md` as most recent for active work direction.
+
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
