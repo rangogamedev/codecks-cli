@@ -5,11 +5,11 @@ import pytest
 import urllib.error
 from unittest.mock import MagicMock, patch
 
-from config import CliError
+from config import CliError, SetupError
 from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
                  HTTPError, warn_if_empty, session_request, _http_request,
                  _sanitize_url_for_log, _is_sampled_request, query, dispatch,
-                 generate_report_token)
+                 generate_report_token, _check_token)
 
 
 class TestMaskToken:
@@ -256,3 +256,45 @@ class TestGenerateReportTokenLeak:
             generate_report_token()
         msg = str(exc_info.value)
         assert "generate-token" in msg
+
+
+class TestCheckToken:
+    @patch("api.session_request")
+    def test_raises_setup_needed_when_missing_config(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.SESSION_TOKEN", "")
+        monkeypatch.setattr("api.config.ACCOUNT", "")
+        with pytest.raises(SetupError) as exc_info:
+            _check_token()
+        assert "[SETUP_NEEDED]" in str(exc_info.value)
+        assert "setup" in str(exc_info.value).lower()
+        mock_session.assert_not_called()
+
+    @patch("api.session_request")
+    def test_accepts_valid_account_payload(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
+        _check_token()
+        mock_session.assert_called_once()
+
+    @patch("api.session_request")
+    def test_raises_token_expired_on_empty_account(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        mock_session.return_value = {"account": {}}
+        with pytest.raises(SetupError) as exc_info:
+            _check_token()
+        msg = str(exc_info.value)
+        assert "[TOKEN_EXPIRED]" in msg
+        assert "setup" in msg.lower()
+
+    @patch("api.session_request")
+    def test_wraps_setup_error_with_setup_hint(self, mock_session, monkeypatch):
+        monkeypatch.setattr("api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("api.config.ACCOUNT", "acct")
+        mock_session.side_effect = SetupError("[TOKEN_EXPIRED] expired")
+        with pytest.raises(SetupError) as exc_info:
+            _check_token()
+        msg = str(exc_info.value)
+        assert "[TOKEN_EXPIRED]" in msg
+        assert "Run: py codecks_api.py setup" in msg

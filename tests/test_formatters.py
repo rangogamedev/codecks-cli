@@ -9,7 +9,7 @@ from formatters import (
     format_decks_table, format_projects_table, format_milestones_table,
     format_gdd_table, format_cards_csv, format_activity_diff,
     resolve_activity_val, output, format_pm_focus_table,
-    format_standup_table,
+    format_standup_table, format_conversations_table,
 )
 
 
@@ -178,6 +178,45 @@ class TestFormatCardDetail:
         assert "Created:   2026-01-03T00:00:00Z" in result
         assert "0 open, 1 closed" in result
 
+    def test_renders_checklist_and_subcards_and_thread_messages(self):
+        result = format_card_detail({
+            "card": {
+                "hero": {
+                    "title": "Hero Card",
+                    "status": "started",
+                    "checkboxStats": {"total": 4, "checked": 1},
+                    "childCards": ["sub1"],
+                    "resolvables": ["r1"],
+                },
+                "sub1": {
+                    "title": "Sub Task",
+                    "status": "done",
+                },
+            },
+            "resolvable": {
+                "r1": {
+                    "creator": "u1",
+                    "isClosed": False,
+                    "entries": ["e1"],
+                },
+            },
+            "resolvableEntry": {
+                "e1": {
+                    "author": "u2",
+                    "content": "Looks good to me",
+                },
+            },
+            "user": {
+                "u1": {"name": "Alice"},
+                "u2": {"name": "Bob"},
+            },
+        })
+        assert "Checklist: 1/4 (25%)" in result
+        assert "Sub-cards (1):" in result
+        assert "[done] Sub Task" in result
+        assert "Conversations (1: 1 open, 0 closed):" in result
+        assert "Bob: Looks good to me" in result
+
 
 # ---------------------------------------------------------------------------
 # format_stats_table
@@ -325,6 +364,44 @@ class TestFormatActivityTable:
             "card": {},
         })
         assert "2026-01-15 10:30" in result
+
+
+class TestFormatConversationsTable:
+    def test_formats_threads_and_entries(self):
+        result = format_conversations_table({
+            "card": {
+                "c1": {"title": "Card A", "resolvables": ["r1"]},
+            },
+            "resolvable": {
+                "r1": {
+                    "creator": "u1",
+                    "isClosed": True,
+                    "createdAt": "2026-01-15T10:30:00Z",
+                    "entries": ["e1"],
+                },
+            },
+            "resolvableEntry": {
+                "e1": {
+                    "author": "u2",
+                    "createdAt": "2026-01-15T10:31:00Z",
+                    "content": "Please update copy.",
+                },
+            },
+            "user": {
+                "u1": {"name": "Alice"},
+                "u2": {"name": "Bob"},
+            },
+        })
+        assert "Conversations on Card A:" in result
+        assert "[closed] Thread r1" in result
+        assert "Bob (2026-01-15T10:31:00Z): Please update copy." in result
+
+    def test_handles_no_conversations_and_missing_card(self):
+        result = format_conversations_table({
+            "card": {"c1": {"title": "Card A", "resolvables": []}},
+        })
+        assert "No conversations." in result
+        assert "Card not found." in format_conversations_table({"card": {}})
 
 
 # ---------------------------------------------------------------------------

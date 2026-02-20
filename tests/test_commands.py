@@ -277,6 +277,60 @@ class TestUpdateNoFlags:
         assert exc_info.value.exit_code == 1
 
 
+class TestUpdateValidation:
+    @patch("commands.update_card")
+    def test_rejects_invalid_effort_value(self, mock_update):
+        ns = argparse.Namespace(
+            card_ids=["c1"], status=None, priority=None,
+            effort="abc", deck=None, title=None, content=None,
+            milestone=None, hero=None, owner=None, tag=None, doc=None,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_update(ns)
+        assert "Invalid effort value" in str(exc_info.value)
+        mock_update.assert_not_called()
+
+    @patch("commands.update_card")
+    def test_rejects_invalid_doc_value(self, mock_update):
+        ns = argparse.Namespace(
+            card_ids=["c1"], status=None, priority=None,
+            effort=None, deck=None, title=None, content=None,
+            milestone=None, hero=None, owner=None, tag=None, doc="maybe",
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_update(ns)
+        assert "Invalid --doc value" in str(exc_info.value)
+        mock_update.assert_not_called()
+
+    @patch("commands.update_card")
+    def test_rejects_title_with_multiple_cards(self, mock_update):
+        ns = argparse.Namespace(
+            card_ids=["c1", "c2"], status=None, priority=None,
+            effort=None, deck=None, title="Rename", content=None,
+            milestone=None, hero=None, owner=None, tag=None, doc=None,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_update(ns)
+        assert "--title can only be used with a single card" in str(exc_info.value)
+        mock_update.assert_not_called()
+
+    @patch("commands.update_card")
+    def test_rejects_content_with_multiple_cards(self, mock_update):
+        ns = argparse.Namespace(
+            card_ids=["c1", "c2"], status=None, priority=None,
+            effort=None, deck=None, title=None, content="new body",
+            milestone=None, hero=None, owner=None, tag=None, doc=None,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_update(ns)
+        assert "--content can only be used with a single card" in str(exc_info.value)
+        mock_update.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Regression: False TOKEN_EXPIRED on filtered empty results (known bug #1)
 # ---------------------------------------------------------------------------

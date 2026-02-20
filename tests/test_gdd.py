@@ -4,7 +4,8 @@ import pytest
 from unittest.mock import patch, mock_open
 import config
 from config import CliError, SetupError
-from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd, _save_gdd_cache
+from gdd import (parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd,
+                 _save_gdd_cache, fetch_gdd)
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +231,38 @@ class TestSaveGddCache:
         with open(cache_path, "r", encoding="utf-8") as f:
             assert f.read() == "# GDD content"
         mock_chmod.assert_called_once_with(cache_path, 0o600)
+
+
+class TestFetchGdd:
+    def test_reads_local_file(self):
+        with patch("gdd.os.path.exists", return_value=True), \
+                patch("builtins.open", mock_open(read_data="## Core\n- Task A\n")):
+            content = fetch_gdd(local_file="gdd.md")
+        assert "Task A" in content
+
+    def test_local_file_missing_raises(self):
+        with pytest.raises(CliError) as exc_info:
+            fetch_gdd(local_file="does-not-exist.md")
+        assert "File not found" in str(exc_info.value)
+
+    def test_uses_cache_when_available(self, monkeypatch):
+        monkeypatch.setattr(config, "GDD_DOC_URL", "")
+        monkeypatch.setattr(config, "GDD_CACHE_PATH", ".gdd_cache.md")
+        with patch("gdd.os.path.exists", return_value=True), \
+                patch("builtins.open", mock_open(read_data="# cached")):
+            content = fetch_gdd()
+        assert content == "# cached"
+
+    @patch("gdd._save_gdd_cache")
+    def test_refresh_uses_google_fetch_and_saves_cache(self, mock_save, monkeypatch):
+        monkeypatch.setattr(config, "GDD_DOC_URL",
+                            "https://docs.google.com/document/d/ABC123_def-456/edit")
+        monkeypatch.setattr("gdd.os.path.exists", lambda p: False)
+        with patch("gdd._fetch_google_doc_content", return_value="# remote") as mock_fetch:
+            content = fetch_gdd(force_refresh=True)
+        assert content == "# remote"
+        mock_fetch.assert_called_once_with("ABC123_def-456")
+        mock_save.assert_called_once_with("# remote")
 
     def test_chmod_error_does_not_crash(self, tmp_path, monkeypatch):
         cache_path = str(tmp_path / ".gdd_cache.md")
