@@ -78,12 +78,29 @@ def _normalize_dispatch_path(path):
     return normalized
 
 
+def _require_object_payload(value, context):
+    """Require a JSON object payload for raw query/dispatch commands."""
+    if isinstance(value, dict):
+        return value
+    raise CliError(
+        f"[ERROR] Invalid JSON in {context}: expected object, "
+        f"got {type(value).__name__}."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Read commands
 # ---------------------------------------------------------------------------
 
 def cmd_query(ns):
-    q = _safe_json_parse(ns.json_query, "query")
+    q = _require_object_payload(_safe_json_parse(ns.json_query, "query"), "query")
+    if config.RUNTIME_STRICT:
+        root = q.get("_root")
+        if not isinstance(root, list) or not root:
+            raise CliError(
+                "[ERROR] Strict mode: query payload must include non-empty "
+                "'_root' array."
+            )
     output(query(q), fmt=ns.format)
 
 
@@ -481,5 +498,19 @@ def cmd_generate_token(ns):
 
 def cmd_dispatch(ns):
     path = _normalize_dispatch_path(ns.path)
-    result = dispatch(path, _safe_json_parse(ns.json_data, "dispatch data"))
+    payload = _require_object_payload(
+        _safe_json_parse(ns.json_data, "dispatch data"),
+        "dispatch data",
+    )
+    if config.RUNTIME_STRICT:
+        if "/" not in path:
+            raise CliError(
+                "[ERROR] Strict mode: dispatch path should include action "
+                "segment, e.g. cards/update."
+            )
+        if not payload:
+            raise CliError(
+                "[ERROR] Strict mode: dispatch payload cannot be empty."
+            )
+    result = dispatch(path, payload)
     output(result, fmt=ns.format)

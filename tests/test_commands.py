@@ -315,3 +315,43 @@ class TestActivityValidation:
         ns = argparse.Namespace(limit=0, format="json")
         with pytest.raises(CliError):
             cmd_activity(ns)
+
+
+class TestRawCommandValidation:
+    def test_query_requires_object_payload(self):
+        ns = argparse.Namespace(json_query='[1,2,3]', format="json")
+        from commands import cmd_query
+        with pytest.raises(CliError) as exc_info:
+            cmd_query(ns)
+        assert "expected object" in str(exc_info.value)
+
+    def test_query_strict_requires_root(self, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
+        ns = argparse.Namespace(json_query='{"foo":"bar"}', format="json")
+        from commands import cmd_query
+        with pytest.raises(CliError) as exc_info:
+            cmd_query(ns)
+        assert "non-empty '_root' array" in str(exc_info.value)
+
+    @patch("commands.output")
+    @patch("commands.dispatch")
+    def test_dispatch_requires_object_payload(self, mock_dispatch, mock_output):
+        ns = argparse.Namespace(path="cards/update", json_data='["x"]', format="json")
+        with pytest.raises(CliError) as exc_info:
+            cmd_dispatch(ns)
+        assert "expected object" in str(exc_info.value)
+        mock_dispatch.assert_not_called()
+
+    def test_dispatch_strict_requires_action_segment(self, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
+        ns = argparse.Namespace(path="cards", json_data='{"id":"c1"}', format="json")
+        with pytest.raises(CliError) as exc_info:
+            cmd_dispatch(ns)
+        assert "dispatch path should include action segment" in str(exc_info.value)
+
+    def test_dispatch_strict_rejects_empty_payload(self, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
+        ns = argparse.Namespace(path="cards/update", json_data='{}', format="json")
+        with pytest.raises(CliError) as exc_info:
+            cmd_dispatch(ns)
+        assert "dispatch payload cannot be empty" in str(exc_info.value)
