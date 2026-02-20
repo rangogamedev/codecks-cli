@@ -53,6 +53,7 @@ Purpose: Python CLI for an AI agent (or human) to control Codecks (web-based pro
 - API rate limit: 40 requests / 5 seconds.
 - Doc cards cannot accept priority/effort/status updates.
 - Hand operations use `handQueue/*` dispatch and `queueEntries` data.
+- `feature` command uses transaction safety with rollback (best-effort archive of created cards on partial failure).
 
 ## Output/Error Conventions
 - Success mutation prefix: `OK:`

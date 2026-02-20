@@ -271,53 +271,76 @@ def cmd_feature(ns):
           "- [] Integration verified\n\n"
           "Tags: #hero #feature"
     )
-    hero_result = create_card(hero_title, hero_body)
-    hero_id = hero_result.get("cardId")
-    if not hero_id:
-        raise CliError("[ERROR] Hero creation failed: missing cardId.")
-    update_card(hero_id, deckId=hero_deck_id,
-                masterTags=["hero", "feature"], **common_update)
-
     created = []
+    created_ids = []
 
-    def _make_sub(lane, deck_id, tags, checklist_lines):
-        sub_title = f"[{lane}] {ns.title}"
-        sub_body = (
-            "Scope:\n"
-            f"- {lane} lane execution for feature goal\n\n"
-            "Checklist:\n"
-            + "\n".join(f"- [] {line}" for line in checklist_lines)
-            + "\n\nTags: " + " ".join(f"#{t}" for t in tags)
-        )
-        res = create_card(sub_title, sub_body)
-        sub_id = res.get("cardId")
-        if not sub_id:
-            raise CliError(f"[ERROR] {lane} sub-card creation failed: missing cardId.")
-        update_card(
-            sub_id,
-            parentCardId=hero_id,
-            deckId=deck_id,
-            masterTags=tags,
-            **common_update,
-        )
-        created.append({"lane": lane.lower(), "id": sub_id})
+    try:
+        hero_result = create_card(hero_title, hero_body)
+        hero_id = hero_result.get("cardId")
+        if not hero_id:
+            raise CliError("[ERROR] Hero creation failed: missing cardId.")
+        created_ids.append(hero_id)
+        update_card(hero_id, deckId=hero_deck_id,
+                    masterTags=["hero", "feature"], **common_update)
 
-    _make_sub("Code", code_deck_id, ["code", "feature"], [
-        "Implement core logic",
-        "Handle edge cases",
-        "Add tests/verification",
-    ])
-    _make_sub("Design", design_deck_id, ["design", "feel", "economy", "feature"], [
-        "Define target player feel",
-        "Tune balance/economy parameters",
-        "Run playtest and iterate",
-    ])
-    if not ns.skip_art and art_deck_id:
-        _make_sub("Art", art_deck_id, ["art", "feature"], [
-            "Create required assets/content",
-            "Integrate assets in game flow",
-            "Visual quality pass",
+        def _make_sub(lane, deck_id, tags, checklist_lines):
+            sub_title = f"[{lane}] {ns.title}"
+            sub_body = (
+                "Scope:\n"
+                f"- {lane} lane execution for feature goal\n\n"
+                "Checklist:\n"
+                + "\n".join(f"- [] {line}" for line in checklist_lines)
+                + "\n\nTags: " + " ".join(f"#{t}" for t in tags)
+            )
+            res = create_card(sub_title, sub_body)
+            sub_id = res.get("cardId")
+            if not sub_id:
+                raise CliError(
+                    f"[ERROR] {lane} sub-card creation failed: missing cardId.")
+            created_ids.append(sub_id)
+            update_card(
+                sub_id,
+                parentCardId=hero_id,
+                deckId=deck_id,
+                masterTags=tags,
+                **common_update,
+            )
+            created.append({"lane": lane.lower(), "id": sub_id})
+
+        _make_sub("Code", code_deck_id, ["code", "feature"], [
+            "Implement core logic",
+            "Handle edge cases",
+            "Add tests/verification",
         ])
+        _make_sub("Design", design_deck_id, ["design", "feel", "economy", "feature"], [
+            "Define target player feel",
+            "Tune balance/economy parameters",
+            "Run playtest and iterate",
+        ])
+        if not ns.skip_art and art_deck_id:
+            _make_sub("Art", art_deck_id, ["art", "feature"], [
+                "Create required assets/content",
+                "Integrate assets in game flow",
+                "Visual quality pass",
+            ])
+    except Exception as err:
+        # Transaction safety: best-effort compensating rollback.
+        rolled_back = []
+        rollback_failed = []
+        for cid in reversed(created_ids):
+            try:
+                archive_card(cid)
+                rolled_back.append(cid)
+            except Exception:
+                rollback_failed.append(cid)
+        detail = (
+            f"[ERROR] Feature scaffold failed: {err}\n"
+            f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
+            "created cards."
+        )
+        if rollback_failed:
+            detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
+        raise CliError(detail) from err
 
     report = {
         "ok": True,

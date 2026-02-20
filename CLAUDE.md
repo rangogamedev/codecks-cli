@@ -102,6 +102,7 @@ Invalid → `[ERROR]` with valid options listed.
 **Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
 **Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
 **Mutate:** `create <title>` (`--deck --project --content --severity --doc`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
+**Feature scaffolding safety:** `feature` is transaction-safe with compensating rollback (archives created cards if later steps fail).
 **GDD:** `gdd` (`--refresh --file --save-cache`), `gdd-sync` (`--project --section --apply --quiet --refresh --file --save-cache`), `gdd-auth`, `gdd-revoke`
 **Other:** `setup`, `generate-token --label`, `query <json>`, `dispatch <path> <json>`
 **Global flags:** `--format table|csv|json` (default json), `--version`

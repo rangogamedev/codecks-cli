@@ -142,6 +142,10 @@ py codecks_api.py feature "Economy Tuning" \
   --skip-art
 ```
 
+Transaction safety:
+- If feature scaffolding fails after creating some cards, the command performs a best-effort rollback by archiving created cards.
+- On rollback issues, the error message reports which card IDs failed to roll back.
+
 Severity levels: `critical`, `high`, `low`, or `null`.
 
 ### Updating cards

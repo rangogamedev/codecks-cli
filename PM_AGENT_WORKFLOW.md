@@ -40,6 +40,11 @@ py codecks_api.py feature "<Feature Title>" \
 
 Use `--skip-art` when visuals/content are not impacted.
 
+## Transaction Safety
+- Feature scaffolding includes compensating rollback.
+- If Hero/sub-card creation fails mid-flow, created cards are archived automatically (best effort).
+- Treat rollback errors as manual follow-up required and inspect reported card IDs.
+
 ## Safety Rules
 - Use full UUIDs for all mutation commands.
 - Never close Hero without checking Code/Art/Design lane coverage.
