@@ -11,7 +11,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `py -m pytest tests/ -v` (280 unit tests, no API calls)
+- **Test**: `py -m pytest tests/ -v` (293 unit tests, no API calls)
 - **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
@@ -118,7 +118,7 @@ Invalid → `[ERROR]` with valid options listed.
 **Global flags:** `--format table|csv|json` (default json), `--version`
 
 ## Testing
-- Run: `py -m pytest tests/ -v` (280 tests, ~8 seconds)
+- Run: `py -m pytest tests/ -v` (293 tests, ~8 seconds)
 - `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
 - Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`

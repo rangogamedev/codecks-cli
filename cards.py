@@ -231,23 +231,30 @@ def list_cards(deck_filter=None, status_filter=None, project_filter=None,
             _filter_cards(result, lambda k, c: c.get("assignee") == owner_id)
 
     # Client-side date filters
+    # Cards with missing timestamps are excluded from all date-filtered results.
     if stale_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
-        _filter_cards(result, lambda k, c:
-                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
-                       or c.get("last_updated_at")) or cutoff) < cutoff)
+        def _stale_pred(k, c):
+            ts = _parse_iso_timestamp(
+                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+            return ts is not None and ts < cutoff
+        _filter_cards(result, _stale_pred)
 
     if updated_after:
         after_dt = _parse_date(updated_after)
-        _filter_cards(result, lambda k, c:
-                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
-                       or c.get("last_updated_at")) or after_dt) >= after_dt)
+        def _after_pred(k, c):
+            ts = _parse_iso_timestamp(
+                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+            return ts is not None and ts >= after_dt
+        _filter_cards(result, _after_pred)
 
     if updated_before:
         before_dt = _parse_date(updated_before)
-        _filter_cards(result, lambda k, c:
-                      (_parse_iso_timestamp(c.get("lastUpdatedAt")
-                       or c.get("last_updated_at")) or before_dt) < before_dt)
+        def _before_pred(k, c):
+            ts = _parse_iso_timestamp(
+                c.get("lastUpdatedAt") or c.get("last_updated_at"))
+            return ts is not None and ts < before_dt
+        _filter_cards(result, _before_pred)
 
     return result
 

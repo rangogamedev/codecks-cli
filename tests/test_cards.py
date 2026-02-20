@@ -227,16 +227,38 @@ class TestDateFiltering:
 
     @patch("cards.query")
     def test_stale_handles_missing_timestamp(self, mock_query):
-        """Cards with no lastUpdatedAt should be treated as stale."""
+        """Critical fix #6: Cards with no lastUpdatedAt are excluded from date filters."""
         mock_query.return_value = {"card": {
             "no_ts": {"status": "started"},
         }, "user": {}}
         from cards import list_cards
-        # Should not crash — card with no timestamp treated as matching cutoff
         result = list_cards(stale_days=30)
-        # No timestamp → _parse_iso_timestamp returns None → fallback = cutoff
-        # cutoff < cutoff is False, so card is excluded
+        # No timestamp → excluded (not falsely treated as stale)
         assert len(result["card"]) == 0
+
+    @patch("cards.query")
+    def test_updated_after_excludes_missing_timestamp(self, mock_query):
+        """Critical fix #6: Cards with no timestamp excluded from --updated-after."""
+        mock_query.return_value = {"card": {
+            "has_ts": {"status": "done", "lastUpdatedAt": "2026-02-01T00:00:00Z"},
+            "no_ts": {"status": "done"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(updated_after="2026-01-15")
+        assert "has_ts" in result["card"]
+        assert "no_ts" not in result["card"]
+
+    @patch("cards.query")
+    def test_updated_before_excludes_missing_timestamp(self, mock_query):
+        """Critical fix #6: Cards with no timestamp excluded from --updated-before."""
+        mock_query.return_value = {"card": {
+            "has_ts": {"status": "done", "lastUpdatedAt": "2025-12-01T00:00:00Z"},
+            "no_ts": {"status": "done"},
+        }, "user": {}}
+        from cards import list_cards
+        result = list_cards(updated_before="2026-01-15")
+        assert "has_ts" in result["card"]
+        assert "no_ts" not in result["card"]
 
 
 # ---------------------------------------------------------------------------

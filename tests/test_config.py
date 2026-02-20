@@ -79,6 +79,50 @@ class TestSaveEnvValue:
         assert env_file.read_text() == "KEY=val\n"
 
 
+class TestEnvParsers:
+    """_env_int and _env_float should gracefully handle bad .env values."""
+
+    def test_env_int_valid(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"K": "42"})
+        assert config._env_int("K", 10) == 42
+
+    def test_env_int_missing_returns_default(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {})
+        assert config._env_int("MISSING", 99) == 99
+
+    def test_env_int_empty_returns_default(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"K": ""})
+        assert config._env_int("K", 99) == 99
+
+    def test_env_int_bad_value_returns_default(self, monkeypatch):
+        """Critical fix #1: non-numeric .env values no longer crash at import."""
+        monkeypatch.setattr(config, "env", {"K": "not_a_number"})
+        assert config._env_int("K", 30) == 30
+
+    def test_env_float_valid(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"K": "1.5"})
+        assert config._env_float("K", 1.0) == 1.5
+
+    def test_env_float_missing_returns_default(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {})
+        assert config._env_float("MISSING", 2.0) == 2.0
+
+    def test_env_float_bad_value_returns_default(self, monkeypatch):
+        """Critical fix #1: non-numeric .env values no longer crash at import."""
+        monkeypatch.setattr(config, "env", {"K": "abc"})
+        assert config._env_float("K", 1.0) == 1.0
+
+    def test_env_bool_truthy(self, monkeypatch):
+        for val in ("1", "true", "yes", "on", "True", "YES"):
+            monkeypatch.setattr(config, "env", {"K": val})
+            assert config._env_bool("K") is True
+
+    def test_env_bool_falsy(self, monkeypatch):
+        for val in ("0", "false", "no", "off", "anything"):
+            monkeypatch.setattr(config, "env", {"K": val})
+            assert config._env_bool("K") is False
+
+
 class TestConstants:
     def test_valid_statuses(self):
         assert "not_started" in config.VALID_STATUSES

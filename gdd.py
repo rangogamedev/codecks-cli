@@ -107,6 +107,9 @@ def _get_google_access_token():
     return tokens["access_token"]
 
 
+_MAX_DOC_BYTES = 10_000_000  # 10 MB safety limit for Google Doc responses
+
+
 def _fetch_google_doc_content(doc_id):
     """Fetch Google Doc as markdown. Tries OAuth first, then public fallback.
     Returns content string, or None on failure."""
@@ -120,7 +123,12 @@ def _fetch_google_doc_content(doc_id):
         req.add_header("Authorization", f"Bearer {access_token}")
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                return resp.read().decode("utf-8")
+                raw = resp.read(_MAX_DOC_BYTES + 1)
+                if len(raw) > _MAX_DOC_BYTES:
+                    raise CliError(
+                        f"[ERROR] Google Doc response too large "
+                        f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?")
+                return raw.decode("utf-8")
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 print("[WARN] Google OAuth token rejected. "
@@ -136,7 +144,12 @@ def _fetch_google_doc_content(doc_id):
     req = urllib.request.Request(export_url)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.read().decode("utf-8")
+            raw = resp.read(_MAX_DOC_BYTES + 1)
+            if len(raw) > _MAX_DOC_BYTES:
+                raise CliError(
+                    f"[ERROR] Google Doc response too large "
+                    f"(>{_MAX_DOC_BYTES} bytes). Is this the right doc?")
+            return raw.decode("utf-8")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print("[ERROR] Google Doc not found. Check GDD_GOOGLE_DOC_URL.",

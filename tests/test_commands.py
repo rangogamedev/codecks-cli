@@ -224,6 +224,30 @@ class TestCreateMissingCardId:
         assert "cardId" in str(exc_info.value)
 
 
+class TestCreateProjectNotFound:
+    """Critical fix #2: --project on nonexistent project should raise CliError,
+    not silently print to stderr."""
+
+    @patch("commands.load_project_names")
+    @patch("commands.get_project_deck_ids")
+    @patch("commands.list_decks")
+    @patch("commands.create_card")
+    def test_raises_on_unknown_project(self, mock_create, mock_list_decks,
+                                        mock_get_project, mock_proj_names):
+        mock_create.return_value = {"cardId": "new-card-id"}
+        mock_list_decks.return_value = {"deck": {}}
+        mock_get_project.return_value = None
+        mock_proj_names.return_value = {"p1": "Tea Shop"}
+        ns = argparse.Namespace(
+            title="Test Card", content=None, severity=None,
+            deck=None, project="Nonexistent", doc=False, format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "Nonexistent" in str(exc_info.value)
+        assert "Tea Shop" in str(exc_info.value)
+
+
 class TestUpdateNoFlags:
     def test_exits_with_error(self):
         ns = argparse.Namespace(
@@ -676,6 +700,21 @@ class TestHandSortOrder:
 # ---------------------------------------------------------------------------
 # Deck card counts (item 1.8)
 # ---------------------------------------------------------------------------
+
+class TestHandEmptyReturns:
+    """Critical fix #5: cmd_hand with empty hand should return, not sys.exit(0)."""
+
+    @patch("commands.extract_hand_card_ids")
+    @patch("commands.list_hand")
+    def test_empty_hand_returns_without_exit(self, mock_list_hand, mock_extract, capsys):
+        mock_list_hand.return_value = {"queueEntry": {}}
+        mock_extract.return_value = set()
+        ns = argparse.Namespace(card_ids=None, format="json")
+        # Should return normally, not raise SystemExit
+        cmd_hand(ns)
+        err = capsys.readouterr().err
+        assert "empty" in err.lower()
+
 
 class TestDeckCardCounts:
     @patch("commands.output")

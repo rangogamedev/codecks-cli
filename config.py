@@ -55,6 +55,17 @@ def _env_bool(key, default=False):
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(key, default):
+    """Parse integer env values with fallback."""
+    raw = env.get(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _env_float(key, default):
     """Parse float env values with fallback."""
     raw = env.get(key)
@@ -93,10 +104,10 @@ ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
 REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
 USER_ID = env.get("CODECKS_USER_ID", "")
-HTTP_TIMEOUT_SECONDS = int(env.get("CODECKS_HTTP_TIMEOUT_SECONDS", "30"))
-HTTP_MAX_RETRIES = int(env.get("CODECKS_HTTP_MAX_RETRIES", "2"))
-HTTP_RETRY_BASE_SECONDS = float(env.get("CODECKS_HTTP_RETRY_BASE_SECONDS", "1.0"))
-HTTP_MAX_RESPONSE_BYTES = int(env.get("CODECKS_HTTP_MAX_RESPONSE_BYTES", "5000000"))
+HTTP_TIMEOUT_SECONDS = _env_int("CODECKS_HTTP_TIMEOUT_SECONDS", 30)
+HTTP_MAX_RETRIES = _env_int("CODECKS_HTTP_MAX_RETRIES", 2)
+HTTP_RETRY_BASE_SECONDS = _env_float("CODECKS_HTTP_RETRY_BASE_SECONDS", 1.0)
+HTTP_MAX_RESPONSE_BYTES = _env_int("CODECKS_HTTP_MAX_RESPONSE_BYTES", 5_000_000)
 HTTP_LOG_ENABLED = _env_bool("CODECKS_HTTP_LOG", False)
 HTTP_LOG_SAMPLE_RATE = min(1.0, max(0.0, _env_float("CODECKS_HTTP_LOG_SAMPLE_RATE", 1.0)))
 

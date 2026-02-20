@@ -244,8 +244,9 @@ def cmd_create(ns):
             post_update["deckId"] = next(iter(project_deck_ids))
             placed_in = ns.project
         else:
-            print(f"[ERROR] Project '{ns.project}' not found.",
-                  file=sys.stderr)
+            available = [n for n in load_project_names().values()]
+            hint = f" Available: {', '.join(available)}" if available else ""
+            raise CliError(f"[ERROR] Project '{ns.project}' not found.{hint}")
     if ns.doc:
         post_update["isDoc"] = True
     if post_update:
@@ -524,7 +525,7 @@ def cmd_hand(ns):
         hand_card_ids = extract_hand_card_ids(hand_result)
         if not hand_card_ids:
             print("Your hand is empty.", file=sys.stderr)
-            sys.exit(0)
+            return
         result = list_cards()
         filtered = {k: v for k, v in result.get("card", {}).items()
                     if k in hand_card_ids}

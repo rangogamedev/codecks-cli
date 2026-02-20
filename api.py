@@ -207,7 +207,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     raise CliError("[ERROR] Unexpected response from Codecks API "
                                    "(not valid JSON).")
         except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8") if e.fp else ""
+            error_body = (e.read(config.HTTP_MAX_RESPONSE_BYTES).decode(
+                "utf-8", errors="replace") if e.fp else "")
             retryable = e.code in (429, 502, 503, 504)
             can_retry = idempotent and attempt < max_attempts - 1 and retryable
             if sampled:
