@@ -219,7 +219,6 @@ def _setup_done():
 
 def cmd_setup():
     """Interactive setup wizard. Creates or updates .env configuration."""
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
     print()
     print("=" * 56)

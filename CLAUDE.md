@@ -120,6 +120,7 @@ Invalid → `[ERROR]` with valid options listed.
 7. **Date sort was oldest-first** — sort by `updated`/`created` should be newest-first. Fixed: `reverse=True` for date fields, blanks-last via `(-1, "")` tuple
 
 ## Skills (`.claude/commands/`)
+- `/pm` — interactive PM session: dashboard, review/update/create cards, hand management, checklist formatting
 - `/test-all` — full regression test against live API (8 groups), plus unit tests
 - `/release` — version bump, changelog, test, commit, push, optional GitHub release
 - `/api-ref` — complete command/flag reference (loads into context)

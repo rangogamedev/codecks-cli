@@ -439,6 +439,16 @@ def list_hand():
     return query(q)
 
 
+def _extract_hand_card_ids(hand_result):
+    """Extract card IDs from a list_hand() result as a set."""
+    hand_card_ids = set()
+    for entry in (hand_result.get("queueEntry") or {}).values():
+        cid = entry.get("card") or entry.get("cardId")
+        if cid:
+            hand_card_ids.add(cid)
+    return hand_card_ids
+
+
 def add_to_hand(card_ids):
     """Add cards to the current user's hand."""
     user_id = _get_user_id()

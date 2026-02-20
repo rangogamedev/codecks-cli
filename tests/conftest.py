@@ -4,12 +4,8 @@ Patches config module to avoid loading real .env and making API calls.
 """
 
 import sys
-import os
 import types
 import pytest
-
-# Add project root to path so imports work
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture(autouse=True)

@@ -17,13 +17,11 @@ from cards import _load_project_names, _load_milestone_names, _load_users
 # ---------------------------------------------------------------------------
 
 def pretty_print(data):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def output(data, formatter=None, fmt="json", csv_formatter=None):
     """Output data in requested format."""
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     if fmt == "csv" and csv_formatter:
         print(csv_formatter(data))
     elif fmt == "table" and formatter:
@@ -34,7 +32,6 @@ def output(data, formatter=None, fmt="json", csv_formatter=None):
 
 def _mutation_response(action, card_id=None, details=None, data=None, fmt="json"):
     """Print a mutation confirmation."""
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     parts = [action]
     if card_id:
         parts.append(f"card {card_id}")

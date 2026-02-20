@@ -15,6 +15,7 @@ from cards import (get_account, list_decks, list_cards, get_card,
                    create_card, update_card, archive_card, unarchive_card,
                    delete_card, bulk_status,
                    list_hand, add_to_hand, remove_from_hand,
+                   _extract_hand_card_ids,
                    create_comment, reply_comment, close_comment,
                    reopen_comment, get_conversations,
                    _resolve_deck_id, _resolve_milestone_id,
@@ -71,11 +72,7 @@ def cmd_cards(ns):
     # Filter to hand cards if requested
     if ns.hand:
         hand_result = list_hand()
-        hand_card_ids = set()
-        for entry in (hand_result.get("queueEntry") or {}).values():
-            cid = entry.get("card") or entry.get("cardId")
-            if cid:
-                hand_card_ids.add(cid)
+        hand_card_ids = _extract_hand_card_ids(hand_result)
         result["card"] = {k: v for k, v in result.get("card", {}).items()
                           if k in hand_card_ids}
     # Filter to sub-cards of a hero card
@@ -147,11 +144,7 @@ def cmd_card(ns):
                                    result.get("user"))
     # Check if this card is in hand
     hand_result = list_hand()
-    hand_card_ids = set()
-    for entry in (hand_result.get("queueEntry") or {}).values():
-        cid = entry.get("card") or entry.get("cardId")
-        if cid:
-            hand_card_ids.add(cid)
+    hand_card_ids = _extract_hand_card_ids(hand_result)
     for card_key, card in result.get("card", {}).items():
         card["in_hand"] = card_key in hand_card_ids
     output(result, _format_card_detail, ns.format)
@@ -342,11 +335,7 @@ def cmd_hand(ns):
     if not ns.card_ids:
         # No args = list hand cards
         hand_result = list_hand()
-        hand_card_ids = set()
-        for entry in (hand_result.get("queueEntry") or {}).values():
-            cid = entry.get("card") or entry.get("cardId")
-            if cid:
-                hand_card_ids.add(cid)
+        hand_card_ids = _extract_hand_card_ids(hand_result)
         if not hand_card_ids:
             print("Your hand is empty.", file=sys.stderr)
             sys.exit(0)
