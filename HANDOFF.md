@@ -4,7 +4,7 @@ Quick context for any AI agent or contributor picking up this project.
 
 **Reading order:** `HANDOFF.md` (you are here) -> `CLAUDE.md` -> `PROJECT_INDEX.md` -> `PM_AGENT_WORKFLOW.md`
 
-Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 293
+Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 293 | HEAD: `b4ea42c`
 
 ## Project Summary
 
@@ -24,6 +24,25 @@ These constraints must be respected by all agents and contributors:
 - Other paid-only features (do NOT use): Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
 
 ## What Was Completed
+
+### Latest Update — Post-223b1d2 Reliability Fixes
+
+Committed and pushed in `b4ea42c`:
+
+- Preserved `SetupError` semantics in `feature` rollback flow (`commands.py`):
+  rollback still runs, but token/setup failures keep exit-code-2 behavior.
+- Fixed `_get_field()` falsy-value handling (`cards.py`):
+  snake_case value now wins by key presence (not truthiness), preventing `False`/`0` bugs.
+- Consolidated activity limit behavior:
+  `list_activity(limit)` now owns trimming; duplicate trimming removed from `cmd_activity`.
+- Added regression tests:
+  - `tests/test_commands.py`: rollback `SetupError` preservation + activity limit forwarding
+  - `tests/test_cards.py`: `_get_field` key precedence and falsy behavior
+
+Validation status for this update:
+
+- Targeted suites pass (`101 passed` for `tests/test_commands.py` + `tests/test_cards.py`).
+- Full suite in this environment still hits an existing Windows permission issue in pytest temp dirs (`pytest-of-USER`), yielding non-code failures (lock/scan `PermissionError`).
 
 ### Phase 3 — Code Quality Hardening
 
