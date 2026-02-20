@@ -90,6 +90,22 @@ class TestSortWithNone:
         # c2 has empty owner -> should be last
         assert keys[-1] == "c2"
 
+    @patch("commands.list_cards")
+    @patch("commands.enrich_cards", side_effect=lambda c, u: c)
+    def test_sort_updated_supports_snake_case(self, mock_enrich, mock_list, capsys):
+        mock_cards = {
+            "card": {
+                "old": {"title": "Old", "last_updated_at": "2026-01-02"},
+                "new": {"title": "New", "last_updated_at": "2026-01-04"},
+            },
+            "user": {},
+        }
+        mock_list.return_value = mock_cards
+        cmd_cards(_ns(sort="updated", format="json"))
+        out = json.loads(capsys.readouterr().out)
+        keys = list(out["card"].keys())
+        assert keys == ["new", "old"]
+
 
 # ---------------------------------------------------------------------------
 # Regression: --title on missing card (the bug we fixed)

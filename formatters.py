@@ -240,7 +240,8 @@ def format_card_detail(result):
         if parent:
             lines.append(f"Hero:      {parent}")
         lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
-        lines.append(f"Created:   {card.get('createdAt', '')}")
+        created = _get_field(card, "created_at", "createdAt") or ""
+        lines.append(f"Created:   {created}")
         updated = _get_field(card, "last_updated_at", "lastUpdatedAt") or ""
         if updated:
             lines.append(f"Updated:   {updated}")
@@ -274,10 +275,8 @@ def format_card_detail(result):
             entry_data = result.get("resolvableEntry", {})
             user_data = result.get("user", {})
             open_count = sum(1 for rid in resolvables
-                             if not (resolvable_data.get(rid, {})
-                                     .get("is_closed")
-                                     or resolvable_data.get(rid, {})
-                                     .get("isClosed")))
+                             if not _get_field(resolvable_data.get(rid, {}),
+                                               "is_closed", "isClosed"))
             closed_count = len(resolvables) - open_count
             lines.append(f"Conversations ({len(resolvables)}: "
                          f"{open_count} open, {closed_count} closed):")
@@ -445,7 +444,7 @@ def format_activity_table(result):
             ("Card", 20), ("Details", 0)]
     rows = []
     for key, act in activities.items():
-        ts = (act.get("createdAt") or "")[:16].replace("T", " ")
+        ts = (_get_field(act, "created_at", "createdAt") or "")[:16].replace("T", " ")
         changer_id = act.get("changer")
         changer = users.get(changer_id, {}).get("name", "") if changer_id else ""
         deck_id = act.get("deck")

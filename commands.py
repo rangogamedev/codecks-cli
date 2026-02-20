@@ -54,13 +54,22 @@ _SORT_KEY_MAP = {
 }
 
 
+def _sort_field_value(card, sort_field):
+    """Return the sortable value for a field with snake/camel compatibility."""
+    if sort_field == "updated":
+        return _get_field(card, "last_updated_at", "lastUpdatedAt")
+    if sort_field == "created":
+        return _get_field(card, "created_at", "createdAt")
+    field = _SORT_KEY_MAP[sort_field]
+    return card.get(field)
+
+
 def _sort_cards(cards_dict, sort_field):
     """Sort a {card_id: card_data} dict by *sort_field*; return a new dict."""
-    field = _SORT_KEY_MAP[sort_field]
     reverse = sort_field in ("updated", "created")
 
     def _key(item):
-        v = item[1].get(field)
+        v = _sort_field_value(item[1], sort_field)
         if v is None or v == "":
             return (1, "") if not reverse else (-1, "")
         if isinstance(v, (int, float)):

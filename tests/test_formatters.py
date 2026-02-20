@@ -155,6 +155,29 @@ class TestFormatCardDetail:
     def test_card_not_found(self):
         assert "not found" in format_card_detail({"card": {}})
 
+    def test_supports_snake_case_created_and_is_closed(self):
+        result = format_card_detail({
+            "card": {
+                "c1": {
+                    "title": "Snake Card",
+                    "status": "started",
+                    "created_at": "2026-01-03T00:00:00Z",
+                    "resolvables": ["r1"],
+                },
+            },
+            "resolvable": {
+                "r1": {
+                    "is_closed": True,
+                    "creator": "u1",
+                    "entries": [],
+                },
+            },
+            "resolvableEntry": {},
+            "user": {"u1": {"name": "Alice"}},
+        })
+        assert "Created:   2026-01-03T00:00:00Z" in result
+        assert "0 open, 1 closed" in result
+
 
 # ---------------------------------------------------------------------------
 # format_stats_table
@@ -285,6 +308,23 @@ class TestFormatActivityTable:
         })
         assert "Fix login bug" in result
         assert "Card" in result  # column header
+
+    def test_supports_snake_case_created_timestamp(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {})
+        from formatters import format_activity_table
+        result = format_activity_table({
+            "activity": {
+                "a1": {
+                    "type": "card_update",
+                    "created_at": "2026-01-15T10:30:00Z",
+                    "data": {"diff": {}},
+                },
+            },
+            "user": {},
+            "deck": {},
+            "card": {},
+        })
+        assert "2026-01-15 10:30" in result
 
 
 # ---------------------------------------------------------------------------
