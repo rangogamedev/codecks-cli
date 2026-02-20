@@ -9,7 +9,11 @@ A self-updating playbook for AI agents managing Codecks cards. The agent should 
 3. **Compose workflows** — combine primitives (filters, commands, output formats) to solve novel PM requests.
 4. **Propose updates** — if you discover a better pattern or a new flag, suggest appending it to the Learned Patterns section below.
 
+For project state and recent changes, see `HANDOFF.md`.
+For codebase navigation, see `PROJECT_INDEX.md`.
 The canonical command/flag reference lives in `CLAUDE.md` and `.claude/commands/api-ref.md`. This file focuses on *how to think* about PM work, not just what commands exist.
+
+> **Note:** `.claude/commands/` contains Claude Code-specific skill files. Other AI agents should use `CLAUDE.md`, this file, and the CLI's `--help` flags as their primary references.
 
 ---
 
@@ -193,6 +197,8 @@ This section is designed to grow. When the agent or user discovers a useful patt
 | Deck health | `decks --format table` | See card counts per deck |
 | Feature check | `cards --hero <id> --format table` | Verify sub-card coverage |
 | Date range audit | `cards --updated-after 2026-01-01 --updated-before 2026-02-01` | Audit period activity |
+| Project standup | `standup --project "Tea Shop" --format table` | Scoped daily standup |
+| Owner standup | `standup --owner "Thomas" --format table` | Per-person daily standup |
 | No-priority backlog | `cards --priority null --status not_started` | Grooming session |
 
 ---
@@ -206,6 +212,7 @@ This section is designed to grow. When the agent or user discovers a useful patt
 - Bulk updates: batches of ~10, verify between batches.
 - Never close a Hero before checking sub-card coverage across Code/Art/Design.
 - After every mutation, verify with a re-read.
+- **Never set `dueAt` or any date/deadline field on cards** — paid-only feature. The `--stale` and `--updated-after/before` flags only **read** existing timestamps for filtering; they never write dates.
 
 ---
 

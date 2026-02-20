@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing! This is a small, focused project and contributions of all kinds are welcome.
 
+For architecture details, see `CLAUDE.md`. For current project state, see `HANDOFF.md`.
+
 ## Development setup
 
 1. Clone the repo and create a `.env` file (see [README.md](README.md#setup))
@@ -34,8 +36,8 @@ Open an issue describing:
 ### Submitting code
 
 1. Fork the repo and create a branch
-2. Make your changes in the relevant module (see README > File structure)
-3. Run `py -m pytest tests/` to verify existing tests pass
+2. Make your changes in the relevant module (see `PROJECT_INDEX.md` or `CLAUDE.md` for module layout)
+3. Run `py -m pytest tests/ -v` to verify all 293 tests pass
 4. Test your changes with real Codecks API calls if they touch the API layer
 5. Update `README.md` if you add new commands or flags
 6. Open a pull request with a clear description
@@ -49,9 +51,19 @@ Open an issue describing:
 ## Code style
 
 - Standard Python conventions (PEP 8 mostly)
-- Code is split across modules: `api.py` (HTTP), `cards.py` (business logic), `commands.py` (CLI handlers), `formatters.py` (output), `gdd.py` (Google Docs), `setup_wizard.py` (setup)
+- Code is split across 9 modules: `codecks_api.py` (entry point), `config.py` (env/constants), `api.py` (HTTP), `cards.py` (business logic), `commands.py` (CLI handlers), `formatters.py` (output), `models.py` (typed contracts), `gdd.py` (Google Docs), `setup_wizard.py` (setup)
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
 - All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
+
+## Important constraints
+
+- **Zero external dependencies.** Stdlib only — do not add packages to requirements.
+- **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
+- **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
+- **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
+- **Tests:** `py -m pytest tests/ -v` — currently 293 tests. All must pass before submitting.
+
+See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
 
 ## AI-assisted development
 

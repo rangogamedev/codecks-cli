@@ -1,97 +1,137 @@
-# HANDOFF.md
+# HANDOFF.md — codecks-cli
 
-Purpose: quick context handoff for Claude Code and other coding agents working on `codecks-cli`.
+Quick context for any AI agent or contributor picking up this project.
 
-Last updated: 2026-02-20
+**Reading order:** `HANDOFF.md` (you are here) -> `CLAUDE.md` -> `PROJECT_INDEX.md` -> `PM_AGENT_WORKFLOW.md`
 
-## Project Goal
-- Build a robust CLI that lets an AI `/PM` agent manage Codecks workflows directly.
-- Prioritize Codecks-native PM behavior (hero cards + sub-cards by discipline) over generic PM frameworks.
-- Start without Journeys automation unless a clear ROI appears.
+Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 293
+
+## Project Summary
+
+Python CLI (stdlib only, zero dependencies) for managing [Codecks](https://codecks.io) project cards. Designed for AI agent consumption (JSON default) with human-readable table output. MIT licensed.
+
+- **Run:** `py codecks_api.py` (help) | `py codecks_api.py --version`
+- **Test:** `py -m pytest tests/ -v` (293 unit tests, no API calls)
+- **Python:** `py` command (never `python` or `python3`), requires 3.10+
+
+## Safety: Paid-Only Constraints
+
+These constraints must be respected by all agents and contributors:
+
+- **Never set `dueAt` or any date/deadline field on cards.** Due dates are a paid-only feature. Do not include deadlines in card creation or update workflows.
+- The `--stale`, `--updated-after`, and `--updated-before` flags only **read** existing `lastUpdatedAt` timestamps for filtering. They never write any date field.
+- **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400). Only owner, tags, milestone, deck, title, content, and hero can be set.
+- Other paid-only features (do NOT use): Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
 
 ## What Was Completed
-1. Agent strictness and reliability
-- Added global `--strict` mode in `codecks_api.py`.
-- Hardened raw `query` and `dispatch` validation/contracts.
-- Added JSON error envelopes on stderr in JSON mode.
-- Added strict JSON mutation output support.
 
-2. REST/API transport hardening
-- Added idempotent retries for safe read/query operations.
-- Added `Retry-After` handling.
-- Added response-size cap protections.
-- Added per-request `X-Request-Id`.
-- Added optional structured HTTP logging with sampling and redaction.
+### Phase 3 — Code Quality Hardening
 
-3. Codecks PM workflow commands
-- Added `feature` scaffolding command to create:
-  - Hero card
-  - Code sub-card
-  - Design sub-card
-  - Optional Art sub-card
-- Implemented transaction safety with compensating rollback (best-effort archive of created cards on partial failure).
-- Relaxed Art lane behavior for AI flexibility:
-  - If `--art-deck` is missing and `--skip-art` is not set, auto-skip art lane rather than hard-fail.
-- Added `pm-focus` command for PM triage view (`blocked`, `hand`, suggested next work).
+6 critical + 9 medium fixes across all modules.
 
-4. Typed models introduction
-- Added `models.py` dataclass contracts:
-  - `ObjectPayload`
-  - `FeatureSpec`
-  - `FeatureSubcard`
-  - `FeatureScaffoldReport`
-- Updated `commands.py` to consume typed models for safer payload/report handling.
+| Type | Fix | Commit |
+|------|-----|--------|
+| Critical | Safe `.env` parsing (malformed lines, whitespace, edge cases) | `c3816e1` |
+| Critical | Response size cap (5 MB default, `CODECKS_HTTP_MAX_RESPONSE_BYTES`) | `c3816e1` |
+| Critical | Exception chaining (`raise ... from e`) in date parsing | `2168cd5` |
+| Critical | Atomic `.env` writes via `tempfile.mkstemp()` + `os.replace()` | `2168cd5` |
+| Critical | HTTP Content-Type check on parse failure (proxy/HTML detection) | `c3816e1` |
+| Critical | Strict JSON response shape enforcement in query/dispatch | `c3816e1` |
+| Medium | `_get_field(d, snake, camel)` helper — DRY snake/camelCase lookups | `2168cd5` |
+| Medium | `get_card_tags(card)` — normalized tag access | `2168cd5` |
+| Medium | `_card_section()` — shared section renderer for pm-focus/standup | `2168cd5` |
+| Medium | `_RETRYABLE_HTTP_CODES` — centralized frozenset | `2168cd5` |
+| Medium | OAuth HTTP server try/finally cleanup | `2168cd5` |
+| Medium | Module-level imports (removed redundant function-scope imports) | `2168cd5` |
+| Medium | Owner resolution dedup (single lookup path) | `2168cd5` |
+| Medium | `_sanitize_str()` for ANSI escape removal in table output | `d50ef1a` |
 
-5. Docs and guidance updates
-- Updated `README.md`, `CLAUDE.md`, `PROJECT_INDEX.md`, `PM_AGENT_WORKFLOW.md` for new command surface and behavior.
-- Updated local Claude command docs under `.claude/commands/` (local-only, may be gitignored).
+### Phase 2 — PM Features
 
-6. Test coverage updates
-- Expanded tests across:
-  - `tests/test_api.py`
-  - `tests/test_cli.py`
-  - `tests/test_commands.py`
-  - `tests/test_formatters.py`
-  - `tests/test_models.py` (new)
-- Latest reported targeted run in prior session: 151 tests passed.
+Standup, multi-value filters, date filtering, stale detection, pm-focus.
+
+| Feature | Detail | Commit |
+|---------|--------|--------|
+| `standup` command | Done/In-Progress/Blocked/Hand sections, `--days`, `--project`, `--owner` | `855543c` |
+| `pm-focus` command | Sprint health: blocked, unassigned, started, in-review, stale | `d86c091` |
+| Multi-value `--status` | Comma-separated values: `--status started,blocked` | `855543c` |
+| Multi-value `--priority` | Comma-separated values: `--priority a,b` | `855543c` |
+| `--stale <days>` filter | Cards not updated in N days | `855543c` |
+| `--updated-after/before` | Date range filters (read-only) | `855543c` |
+| ANSI sanitization | Strip escape sequences from table output | `d50ef1a` |
+| PM workflow doc rewrite | Self-evolving agent playbook format | `8ffa681` |
+
+### Phase 1 — Agent Reliability
+
+Strict mode, typed models, feature scaffolding, transaction safety.
+
+| Feature | Detail | Commit |
+|---------|--------|--------|
+| `--strict` global flag | Fail-fast on ambiguous query/dispatch responses | `18cc18d` |
+| Raw query/dispatch validation | Reject empty payloads, enforce JSON objects | `8cfec86` |
+| `feature` scaffolding command | Hero + Code + Design + optional Art sub-cards | `d467b93` |
+| Transaction-safe rollback | Archive created cards on partial failure | `9d8c7a0` |
+| Typed models (`models.py`) | `ObjectPayload`, `FeatureSpec`, `FeatureSubcard`, `FeatureScaffoldReport` | `b1222ca` |
+| JSON error envelopes | Structured errors on stderr in JSON mode | `d86c091` |
+| Art lane auto-skip | Skip Art when `--art-deck` not provided (no hard fail) | `2613545` |
+
+### Phase 0 — Foundation
+
+Full CLI surface, GDD pipeline, setup wizard, exception hierarchy, test suite.
+
+| Feature | Detail | Commit |
+|---------|--------|--------|
+| CLI surface | All read/mutate/hand/comment/GDD commands | `02679a4`..`eaf1993` |
+| Exception hierarchy | `CliError`/`SetupError` instead of `sys.exit()` | `eaf1993` |
+| Input validation | Status/priority/sort/effort validation with helpful errors | `ee89739` |
+| Test suite | 170 initial tests across 7 modules (now 293 across 8) | `02679a4` |
+| GDD pipeline | Google OAuth2, fetch/parse/sync with Codecks | `02679a4` |
+| Setup wizard | Interactive `.env` bootstrap with auto-discovery | `02679a4` |
+
+## Module Inventory
+
+| Module | Lines | Purpose | Key exports |
+|--------|-------|---------|-------------|
+| `codecks_api.py` | ~380 | Entry point, argparse, dispatch | `main()`, `build_parser()` |
+| `config.py` | ~95 | Env, tokens, constants, error classes | `load_env()`, `save_env_value()`, `CliError`, `SetupError` |
+| `api.py` | ~220 | HTTP transport, query/dispatch | `session_request()`, `query()`, `dispatch()`, `_RETRYABLE_HTTP_CODES` |
+| `cards.py` | ~550 | Card CRUD, hand, conversations, enrichment | `list_cards()`, `enrich_cards()`, `_get_field()`, `get_card_tags()` |
+| `commands.py` | ~475 | Command handlers | `cmd_cards()`, `cmd_standup()`, `cmd_pm_focus()`, etc. |
+| `formatters.py` | ~500 | JSON/table/CSV output | `output()`, `_mutation_response()`, `_card_section()` |
+| `models.py` | ~100 | Typed dataclass contracts | `ObjectPayload`, `FeatureSpec` |
+| `gdd.py` | ~540 | Google OAuth2, GDD sync | `fetch_gdd()`, `sync_gdd()` |
+| `setup_wizard.py` | ~400 | Interactive setup | `run_setup()` |
+
+## Dependency Graph
+
+```
+config.py          <- pure data, no project imports
+api.py             <- config
+cards.py           <- config, api
+formatters.py      <- config, cards
+gdd.py             <- config, cards
+setup_wizard.py    <- config, api, cards
+commands.py        <- config, api, cards, formatters, gdd, setup_wizard
+codecks_api.py     <- config, api, commands
+```
 
 ## Important Behavior Decisions
+
 - Keep the PM agent flexible; avoid over-restrictive validation that blocks productive iteration.
-- No Journeys dependency by default. Reassess later only if automation value outweighs authoring overhead.
-- Preserve `unhand` functionality. It remains supported and documented in command references.
+- No Journeys dependency by default. Reassess only if automation value outweighs authoring overhead.
+- Preserve `unhand` functionality. It remains supported and documented.
+- Card lists omit `content` for token efficiency; `--search` adds it back.
+- Default output is JSON (agent-optimized); `--format table` for human consumption.
 
-## Recent Commits Already Pushed
-- `18cc18d` Harden agent workflows and strict API behavior
-- `8cfec86` Harden raw query/dispatch validation for strict mode
-- `d467b93` Add no-journey feature scaffolding command for PM agents
-- `9d8c7a0` Add transaction-safe rollback for feature scaffolding
-- `b1222ca` Introduce typed models for payload and feature contracts
-- `d86c091` Add pm-focus command and strict JSON mutation output
-- `2613545` Relax feature art lane with typed auto-skip behavior
+## Recommended Next Work
 
-## Current Baseline
-- Branch: `main`
-- Core docs: `CLAUDE.md`, `PROJECT_INDEX.md`, `PM_AGENT_WORKFLOW.md`
-- Architecture remains modular (`codecks_api.py`, `commands.py`, `cards.py`, `api.py`, `formatters.py`, `models.py`, `config.py`, `gdd.py`).
+1. **Expand test coverage** — Strict mode edge-cases, retry exhaustion, rollback partial-failure paths.
+2. **Lightweight duplicate detection** — Before card creation, check for existing cards with similar titles.
+3. **Push typed models deeper** — Validate API payloads via dataclasses to reduce dynamic dict drift.
+4. **Improve pm-focus/standup heuristics** — Smarter section grouping, owner-based summaries.
+5. **Structured rollback reporting** — Report which cards were archived vs failed in `feature` scaffolding.
 
-## High-Value Next Improvements
-1. Strengthen idempotency semantics
-- Ensure retries are strictly limited to non-mutating operations unless explicit idempotency keys exist.
+## Agent-Specific Tooling
 
-2. Tighten transaction observability
-- Add structured rollback result reporting for `feature` scaffolding (which cards were archived successfully vs failed).
-
-3. Expand PM-agent flow quality
-- Improve `/pm` heuristics for category routing (Code vs Art vs Design) with clearer confidence markers.
-- Add lightweight safeguards to prevent card spam/duplicates while keeping flexibility.
-
-4. Extend typed model usage
-- Push dataclass validation boundaries deeper into API payload construction to reduce dynamic dict drift.
-
-5. Add regression tests
-- Add targeted tests for strict mode edge-cases, retry exhaustion behavior, and rollback partial-failure paths.
-
-## Notes for Claude Code
-- Read `CLAUDE.md` first for architecture, command surface, and constraints.
-- Then read this file for latest delivery state and recommended next work.
-- Keep changes aligned with Codecks-native PM patterns rather than generic agile templates.
+- **Claude Code**: Has skill files in `.claude/commands/` (`/pm`, `/test-all`, `/api-ref`, `/release`, `/security-audit`). These are Claude-specific and gitignored.
+- **Other agents**: Use `CLAUDE.md` for architecture, this file for project state, `PM_AGENT_WORKFLOW.md` for PM workflows. The CLI's `--help` flags are the authoritative command reference.

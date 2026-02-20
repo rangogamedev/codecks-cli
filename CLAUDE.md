@@ -56,10 +56,16 @@ codecks_api.py     ← config, api, commands
 - Card lists omit `content` for token efficiency; `--search` adds it back
 - Errors/warnings → `sys.stderr`. Data → `sys.stdout`
 - `sys.stdout.reconfigure(encoding='utf-8')` for Windows Unicode support
-- `save_env_value()` chmods `.env` to 0o600 after write (Unix only, no-op on Windows)
+- `save_env_value()` uses atomic temp-file-then-rename writes; chmods `.env` to 0o600 after write (Unix only, no-op on Windows)
 - `_save_gdd_cache()` in `gdd.py` centralizes GDD cache writes with chmod 0o600
 - `_sanitize_str()` in `formatters.py` strips ANSI escape sequences and control chars from table output (not JSON)
 - Error messages never leak raw API response dicts — show only keys for diagnostic
+- `_get_field(d, snake, camel)` in `cards.py` — canonical helper for snake_case/camelCase dual lookups (API returns snake_case, queries use camelCase). Used across `cards.py`, `commands.py`, `formatters.py`, `setup_wizard.py`.
+- `get_card_tags(card)` in `cards.py` — normalizes tag access across `tags`/`master_tags`/`masterTags` keys. Used everywhere tags are read.
+- `_card_section(lines, title, items)` in `formatters.py` — shared section renderer for pm-focus and standup tables
+- `_RETRYABLE_HTTP_CODES` frozenset in `api.py` — single source of truth for `{429, 502, 503, 504}`
+- OAuth HTTP server in `gdd.py` uses try/finally for server cleanup
+- Exception chaining: `_parse_date()` uses `raise ... from e` to preserve original traceback
 
 **Output prefixes:** `OK:` (mutation success), `[ERROR]` (exit 1), `[TOKEN_EXPIRED]` / `[SETUP_NEEDED]` (exit 2), `[WARN]` / `[INFO]` (non-fatal, stderr)
 
@@ -93,7 +99,9 @@ codecks_api.py     ← config, api, commands
 - Setup: `py codecks_api.py gdd-auth` (one-time, opens browser). Revoke: `gdd-revoke`
 
 ## Paid-Only Features (do NOT use)
-Due dates, Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes
+Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
+
+**Critical:** Never set `dueAt` on cards — it is a paid feature we don't have access to. Do not set deadlines when creating or updating cards, and do not use date fields as part of any default card creation workflow. The `--stale`, `--updated-after`, and `--updated-before` flags only *read* the existing `lastUpdatedAt` timestamp for filtering — they never write any date field.
 
 ## Validation
 | Flag | Valid values |
