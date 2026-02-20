@@ -557,8 +557,13 @@ Run checks:
 py -m ruff check .
 py -m ruff format --check .
 py -m mypy api.py cards.py commands.py formatters.py models.py
-py -m pytest tests/ -v --basetemp .tmp/pytest
+pwsh -File scripts/run-tests.ps1
 ```
+
+`scripts/run-tests.ps1` sets `TEMP`/`TMP` to `.tmp/` and uses a unique
+`.tmp/pytest-<timestamp>-<pid>` base temp per run to reduce Windows lock/permission collisions.
+It prefers `py` and falls back to `CODECKS_PYTHON_PATH` (or
+`C:\Users\USER\AppData\Local\Python\bin\python.exe`).
 
 ## Security
 

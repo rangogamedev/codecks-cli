@@ -6,4 +6,9 @@
 __pycache__/
 *.pyc
 .claude/
+.pytest_cache/
+.tmp/
+.tmp-codex/
+.sandbox_tmp/
+pip_temp_run/
 nul

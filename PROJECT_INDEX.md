@@ -35,7 +35,8 @@ Python CLI for AI agents (or humans) to manage [Codecks](https://codecks.io) pro
 | `models.py` | ~100 | Typed dataclass contracts | `ObjectPayload`, `FeatureSpec`, `FeatureSubcard` |
 | `gdd.py` | ~540 | GDD fetch/parse/sync + Google OAuth2 | `fetch_gdd()`, `sync_gdd()` |
 | `setup_wizard.py` | ~400 | Interactive `.env` bootstrap/update | `run_setup()` |
-| `tests/` | — | Unit tests for every core module (293 tests) | Isolated from real API |
+| `scripts/run-tests.ps1` | ~30 | Stable Windows test wrapper (pins TEMP/TMP and pytest basetemp) | PowerShell entrypoint |
+| `tests/` | — | Unit tests for every core module (321 tests) | Isolated from real API |
 
 ## Dependency Graph
 
@@ -106,7 +107,7 @@ JSON mode errors on stderr: `{"ok": false, "error": {"type": "error", "message":
 
 ## Testing
 
-- **Run:** `py -m pytest tests/ -v` (293 tests, ~6 seconds)
+- **Run:** `pwsh -File scripts/run-tests.ps1` (321 tests, ~6 seconds)
 - **Isolation:** `conftest.py` autouse fixture resets all `config` globals per test — no real `.env` or API calls.
 - **Coverage map:**
 
@@ -133,4 +134,4 @@ JSON mode errors on stderr: `{"ok": false, "error": {"type": "error", "message":
 
 ---
 
-Version: 0.4.0 | Tests: 293 | Updated: 2026-02-20
+Version: 0.4.0 | Tests: 321 | Updated: 2026-02-20

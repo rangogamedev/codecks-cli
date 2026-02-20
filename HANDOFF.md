@@ -4,14 +4,14 @@ Quick context for any AI agent or contributor picking up this project.
 
 **Reading order:** `HANDOFF.md` (you are here) -> `CLAUDE.md` -> `PROJECT_INDEX.md` -> `PM_AGENT_WORKFLOW.md`
 
-Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 293 | HEAD: `b4ea42c`
+Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 321 | HEAD: `b4ea42c`
 
 ## Project Summary
 
 Python CLI (stdlib only, zero dependencies) for managing [Codecks](https://codecks.io) project cards. Designed for AI agent consumption (JSON default) with human-readable table output. MIT licensed.
 
 - **Run:** `py codecks_api.py` (help) | `py codecks_api.py --version`
-- **Test:** `py -m pytest tests/ -v` (293 unit tests, no API calls)
+- **Test:** `pwsh -File scripts/run-tests.ps1` (321 unit tests, no API calls)
 - **Python:** `py` command (never `python` or `python3`), requires 3.10+
 
 ## Safety: Paid-Only Constraints
@@ -42,7 +42,7 @@ Committed and pushed in `b4ea42c`:
 Validation status for this update:
 
 - Targeted suites pass (`101 passed` for `tests/test_commands.py` + `tests/test_cards.py`).
-- Full suite in this environment still hits an existing Windows permission issue in pytest temp dirs (`pytest-of-USER`), yielding non-code failures (lock/scan `PermissionError`).
+- Full suite should be executed via `pwsh -File scripts/run-tests.ps1`, which pins temp paths to `.tmp/` and uses per-run pytest temp dirs to reduce lock/permission failures.
 
 ### Phase 3 — Code Quality Hardening
 
@@ -103,7 +103,7 @@ Full CLI surface, GDD pipeline, setup wizard, exception hierarchy, test suite.
 | CLI surface | All read/mutate/hand/comment/GDD commands | `02679a4`..`eaf1993` |
 | Exception hierarchy | `CliError`/`SetupError` instead of `sys.exit()` | `eaf1993` |
 | Input validation | Status/priority/sort/effort validation with helpful errors | `ee89739` |
-| Test suite | 170 initial tests across 7 modules (now 293 across 8) | `02679a4` |
+| Test suite | 170 initial tests across 7 modules (now 321 across 8) | `02679a4` |
 | GDD pipeline | Google OAuth2, fetch/parse/sync with Codecks | `02679a4` |
 | Setup wizard | Interactive `.env` bootstrap with auto-discovery | `02679a4` |
 
