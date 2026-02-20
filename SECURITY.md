@@ -28,7 +28,7 @@ This tool handles Codecks API tokens. Please follow these practices:
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | Yes       |
+| 0.4.x   | Yes       |
 
 ## Scope
 

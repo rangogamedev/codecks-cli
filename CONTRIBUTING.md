@@ -10,7 +10,7 @@ Thanks for your interest in contributing! This is a small, focused project and c
 
 ## Project principles
 
-- **Single file, zero dependencies.** The entire tool is `codecks_api.py` using only Python's standard library. Please don't add external packages.
+- **Zero external dependencies.** The tool uses only Python's standard library. Please don't add external packages.
 - **AI-agent first, human-friendly second.** JSON output is the default for agent consumption. Table output (`--format table`) is for humans.
 - **Token efficiency.** Minimize output noise — AI agents pay per token. Avoid verbose responses.
 
@@ -34,10 +34,10 @@ Open an issue describing:
 ### Submitting code
 
 1. Fork the repo and create a branch
-2. Make your changes in `codecks_api.py`
-3. Test your changes with real Codecks API calls
-4. Update the docstring at the top of `codecks_api.py` if you add/change commands
-5. Update `README.md` if you add new features
+2. Make your changes in the relevant module (see README > File structure)
+3. Run `py -m pytest tests/` to verify existing tests pass
+4. Test your changes with real Codecks API calls if they touch the API layer
+5. Update `README.md` if you add new commands or flags
 6. Open a pull request with a clear description
 
 ### Commit messages
@@ -49,9 +49,9 @@ Open an issue describing:
 ## Code style
 
 - Standard Python conventions (PEP 8 mostly)
-- Functions are grouped: HTTP layer > query helpers > mutation helpers > formatters > CLI dispatch
+- Code is split across modules: `api.py` (HTTP), `cards.py` (business logic), `commands.py` (CLI handlers), `formatters.py` (output), `gdd.py` (Google Docs), `setup_wizard.py` (setup)
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
-- All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()`
+- All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
 
 ## AI-assisted development
 

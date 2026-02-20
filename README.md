@@ -13,7 +13,7 @@ Codecks doesn't have a public REST API with standard endpoints. Instead it uses 
 
 ## Requirements
 
-- **Python 3.10+** (tested with 3.11.4)
+- **Python 3.10+** (tested with 3.14)
 - A [Codecks](https://codecks.io) account (free tier works)
 - A `.env` file with your credentials (see Setup)
 
@@ -409,7 +409,15 @@ The script is optimized to minimize context window usage for AI agents:
 
 ```
 codecks-cli/
-  codecks_api.py    # The script (all commands)
+  codecks_api.py    # Entry point — argparse, help text, command dispatch
+  config.py         # Constants, .env loading, module-level state
+  api.py            # HTTP layer, security helpers, token validation
+  cards.py          # Card CRUD, hand ops, conversations, enrichment
+  commands.py       # Command handlers (one cmd_*() per CLI command)
+  formatters.py     # Table, CSV, JSON output formatters
+  gdd.py            # Google OAuth2, GDD fetch/parse/sync
+  setup_wizard.py   # Interactive setup wizard
+  tests/            # pytest unit tests (no live API calls)
   .env              # Your tokens and config (gitignored)
   .env.example      # Template showing required env vars
   .gitignore        # Protects .env from commits
