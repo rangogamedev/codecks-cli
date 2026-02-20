@@ -68,7 +68,7 @@ Open an issue describing:
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
-- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 321 tests. All must pass before submitting.
+- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 328 tests. All must pass before submitting.
 
 See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
 

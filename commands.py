@@ -5,6 +5,7 @@ Each cmd_*() function receives an argparse.Namespace and handles one CLI command
 
 import json
 import sys
+from difflib import SequenceMatcher
 from datetime import datetime, timezone, timedelta
 
 import config
@@ -113,6 +114,76 @@ def _card_row(cid, card):
         "deck_name": card.get("deck_name") or card.get("deck"),
         "owner_name": card.get("owner_name"),
     }
+
+
+def _normalize_title(title):
+    return " ".join((title or "").strip().lower().split())
+
+
+def _find_duplicate_title_candidates(title, limit=5):
+    """Return (exact, similar) duplicate candidates for a card title."""
+    normalized_target = _normalize_title(title)
+    if not normalized_target:
+        return [], []
+
+    result = list_cards(search_filter=title, archived=False)
+    cards = result.get("card", {})
+
+    exact = []
+    similar = []
+    for cid, card in cards.items():
+        existing_title = (card.get("title") or "").strip()
+        if not existing_title:
+            continue
+        normalized_existing = _normalize_title(existing_title)
+        if not normalized_existing:
+            continue
+
+        status = card.get("status") or "unknown"
+        row = {"id": cid, "title": existing_title, "status": status}
+        if normalized_existing == normalized_target:
+            exact.append(row)
+            continue
+
+        score = SequenceMatcher(None, normalized_target, normalized_existing).ratio()
+        if (
+            normalized_target in normalized_existing
+            or normalized_existing in normalized_target
+            or score >= 0.88
+        ):
+            row["score"] = score
+            similar.append(row)
+
+    similar.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return exact[:limit], similar[:limit]
+
+
+def _guard_duplicate_title(title, allow_duplicate=False, context="card"):
+    """Fail on exact duplicates and warn on near matches unless explicitly allowed."""
+    if allow_duplicate:
+        return
+
+    exact, similar = _find_duplicate_title_candidates(title)
+    if exact:
+        preview = ", ".join(
+            f"{item['id']} ('{item['title']}', status={item['status']})"
+            for item in exact
+        )
+        raise CliError(
+            f"[ERROR] Duplicate {context} title detected: '{title}'.\n"
+            f"[ERROR] Existing: {preview}\n"
+            "[ERROR] Re-run with --allow-duplicate to bypass this check."
+        )
+
+    if similar:
+        preview = ", ".join(
+            f"{item['id']} ('{item['title']}', status={item['status']})"
+            for item in similar
+        )
+        print(
+            f"[WARN] Similar {context} titles found for '{title}': {preview}",
+            file=sys.stderr,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +309,11 @@ def cmd_card(ns):
 
 def cmd_create(ns):
     fmt = ns.format
+    _guard_duplicate_title(
+        ns.title,
+        allow_duplicate=getattr(ns, "allow_duplicate", False),
+        context="card",
+    )
     result = create_card(ns.title, ns.content, ns.severity)
     card_id = result.get("cardId", "")
     if not card_id:
@@ -274,6 +350,12 @@ def cmd_feature(ns):
     """Scaffold one Hero feature plus Code/Design/(optional Art) sub-cards."""
     spec = FeatureSpec.from_namespace(ns)
     fmt = spec.format
+    hero_title = f"Feature: {spec.title}"
+    _guard_duplicate_title(
+        hero_title,
+        allow_duplicate=spec.allow_duplicate,
+        context="feature hero",
+    )
 
     hero_deck_id = resolve_deck_id(spec.hero_deck)
     code_deck_id = resolve_deck_id(spec.code_deck)
@@ -290,7 +372,6 @@ def cmd_feature(ns):
     if spec.effort is not None:
         common_update["effort"] = spec.effort
 
-    hero_title = f"Feature: {spec.title}"
     hero_body = (
         (spec.description.strip() + "\n\n" if spec.description else "")
         + "Success criteria:\n"

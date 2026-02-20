@@ -218,7 +218,7 @@ This section is designed to grow. When the agent or user discovers a useful patt
 
 ## Version Awareness
 
-This file was last updated for codecks-cli **0.4.0** (321 tests).
+This file was last updated for codecks-cli **0.4.0** (328 tests).
 
 If the CLI version has changed since then, the agent should:
 1. Run `py codecks_api.py --version` to check.

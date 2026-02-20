@@ -33,6 +33,7 @@ class TestFeatureSpec:
             "priority": None,
             "effort": None,
             "format": "json",
+            "allow_duplicate": False,
         }
         base.update(kwargs)
         return argparse.Namespace(**base)
@@ -55,6 +56,10 @@ class TestFeatureSpec:
         assert spec.skip_art is True
         assert spec.auto_skip_art is True
         assert spec.art_deck is None
+
+    def test_allow_duplicate_passthrough(self):
+        spec = FeatureSpec.from_namespace(self._ns(allow_duplicate=True))
+        assert spec.allow_duplicate is True
 
 
 class TestFeatureScaffoldReport:

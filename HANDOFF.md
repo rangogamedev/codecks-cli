@@ -4,14 +4,14 @@ Quick context for any AI agent or contributor picking up this project.
 
 **Reading order:** `HANDOFF.md` (you are here) -> `CLAUDE.md` -> `PROJECT_INDEX.md` -> `PM_AGENT_WORKFLOW.md`
 
-Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 321 | HEAD: `b4ea42c`
+Last updated: 2026-02-20 | Version: 0.4.0 | Tests: 328 | HEAD: `0b17ad0`
 
 ## Project Summary
 
 Python CLI (stdlib only, zero dependencies) for managing [Codecks](https://codecks.io) project cards. Designed for AI agent consumption (JSON default) with human-readable table output. MIT licensed.
 
 - **Run:** `py codecks_api.py` (help) | `py codecks_api.py --version`
-- **Test:** `pwsh -File scripts/run-tests.ps1` (321 unit tests, no API calls)
+- **Test:** `pwsh -File scripts/run-tests.ps1` (328 unit tests, no API calls)
 - **Python:** `py` command (never `python` or `python3`), requires 3.10+
 
 ## Safety: Paid-Only Constraints
@@ -24,6 +24,15 @@ These constraints must be respected by all agents and contributors:
 - Other paid-only features (do NOT use): Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
 
 ## What Was Completed
+
+### Latest Update — Duplicate Title Guardrails
+
+- Added lightweight duplicate preflight checks to `create` and `feature`:
+  exact title collisions now fail by default to prevent accidental duplicate cards.
+- Added `--allow-duplicate` to both commands to keep intentional duplicate workflows possible.
+- Added similar-title warnings (non-blocking) for better operator awareness.
+- Added parser/model/command coverage for duplicate detection paths.
+- Test suite now: **328 passing** (`C:\Users\USER\AppData\Local\Python\bin\python.exe -m pytest tests/ -q`).
 
 ### Latest Update — Post-223b1d2 Reliability Fixes
 
@@ -103,7 +112,7 @@ Full CLI surface, GDD pipeline, setup wizard, exception hierarchy, test suite.
 | CLI surface | All read/mutate/hand/comment/GDD commands | `02679a4`..`eaf1993` |
 | Exception hierarchy | `CliError`/`SetupError` instead of `sys.exit()` | `eaf1993` |
 | Input validation | Status/priority/sort/effort validation with helpful errors | `ee89739` |
-| Test suite | 170 initial tests across 7 modules (now 321 across 8) | `02679a4` |
+| Test suite | 170 initial tests across 7 modules (now 328 across 8) | `02679a4` |
 | GDD pipeline | Google OAuth2, fetch/parse/sync with Codecks | `02679a4` |
 | Setup wizard | Interactive `.env` bootstrap with auto-discovery | `02679a4` |
 
@@ -145,10 +154,9 @@ codecks_api.py     <- config, api, commands
 ## Recommended Next Work
 
 1. **Expand test coverage** — Strict mode edge-cases, retry exhaustion, rollback partial-failure paths.
-2. **Lightweight duplicate detection** — Before card creation, check for existing cards with similar titles.
-3. **Push typed models deeper** — Validate API payloads via dataclasses to reduce dynamic dict drift.
-4. **Improve pm-focus/standup heuristics** — Smarter section grouping, owner-based summaries.
-5. **Structured rollback reporting** — Report which cards were archived vs failed in `feature` scaffolding.
+2. **Push typed models deeper** — Validate API payloads via dataclasses to reduce dynamic dict drift.
+3. **Improve pm-focus/standup heuristics** — Smarter section grouping, owner-based summaries.
+4. **Structured rollback reporting** — Report which cards were archived vs failed in `feature` scaffolding.
 
 ## Agent-Specific Tooling
 

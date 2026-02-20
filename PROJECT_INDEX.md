@@ -36,7 +36,7 @@ Python CLI for AI agents (or humans) to manage [Codecks](https://codecks.io) pro
 | `gdd.py` | ~540 | GDD fetch/parse/sync + Google OAuth2 | `fetch_gdd()`, `sync_gdd()` |
 | `setup_wizard.py` | ~400 | Interactive `.env` bootstrap/update | `run_setup()` |
 | `scripts/run-tests.ps1` | ~30 | Stable Windows test wrapper (pins TEMP/TMP and pytest basetemp) | PowerShell entrypoint |
-| `tests/` | — | Unit tests for every core module (321 tests) | Isolated from real API |
+| `tests/` | — | Unit tests for every core module (328 tests) | Isolated from real API |
 
 ## Dependency Graph
 
@@ -92,6 +92,7 @@ Name mappings in `.env`: `CODECKS_PROJECTS`, `CODECKS_MILESTONES` (auto-discover
 - **Never set `dueAt`** — paid-only feature. Date filters (`--stale`, `--updated-after/before`) are read-only.
 - Hand operations use `handQueue/*` dispatch and `queueEntries` data (not `handCards`).
 - `feature` command uses transaction safety with rollback on partial failure.
+- `create` and `feature` perform duplicate-title preflight checks; exact duplicates require `--allow-duplicate`.
 - Raw `query`/`dispatch` input enforced via typed models.
 
 ## Output/Error Conventions
@@ -107,7 +108,7 @@ JSON mode errors on stderr: `{"ok": false, "error": {"type": "error", "message":
 
 ## Testing
 
-- **Run:** `pwsh -File scripts/run-tests.ps1` (321 tests, ~6 seconds)
+- **Run:** `pwsh -File scripts/run-tests.ps1` (328 tests, ~6 seconds)
 - **Isolation:** `conftest.py` autouse fixture resets all `config` globals per test — no real `.env` or API calls.
 - **Coverage map:**
 
@@ -134,4 +135,4 @@ JSON mode errors on stderr: `{"ok": false, "error": {"type": "error", "message":
 
 ---
 
-Version: 0.4.0 | Tests: 321 | Updated: 2026-02-20
+Version: 0.4.0 | Tests: 328 | Updated: 2026-02-20

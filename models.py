@@ -37,6 +37,7 @@ class FeatureSpec:
     effort: int | None
     format: str
     auto_skip_art: bool
+    allow_duplicate: bool
 
     @classmethod
     def from_namespace(cls, ns):
@@ -60,6 +61,7 @@ class FeatureSpec:
             effort=ns.effort,
             format=ns.format,
             auto_skip_art=auto_skip_art,
+            allow_duplicate=bool(getattr(ns, "allow_duplicate", False)),
         )
 
 

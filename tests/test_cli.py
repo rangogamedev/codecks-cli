@@ -149,6 +149,11 @@ class TestBuildParser:
         assert ns.title == "My Card"
         assert ns.deck == "Inbox"
         assert ns.doc is True
+        assert ns.allow_duplicate is False
+
+    def test_create_allow_duplicate_flag(self):
+        ns = self.parser.parse_args(["create", "My Card", "--allow-duplicate"])
+        assert ns.allow_duplicate is True
 
     def test_feature_command(self):
         ns = self.parser.parse_args([
@@ -169,6 +174,17 @@ class TestBuildParser:
         assert ns.skip_art is False
         assert ns.priority == "a"
         assert ns.effort == 5
+        assert ns.allow_duplicate is False
+
+    def test_feature_allow_duplicate_flag(self):
+        ns = self.parser.parse_args([
+            "feature", "Combat Revamp",
+            "--hero-deck", "Features",
+            "--code-deck", "Code",
+            "--design-deck", "Design",
+            "--allow-duplicate",
+        ])
+        assert ns.allow_duplicate is True
 
     def test_card_command(self):
         ns = self.parser.parse_args(["card", "abc-123"])

@@ -11,7 +11,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (321 unit tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (328 unit tests, no API calls)
 - **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
@@ -119,14 +119,14 @@ Invalid → `[ERROR]` with valid options listed.
 **Read:** `account`, `cards` (filters: `--deck --status --project --milestone --search --tag --owner --priority --sort --stats --hand --hero <id> --type hero|doc --archived --stale <days> --updated-after --updated-before`), `card <id>` (shows checklist, conversations, sub-cards), `decks`, `projects`, `milestones`, `activity` (`--limit`), `pm-focus` (`--project --owner --limit --stale-days`), `standup` (`--days --project --owner`)
 **Hand:** `hand` (list hand cards), `hand <id...>` (add to hand), `unhand <id...>` (remove from hand)
 **Comments:** `comment <card_id> "msg"` (new thread), `comment <card_id> --thread <id> "reply"`, `comment <card_id> --close <id>`, `comment <card_id> --reopen <id>`, `conversations <card_id>` (list all)
-**Mutate:** `create <title>` (`--deck --project --content --severity --doc`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
+**Mutate:** `create <title>` (`--deck --project --content --severity --doc [--allow-duplicate]`), `feature <title>` (`--hero-deck --code-deck --design-deck [--art-deck|--skip-art] [--owner --priority --effort] [--allow-duplicate]`), `update <id> [id...]` (`--status --priority --effort --deck --title --content --milestone --hero --owner --tag --doc`), `done/start <id...>`, `archive/unarchive <id>`, `delete <id> --confirm`
 **Feature scaffolding safety:** `feature` is transaction-safe with compensating rollback (archives created cards if later steps fail).
 **GDD:** `gdd` (`--refresh --file --save-cache`), `gdd-sync` (`--project --section --apply --quiet --refresh --file --save-cache`), `gdd-auth`, `gdd-revoke`
 **Other:** `setup`, `generate-token --label`, `query <json>`, `dispatch <path> <json>`
 **Global flags:** `--format table|csv|json` (default json), `--version`
 
 ## Testing
-- Run: `pwsh -File scripts/run-tests.ps1` (321 tests, ~8 seconds)
+- Run: `pwsh -File scripts/run-tests.ps1` (328 tests, ~8 seconds)
 - `conftest.py` autouse `_isolate_config` fixture monkeypatches all `config` globals (tokens, env, cache, strict mode) — no real `.env` or API calls
 - Test files mirror source modules: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`
 - Tests mock at module boundary (e.g. `commands.list_cards`, `commands.update_card`), verify output via `capsys`

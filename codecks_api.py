@@ -75,6 +75,7 @@ Commands:
     --content <text>        Card description/content
     --severity <level>      critical, high, low, or null
     --doc                   Create as a doc card (no workflow states)
+    --allow-duplicate       Bypass exact duplicate-title protection
   feature <title>         - Scaffold Hero + lane sub-cards (no Journey mode)
     --hero-deck <name>      Hero destination deck (required)
     --code-deck <name>      Code sub-card deck (required)
@@ -85,6 +86,7 @@ Commands:
     --owner <name>          Assign owner to hero and sub-cards
     --priority <level>      a, b, c, or null
     --effort <n>            Apply effort to sub-cards
+    --allow-duplicate       Bypass exact duplicate Hero-title protection
   update <id> [id...]     - Update card properties (supports multiple IDs)
     --status <state>        not_started, started, done, blocked, in_review
     --priority <level>      a (high), b (medium), c (low), or null
@@ -238,6 +240,8 @@ def build_parser():
     p.add_argument("--content")
     p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
     p.add_argument("--doc", action="store_true")
+    p.add_argument("--allow-duplicate", action="store_true",
+                   dest="allow_duplicate")
 
     # --- update ---
     p = sub.add_parser("update")
@@ -266,6 +270,8 @@ def build_parser():
     p.add_argument("--owner")
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--effort", type=_positive_int)
+    p.add_argument("--allow-duplicate", action="store_true",
+                   dest="allow_duplicate")
 
     # --- archive / remove ---
     for name in ("archive", "remove"):

@@ -228,8 +228,9 @@ class TestUpdateClearValues:
 # ---------------------------------------------------------------------------
 
 class TestCreateMissingCardId:
+    @patch("commands._guard_duplicate_title")
     @patch("commands.create_card")
-    def test_raises_on_missing_card_id(self, mock_create):
+    def test_raises_on_missing_card_id(self, mock_create, _mock_guard):
         mock_create.return_value = {}
         ns = argparse.Namespace(
             title="Test Card", content=None, severity=None,
@@ -244,12 +245,14 @@ class TestCreateProjectNotFound:
     """Critical fix #2: --project on nonexistent project should raise CliError,
     not silently print to stderr."""
 
+    @patch("commands._guard_duplicate_title")
     @patch("commands.load_project_names")
     @patch("commands.get_project_deck_ids")
     @patch("commands.list_decks")
     @patch("commands.create_card")
     def test_raises_on_unknown_project(self, mock_create, mock_list_decks,
-                                        mock_get_project, mock_proj_names):
+                                       mock_get_project, mock_proj_names,
+                                       _mock_guard):
         mock_create.return_value = {"cardId": "new-card-id"}
         mock_list_decks.return_value = {"deck": {}}
         mock_get_project.return_value = None
@@ -262,6 +265,68 @@ class TestCreateProjectNotFound:
             cmd_create(ns)
         assert "Nonexistent" in str(exc_info.value)
         assert "Tea Shop" in str(exc_info.value)
+
+
+class TestCreateDuplicateGuard:
+    @patch("commands.list_cards")
+    @patch("commands.create_card")
+    def test_blocks_exact_duplicate_without_override(self, mock_create, mock_list_cards):
+        mock_list_cards.return_value = {
+            "card": {
+                "c1": {"title": "Combat Revamp", "status": "started"},
+            }
+        }
+        ns = argparse.Namespace(
+            title="Combat Revamp", content=None, severity=None,
+            deck=None, project=None, doc=False, format="json",
+            allow_duplicate=False,
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "Duplicate card title detected" in str(exc_info.value)
+        assert "--allow-duplicate" in str(exc_info.value)
+        mock_create.assert_not_called()
+
+    @patch("commands.mutation_response")
+    @patch("commands.create_card")
+    @patch("commands.list_cards")
+    def test_allows_duplicate_when_overridden(self, mock_list_cards, mock_create,
+                                              mock_mutation):
+        mock_list_cards.return_value = {
+            "card": {
+                "c1": {"title": "Combat Revamp", "status": "started"},
+            }
+        }
+        mock_create.return_value = {"cardId": "new-card-id"}
+        ns = argparse.Namespace(
+            title="Combat Revamp", content=None, severity=None,
+            deck=None, project=None, doc=False, format="json",
+            allow_duplicate=True,
+        )
+        cmd_create(ns)
+        mock_create.assert_called_once()
+        mock_mutation.assert_called_once()
+
+    @patch("commands.mutation_response")
+    @patch("commands.create_card")
+    @patch("commands.list_cards")
+    def test_warns_on_similar_title(self, mock_list_cards, mock_create,
+                                    mock_mutation, capsys):
+        mock_list_cards.return_value = {
+            "card": {
+                "c1": {"title": "Combat Revamp v2", "status": "not_started"},
+            }
+        }
+        mock_create.return_value = {"cardId": "new-card-id"}
+        ns = argparse.Namespace(
+            title="Combat Revamp", content=None, severity=None,
+            deck=None, project=None, doc=False, format="json",
+            allow_duplicate=False,
+        )
+        cmd_create(ns)
+        captured = capsys.readouterr()
+        assert "[WARN] Similar card titles found" in captured.err
+        mock_mutation.assert_called_once()
 
 
 class TestUpdateNoFlags:
@@ -581,12 +646,13 @@ class TestRawCommandValidation:
 
 
 class TestFeatureScaffold:
+    @patch("commands._guard_duplicate_title")
     @patch("commands.output")
     @patch("commands.update_card")
     @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
     def test_creates_hero_and_subcards(self, mock_resolve_deck, mock_create,
-                                       mock_update, mock_output):
+                                       mock_update, mock_output, _mock_guard):
         mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design", "d-art"]
         mock_create.side_effect = [
             {"cardId": "hero-1"},
@@ -623,12 +689,13 @@ class TestFeatureScaffold:
         assert art_kwargs["deckId"] == "d-art"
         mock_output.assert_called_once()
 
+    @patch("commands._guard_duplicate_title")
     @patch("commands.output")
     @patch("commands.update_card")
     @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
     def test_auto_skips_art_when_art_deck_missing(self, mock_resolve_deck, mock_create,
-                                                  mock_update, mock_output):
+                                                  mock_update, mock_output, _mock_guard):
         mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
         mock_create.side_effect = [
             {"cardId": "hero-1"},
@@ -654,12 +721,13 @@ class TestFeatureScaffold:
         report = mock_output.call_args.args[0]
         assert report["decks"]["art"] is None
 
+    @patch("commands._guard_duplicate_title")
     @patch("commands.output")
     @patch("commands.update_card")
     @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
     def test_skip_art_creates_two_subcards(self, mock_resolve_deck, mock_create,
-                                           mock_update, mock_output):
+                                           mock_update, mock_output, _mock_guard):
         mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
         mock_create.side_effect = [
             {"cardId": "hero-1"},
@@ -682,12 +750,13 @@ class TestFeatureScaffold:
         cmd_feature(ns)
         assert mock_create.call_count == 3
 
+    @patch("commands._guard_duplicate_title")
     @patch("commands.archive_card")
     @patch("commands.update_card")
     @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
     def test_rolls_back_on_partial_failure(self, mock_resolve_deck, mock_create,
-                                           mock_update, mock_archive):
+                                           mock_update, mock_archive, _mock_guard):
         mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
         mock_create.side_effect = [
             {"cardId": "hero-1"},
@@ -719,13 +788,14 @@ class TestFeatureScaffold:
         assert mock_archive.call_args_list[0].args[0] == "code-1"
         assert mock_archive.call_args_list[1].args[0] == "hero-1"
 
+    @patch("commands._guard_duplicate_title")
     @patch("commands.archive_card")
     @patch("commands.update_card")
     @patch("commands.create_card")
     @patch("commands.resolve_deck_id")
     def test_preserves_setup_error_during_rollback(self, mock_resolve_deck,
                                                    mock_create, mock_update,
-                                                   mock_archive):
+                                                   mock_archive, _mock_guard):
         mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
         mock_create.side_effect = [
             {"cardId": "hero-1"},
@@ -754,6 +824,34 @@ class TestFeatureScaffold:
         assert mock_archive.call_count == 2
         assert mock_archive.call_args_list[0].args[0] == "code-1"
         assert mock_archive.call_args_list[1].args[0] == "hero-1"
+
+    @patch("commands.list_cards")
+    @patch("commands.create_card")
+    def test_blocks_duplicate_feature_hero_by_default(self, mock_create,
+                                                      mock_list_cards):
+        mock_list_cards.return_value = {
+            "card": {
+                "h1": {"title": "Feature: Combat Revamp", "status": "started"},
+            }
+        }
+        ns = argparse.Namespace(
+            title="Combat Revamp",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=True,
+            description=None,
+            owner=None,
+            priority=None,
+            effort=None,
+            format="json",
+            allow_duplicate=False,
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_feature(ns)
+        assert "Duplicate feature hero title detected" in str(exc_info.value)
+        mock_create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

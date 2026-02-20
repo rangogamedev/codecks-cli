@@ -178,7 +178,15 @@ py codecks_api.py create "Refactor save system" --deck "Backlog"
 
 # Create into the first deck of a project
 py codecks_api.py create "New feature idea" --project "My Project"
+
+# Bypass duplicate-title protection (exact title match)
+py codecks_api.py create "Fix login bug" --allow-duplicate
 ```
+
+Duplicate-title safety:
+- Exact title matches now fail fast to prevent accidental duplicate cards.
+- Use `--allow-duplicate` to intentionally create a same-title card.
+- Near matches are shown as warnings only (they do not block creation).
 
 ### Scaffold a feature (Hero + sub-cards, no Journey)
 
@@ -202,6 +210,10 @@ py codecks_api.py feature "Economy Tuning" \
   --design-deck "Design" \
   --skip-art
 ```
+
+Feature duplicate safety:
+- Exact duplicate Hero titles (`Feature: <title>`) are blocked by default.
+- Use `--allow-duplicate` when you intentionally want another Hero with the same title.
 
 Transaction safety:
 - If feature scaffolding fails after creating some cards, the command performs a best-effort rollback by archiving created cards.
