@@ -3,10 +3,11 @@
 import json
 import pytest
 import sys
+from unittest.mock import patch
 
 from config import CliError
 from api import (_mask_token, _safe_json_parse, _sanitize_error, _try_call,
-                 HTTPError, warn_if_empty)
+                 HTTPError, warn_if_empty, session_request, _http_request)
 
 
 class TestMaskToken:
@@ -86,3 +87,33 @@ class TestWarnIfEmpty:
     def test_warns_on_empty_dict(self, capsys):
         warn_if_empty({"card": {}}, "card")
         assert "[TOKEN_EXPIRED]" in capsys.readouterr().err
+
+
+class TestSessionRequest429:
+    @patch("api._http_request")
+    def test_rate_limit_message(self, mock_http):
+        mock_http.side_effect = HTTPError(429, "Too Many Requests", "")
+        with pytest.raises(CliError) as exc_info:
+            session_request("/", {"query": {}})
+        assert "Rate limit" in str(exc_info.value)
+
+
+class TestContentTypeCheck:
+    @patch("api.urllib.request.urlopen")
+    def test_html_content_type_gives_proxy_message(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.headers.get.return_value = "text/html; charset=utf-8"
+        mock_resp.read.return_value = b"<html>Error</html>"
+        with pytest.raises(CliError) as exc_info:
+            _http_request("https://api.codecks.io/", {})
+        assert "Content-Type" in str(exc_info.value)
+        assert "proxy" in str(exc_info.value)
+
+    @patch("api.urllib.request.urlopen")
+    def test_json_content_type_gives_json_message(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.headers.get.return_value = "application/json"
+        mock_resp.read.return_value = b"not valid json{{"
+        with pytest.raises(CliError) as exc_info:
+            _http_request("https://api.codecks.io/", {})
+        assert "not valid JSON" in str(exc_info.value)

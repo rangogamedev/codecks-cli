@@ -169,6 +169,9 @@ def cmd_create(ns):
     fmt = ns.format
     result = create_card(ns.title, ns.content, ns.severity)
     card_id = result.get("cardId", "")
+    if not card_id:
+        raise CliError("[ERROR] Card creation failed: API response missing "
+                       f"'cardId'. Response: {str(result)[:200]}")
     placed_in = None
     post_update = {}
     if ns.deck:

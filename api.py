@@ -73,9 +73,16 @@ def _http_request(url, data=None, headers=None, method="POST"):
                                 method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            raw = resp.read()
             try:
-                return json.loads(resp.read().decode("utf-8"))
+                return json.loads(raw.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
+                if content_type and "json" not in content_type.lower():
+                    raise CliError(
+                        f"[ERROR] Unexpected Content-Type from server "
+                        f"({content_type}). This may be a proxy or "
+                        "network issue.")
                 raise CliError("[ERROR] Unexpected response from Codecks API "
                                "(not valid JSON).")
     except urllib.error.HTTPError as e:
@@ -106,6 +113,10 @@ def session_request(path="/", data=None, method="POST"):
                 "Please provide a fresh 'at' cookie from browser DevTools "
                 "(Brave > F12 > Network > api.codecks.io request > "
                 "Cookie header > at=...).")
+        if e.code == 429:
+            raise CliError(
+                "[ERROR] Rate limit reached (Codecks allows ~40 req/5s). "
+                "Wait a few seconds and retry.")
         raise CliError(f"[ERROR] HTTP {e.code}: {e.reason}\n"
                        f"{_sanitize_error(e.body)}")
 

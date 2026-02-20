@@ -54,6 +54,7 @@ PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
 VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title",
                      "owner", "updated", "created"}
 VALID_CARD_TYPES = {"hero", "doc"}
+VALID_SEVERITIES = {"critical", "high", "low", "null"}
 
 BASE_URL = "https://api.codecks.io"
 

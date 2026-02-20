@@ -205,6 +205,23 @@ class TestUpdateClearValues:
 # Regression: no update flags provided
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Regression: cmd_create with missing cardId in API response
+# ---------------------------------------------------------------------------
+
+class TestCreateMissingCardId:
+    @patch("commands.create_card")
+    def test_raises_on_missing_card_id(self, mock_create):
+        mock_create.return_value = {}
+        ns = argparse.Namespace(
+            title="Test Card", content=None, severity=None,
+            deck=None, project=None, doc=False, format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "cardId" in str(exc_info.value)
+
+
 class TestUpdateNoFlags:
     def test_exits_with_error(self):
         ns = argparse.Namespace(

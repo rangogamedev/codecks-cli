@@ -188,7 +188,7 @@ def build_parser():
     p.add_argument("--deck")
     p.add_argument("--project")
     p.add_argument("--content")
-    p.add_argument("--severity")
+    p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
     p.add_argument("--doc", action="store_true")
 
     # --- update ---

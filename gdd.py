@@ -16,7 +16,7 @@ import urllib.request
 import webbrowser
 
 import config
-from config import CliError
+from config import CliError, SetupError
 from cards import list_cards, list_decks, create_card, update_card
 
 
@@ -39,6 +39,11 @@ def _save_gdd_tokens(tokens):
     """Save Google OAuth tokens to .gdd_tokens.json."""
     with open(config.GDD_TOKENS_PATH, "w", encoding="utf-8") as f:
         json.dump(tokens, f, indent=2)
+    # Restrict to owner-only on Unix/Mac. No-op on Windows.
+    try:
+        os.chmod(config.GDD_TOKENS_PATH, 0o600)
+    except (OSError, NotImplementedError):
+        pass
 
 
 def _google_token_request(params):
@@ -507,6 +512,10 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
                 try:
                     result = create_card(task["title"], task.get("content"))
                     card_id = result.get("cardId", "")
+                    if not card_id:
+                        raise CliError(
+                            "[ERROR] create_card returned no cardId "
+                            f"for '{task['title']}'")
                     update_kwargs = {}
                     if deck_id:
                         update_kwargs["deckId"] = deck_id
@@ -521,8 +530,13 @@ def sync_gdd(sections, project_name, target_section=None, apply=False,
                     # Rate limit: ~10 creates before a brief pause
                     if len(report["created"]) % 10 == 0:
                         time.sleep(1)
-                except Exception as e:
+                except SetupError:
+                    raise
+                except CliError as e:
                     task_entry["error"] = str(e)
+                    report["errors"].append(task_entry)
+                except Exception as e:
+                    task_entry["error"] = f"Unexpected: {e}"
                     report["errors"].append(task_entry)
             else:
                 task_entry["deck"] = section["section"]

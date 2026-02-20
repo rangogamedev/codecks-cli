@@ -6,7 +6,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` — never `python` or `python3`. Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = full help). `--version` prints version.
-- **Test**: `py -m pytest tests/ -v` (170 unit tests, no API calls)
+- **Test**: `py -m pytest tests/ -v` (178 unit tests, no API calls)
 - **Version**: `VERSION` constant in `config.py` (currently 0.4.0)
 
 ## Architecture
@@ -43,6 +43,8 @@ codecks_api.py     ← config, api, commands
 - `NO_TOKEN_COMMANDS` set for commands that skip `_check_token()`
 - `CliError(msg)` / `SetupError(msg)` exceptions in `config.py` — raised instead of `sys.exit(1)`/`sys.exit(2)`. Caught once in `main()`. Messages include `[ERROR]`/`[TOKEN_EXPIRED]`/`[SETUP_NEEDED]` prefixes.
 - `_try_call(fn)` in `api.py` wraps functions that may raise `CliError` — returns `None` on failure
+- `_http_request()` checks Content-Type on parse failure — proxy/HTML responses get a specific error message
+- `sync_gdd` uses structured exceptions: `SetupError` aborts batch, `CliError` logged per-card, unexpected errors labeled
 - `output(data, formatter, fmt, csv_formatter)` in `formatters.py` dispatches JSON/table/CSV
 - `config._cache` dict caches deck/user lookups per-invocation
 - Card lists omit `content` for token efficiency; `--search` adds it back
@@ -64,7 +66,7 @@ codecks_api.py     ← config, api, commands
 - 500 error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`; relations: `users`/`projects`/`milestones`/`tags`/`userTags`/`projectTags`
 - `lastUpdatedAt` works on card query. `assigneeId` as a field gives 500 (use `assignee` relation instead).
 - Card title = first line of `content` field
-- Rate limit: 40 req / 5 sec. `sync_gdd` sleeps 1s every 10 cards created.
+- Rate limit: 40 req / 5 sec. `sync_gdd` sleeps 1s every 10 cards created. HTTP 429 returns a specific guidance message.
 - Hand uses `queueEntries` (not `handCards`) for the card list. Add via `handQueue/setCardOrders` (`sessionId`, `userId`, `cardIds`, `draggedCardIds`), remove via `handQueue/removeCards` (`sessionId`, `cardIds`). `handCards` is a different model (top-7 bookmarked cards).
 - Tags: use `masterTags` field (string array). Setting `masterTags` syncs `tags` automatically. Setting `tags` alone does NOT sync `masterTags`.
 - Owner: use `assigneeId` in `cards/update`. Set to `null` to unassign. Query via `assignee` relation (returns user model).

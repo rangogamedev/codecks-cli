@@ -87,6 +87,14 @@ class TestBuildParser:
         with pytest.raises(CliError):
             self.parser.parse_args(["cards", "--sort", "invalid"])
 
+    def test_create_severity_validation(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["create", "title", "--severity", "urgent"])
+
+    def test_create_severity_valid(self):
+        ns = self.parser.parse_args(["create", "title", "--severity", "critical"])
+        assert ns.severity == "critical"
+
     def test_update_command(self):
         ns = self.parser.parse_args(
             ["update", "card-1", "--status", "done", "--priority", "a"])

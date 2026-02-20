@@ -1,7 +1,9 @@
-"""Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id."""
+"""Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd."""
 
 import pytest
-from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id
+from unittest.mock import patch
+from config import CliError, SetupError
+from gdd import parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd
 
 
 # ---------------------------------------------------------------------------
@@ -182,3 +184,35 @@ More text
         assert sections[0]["tasks"][0]["title"] == "Build system"
         assert "[P:" not in sections[0]["tasks"][0]["title"]
         assert "[E:" not in sections[0]["tasks"][0]["title"]
+
+
+# ---------------------------------------------------------------------------
+# sync_gdd error handling
+# ---------------------------------------------------------------------------
+
+class TestSyncGddErrorHandling:
+    """Structured exception handling in sync_gdd batch loop."""
+
+    SECTIONS = [{"section": "Test", "tasks": [{"title": "Task 1"}]}]
+    MOCK_DECKS = {"deck": {"dk1": {"id": "d1", "title": "Test"}}}
+
+    @patch("gdd.list_cards", return_value={"card": {}})
+    @patch("gdd.list_decks")
+    @patch("gdd.create_card")
+    def test_setup_error_propagates(self, mock_create, mock_decks, mock_list):
+        """SetupError (token expired) should abort the batch, not be swallowed."""
+        mock_decks.return_value = self.MOCK_DECKS
+        mock_create.side_effect = SetupError("[TOKEN_EXPIRED] expired")
+        with pytest.raises(SetupError):
+            sync_gdd(self.SECTIONS, "TestProject", apply=True)
+
+    @patch("gdd.list_cards", return_value={"card": {}})
+    @patch("gdd.list_decks")
+    @patch("gdd.create_card")
+    def test_cli_error_caught_in_report(self, mock_create, mock_decks, mock_list):
+        """CliError should be caught and logged to report['errors']."""
+        mock_decks.return_value = self.MOCK_DECKS
+        mock_create.side_effect = CliError("[ERROR] some API error")
+        report = sync_gdd(self.SECTIONS, "TestProject", apply=True)
+        assert len(report["errors"]) == 1
+        assert "some API error" in report["errors"][0]["error"]
