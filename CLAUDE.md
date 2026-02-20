@@ -24,7 +24,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 | `client.py` | **`CodecksClient` class** — public API (27 keyword-only methods returning flat dicts) |
 | `commands.py` | CLI `cmd_*()` handlers (argparse → formatters). Imports helpers from `client.py` |
 | `formatters.py` | JSON/table/CSV output dispatch |
-| `mcp_server.py` | MCP server: wraps `CodecksClient` as 22 MCP tools (stdio) |
+| `mcp_server.py` | MCP server: wraps `CodecksClient` as 25 MCP tools (stdio) |
 | `models.py` | `ObjectPayload`, `FeatureSpec` dataclasses |
 | `gdd.py` | Google OAuth2, GDD fetch/parse/sync |
 | `setup_wizard.py` | Interactive `.env` bootstrap |
@@ -77,7 +77,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 22 tools exposed (all CodecksClient public methods except raw_query/raw_dispatch)
+- 25 tools exposed (all CodecksClient public methods except raw_query/raw_dispatch)
 
 ## Commands
 Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.

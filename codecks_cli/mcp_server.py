@@ -6,17 +6,38 @@ Requires: pip install codecks-cli[mcp]
 
 from __future__ import annotations
 
+from typing import Literal
+
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli import CliError, CodecksClient, SetupError
 
-mcp = FastMCP("codecks", instructions="Codecks project management tools")
+mcp = FastMCP(
+    "codecks",
+    instructions=(
+        "Codecks project management tools. "
+        "Use list_cards with filters to find cards, get_card for full details. "
+        "All card IDs must be full 36-character UUIDs. "
+        "Doc cards cannot have status, priority, or effort. "
+        "Rate limit: 40 requests per 5 seconds."
+    ),
+)
+
+_client: CodecksClient | None = None
+
+
+def _get_client() -> CodecksClient:
+    """Return a cached CodecksClient, creating one on first use."""
+    global _client
+    if _client is None:
+        _client = CodecksClient()
+    return _client
 
 
 def _call(method_name: str, **kwargs):
     """Call a CodecksClient method, converting exceptions to error dicts."""
     try:
-        client = CodecksClient()
+        client = _get_client()
         return getattr(client, method_name)(**kwargs)
     except SetupError as e:
         return {"ok": False, "error": str(e), "type": "setup"}
@@ -33,7 +54,10 @@ def _call(method_name: str, **kwargs):
 def get_account() -> dict:
     """Get current account info for the authenticated user.
 
-    Returns dict with keys: name, id, email, organizationId, role.
+    Use this to verify authentication or look up the current user's ID.
+
+    Returns:
+        dict with keys: name, id, email, organizationId, role.
     """
     return _call("get_account")
 
@@ -48,8 +72,11 @@ def list_cards(
     tag: str | None = None,
     owner: str | None = None,
     priority: str | None = None,
-    sort: str | None = None,
-    card_type: str | None = None,
+    sort: Literal[
+        "status", "priority", "effort", "deck", "title", "owner", "updated", "created"
+    ]
+    | None = None,
+    card_type: Literal["hero", "doc"] | None = None,
     hero: str | None = None,
     hand_only: bool = False,
     stale_days: int | None = None,
@@ -57,32 +84,43 @@ def list_cards(
     updated_before: str | None = None,
     archived: bool = False,
     include_stats: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict:
-    """List project cards with optional filters.
+    """List project cards with optional filters and pagination.
+
+    Use this to search, filter, or browse cards. Combine multiple filters
+    to narrow results. Returns paginated results (default 50 cards).
 
     Args:
-        deck: Filter by deck name.
-        status: Filter by status (comma-separated for multiple).
+        deck: Filter by deck name (exact match).
+        status: Filter by status. Comma-separated for multiple values
+            (e.g. "started,blocked"). Values: not_started, started, done,
+            blocked, in_review.
         project: Filter by project name.
         search: Search cards by title/content.
         milestone: Filter by milestone name.
-        tag: Filter by tag name.
-        owner: Filter by owner name ('none' for unassigned).
-        priority: Filter by priority (comma-separated for multiple).
-        sort: Sort field (status, priority, effort, deck, title, owner, updated, created).
-        card_type: Filter by card type ('hero' or 'doc').
-        hero: Show only sub-cards of this hero card ID.
+        tag: Filter by tag name (case-insensitive).
+        owner: Filter by owner name, or 'none' for unassigned.
+        priority: Filter by priority. Comma-separated for multiple values
+            (e.g. "a,b"). Values: a, b, c, null.
+        sort: Sort field.
+        card_type: Filter by card type.
+        hero: Show only sub-cards of this hero card UUID.
         hand_only: If True, show only cards in the user's hand.
         stale_days: Find cards not updated in N days.
         updated_after: Cards updated after this date (YYYY-MM-DD).
         updated_before: Cards updated before this date (YYYY-MM-DD).
         archived: If True, show archived cards instead of active ones.
-        include_stats: If True, also compute aggregate stats.
+        include_stats: If True, include aggregate stats by status/priority/deck/owner.
+        limit: Max cards to return per page (default 50). Use with offset to paginate.
+        offset: Number of cards to skip (default 0).
 
     Returns:
-        dict with 'cards' list and 'stats' (null unless include_stats=True).
+        dict with 'cards' (list), 'stats' (null unless include_stats),
+        'total_count', 'has_more', 'limit', 'offset'.
     """
-    return _call(
+    result = _call(
         "list_cards",
         deck=deck,
         status=status,
@@ -102,18 +140,36 @@ def list_cards(
         archived=archived,
         include_stats=include_stats,
     )
+    # Apply client-side pagination (error dicts pass through unchanged)
+    if isinstance(result, dict) and "cards" in result:
+        all_cards = result["cards"]
+        total = len(all_cards)
+        page = all_cards[offset : offset + limit]
+        return {
+            "cards": page,
+            "stats": result.get("stats"),
+            "total_count": total,
+            "has_more": offset + limit < total,
+            "limit": limit,
+            "offset": offset,
+        }
+    return result
 
 
 @mcp.tool()
 def get_card(card_id: str) -> dict:
     """Get full details for a single card.
 
+    Use this when you need a card's content, checklist, sub-cards,
+    conversations, or hand status. Accepts full UUIDs or short ID prefixes.
+
     Args:
-        card_id: The card's UUID or short ID prefix.
+        card_id: The card's 36-character UUID or unique short ID prefix.
 
     Returns:
-        dict with card details including checklist, sub_cards, conversations,
-        and hand status.
+        dict with card details including title, content, status, priority,
+        effort, owner, tags, milestone, deck, checklist, sub_cards,
+        conversations, and in_hand.
     """
     return _call("get_card", card_id=card_id)
 
@@ -122,8 +178,11 @@ def get_card(card_id: str) -> dict:
 def list_decks() -> dict:
     """List all decks with card counts.
 
+    Use this to discover available decks before filtering cards or
+    moving cards to a deck.
+
     Returns:
-        list of deck dicts with id, title, project_name, card_count.
+        list of dicts with id, title, project_name, card_count.
     """
     return _call("list_decks")
 
@@ -132,8 +191,10 @@ def list_decks() -> dict:
 def list_projects() -> dict:
     """List all projects.
 
+    Use this to discover project names for filtering cards.
+
     Returns:
-        list of project dicts with id, name, deck_count, decks.
+        list of dicts with id, name, deck_count, decks.
     """
     return _call("list_projects")
 
@@ -142,8 +203,10 @@ def list_projects() -> dict:
 def list_milestones() -> dict:
     """List all milestones.
 
+    Use this to discover milestone names for filtering or assigning cards.
+
     Returns:
-        list of milestone dicts with id, name, card_count.
+        list of dicts with id, name, card_count.
     """
     return _call("list_milestones")
 
@@ -151,6 +214,8 @@ def list_milestones() -> dict:
 @mcp.tool()
 def list_activity(limit: int = 20) -> dict:
     """Show recent activity feed for the account.
+
+    Use this to see what changed recently across all cards and users.
 
     Args:
         limit: Maximum number of activity events to return (default 20).
@@ -168,7 +233,10 @@ def pm_focus(
     limit: int = 5,
     stale_days: int = 14,
 ) -> dict:
-    """Generate PM focus dashboard data.
+    """Generate PM focus dashboard showing sprint health.
+
+    Use this for a high-level overview: blocked cards, unassigned work,
+    stale items, and suggested next actions.
 
     Args:
         project: Filter by project name.
@@ -186,8 +254,11 @@ def pm_focus(
 def standup(days: int = 2, project: str | None = None, owner: str | None = None) -> dict:
     """Generate daily standup summary.
 
+    Use this to prepare for standups: see recently completed work,
+    in-progress cards, blockers, and hand queue.
+
     Args:
-        days: Lookback for recent completions (default 2).
+        days: Lookback period for recent completions (default 2).
         project: Filter by project name.
         owner: Filter by owner name.
 
@@ -206,6 +277,8 @@ def standup(days: int = 2, project: str | None = None, owner: str | None = None)
 def list_hand() -> dict:
     """List cards in the user's hand (personal work queue).
 
+    Use this to see the user's prioritized to-do list.
+
     Returns:
         list of card dicts sorted by hand order.
     """
@@ -216,8 +289,10 @@ def list_hand() -> dict:
 def add_to_hand(card_ids: list[str]) -> dict:
     """Add cards to the user's hand (personal work queue).
 
+    Use this to queue cards for the user to work on next.
+
     Args:
-        card_ids: List of full card UUIDs (36-char format) to add.
+        card_ids: List of full 36-character card UUIDs to add.
 
     Returns:
         dict with ok=True and count of added cards.
@@ -229,8 +304,10 @@ def add_to_hand(card_ids: list[str]) -> dict:
 def remove_from_hand(card_ids: list[str]) -> dict:
     """Remove cards from the user's hand (personal work queue).
 
+    Use this when work on a card is done or deprioritized.
+
     Args:
-        card_ids: List of full card UUIDs (36-char format) to remove.
+        card_ids: List of full 36-character card UUIDs to remove.
 
     Returns:
         dict with ok=True and count of removed cards.
@@ -249,19 +326,22 @@ def create_card(
     content: str | None = None,
     deck: str | None = None,
     project: str | None = None,
-    severity: str | None = None,
+    severity: Literal["critical", "high", "low", "null"] | None = None,
     doc: bool = False,
     allow_duplicate: bool = False,
 ) -> dict:
     """Create a new card.
 
+    Use this to add a bug report, task, or doc card. Specify a deck or
+    project to place the card; otherwise it goes to the default inbox.
+
     Args:
-        title: Card title.
-        content: Card body/description.
+        title: Card title (required).
+        content: Card body/description (markdown supported).
         deck: Place card in this deck (by name).
         project: Place card in the first deck of this project.
-        severity: Card severity (critical, high, low, null).
-        doc: If True, create as a doc card.
+        severity: Bug severity level. Use 'null' to clear.
+        doc: If True, create as a doc card (no status/priority/effort).
         allow_duplicate: Bypass duplicate title protection.
 
     Returns:
@@ -282,8 +362,8 @@ def create_card(
 @mcp.tool()
 def update_cards(
     card_ids: list[str],
-    status: str | None = None,
-    priority: str | None = None,
+    status: Literal["not_started", "started", "done", "blocked", "in_review"] | None = None,
+    priority: Literal["a", "b", "c", "null"] | None = None,
     effort: str | None = None,
     deck: str | None = None,
     title: str | None = None,
@@ -292,26 +372,30 @@ def update_cards(
     hero: str | None = None,
     owner: str | None = None,
     tags: str | None = None,
-    doc: str | None = None,
+    doc: Literal["true", "false"] | None = None,
 ) -> dict:
-    """Update one or more cards.
+    """Update one or more cards' properties.
+
+    Use this to change status, priority, owner, tags, deck, or content.
+    Doc cards cannot have status, priority, or effort — only
+    owner/tags/milestone/deck/title/content/hero can be set.
 
     Args:
-        card_ids: List of card UUIDs.
-        status: New status (not_started, started, done, blocked, in_review).
-        priority: New priority (a, b, c, or 'null' to clear).
-        effort: New effort (integer as string, or 'null' to clear).
+        card_ids: List of full 36-character UUIDs (short IDs will 400).
+        status: New status. Not valid for doc cards.
+        priority: New priority. Use 'null' to clear. Not valid for doc cards.
+        effort: New effort (integer as string, or 'null' to clear). Not valid for doc cards.
         deck: Move to this deck (by name).
         title: New title (single card only).
-        content: New content (single card only).
-        milestone: Milestone name (or 'none' to clear).
-        hero: Parent card ID (or 'none' to detach).
-        owner: Owner name (or 'none' to unassign).
-        tags: Comma-separated tags (or 'none' to clear all).
-        doc: 'true'/'false' to toggle doc card mode.
+        content: New content/body (single card only).
+        milestone: Milestone name, or 'none' to clear.
+        hero: Parent hero card UUID, or 'none' to detach.
+        owner: Owner name, or 'none' to unassign.
+        tags: Comma-separated tags, or 'none' to clear all.
+        doc: Toggle doc card mode.
 
     Returns:
-        dict with ok=True, updated count, and fields changed.
+        dict with ok=True, updated (count), and fields (list of changed field names).
     """
     return _call(
         "update_cards",
@@ -334,8 +418,10 @@ def update_cards(
 def mark_done(card_ids: list[str]) -> dict:
     """Mark one or more cards as done.
 
+    Use this as a shortcut instead of update_cards with status='done'.
+
     Args:
-        card_ids: List of card UUIDs.
+        card_ids: List of full 36-character card UUIDs.
 
     Returns:
         dict with ok=True and count.
@@ -347,8 +433,10 @@ def mark_done(card_ids: list[str]) -> dict:
 def mark_started(card_ids: list[str]) -> dict:
     """Mark one or more cards as started.
 
+    Use this as a shortcut instead of update_cards with status='started'.
+
     Args:
-        card_ids: List of card UUIDs.
+        card_ids: List of full 36-character card UUIDs.
 
     Returns:
         dict with ok=True and count.
@@ -358,10 +446,12 @@ def mark_started(card_ids: list[str]) -> dict:
 
 @mcp.tool()
 def archive_card(card_id: str) -> dict:
-    """Archive a card (reversible).
+    """Archive a card (reversible with unarchive_card).
+
+    Use this to hide a card without permanently deleting it.
 
     Args:
-        card_id: Card UUID.
+        card_id: Full 36-character card UUID.
 
     Returns:
         dict with ok=True and card_id.
@@ -373,8 +463,10 @@ def archive_card(card_id: str) -> dict:
 def unarchive_card(card_id: str) -> dict:
     """Restore an archived card.
 
+    Use this to bring back a previously archived card.
+
     Args:
-        card_id: Card UUID.
+        card_id: Full 36-character card UUID.
 
     Returns:
         dict with ok=True and card_id.
@@ -386,8 +478,10 @@ def unarchive_card(card_id: str) -> dict:
 def delete_card(card_id: str) -> dict:
     """Permanently delete a card. This cannot be undone.
 
+    Use archive_card instead if the deletion should be reversible.
+
     Args:
-        card_id: Card UUID.
+        card_id: Full 36-character card UUID.
 
     Returns:
         dict with ok=True and card_id.
@@ -405,30 +499,31 @@ def scaffold_feature(
     skip_art: bool = False,
     description: str | None = None,
     owner: str | None = None,
-    priority: str | None = None,
+    priority: Literal["a", "b", "c", "null"] | None = None,
     effort: int | None = None,
     allow_duplicate: bool = False,
 ) -> dict:
     """Scaffold a Hero feature with lane sub-cards.
 
-    Creates a Hero card plus Code, Design, and optionally Art sub-cards.
-    Transaction-safe: archives created cards on partial failure.
+    Use this to create a Hero card plus Code, Design, and optionally Art
+    sub-cards in one operation. Transaction-safe: archives created cards
+    on partial failure.
 
     Args:
-        title: Feature title.
-        hero_deck: Hero card destination deck.
-        code_deck: Code sub-card deck.
-        design_deck: Design sub-card deck.
-        art_deck: Art sub-card deck (required unless skip_art).
-        skip_art: Skip art lane.
-        description: Feature context/goal.
-        owner: Owner name for hero and sub-cards.
-        priority: Priority level (a, b, c, or 'null').
-        effort: Effort estimation (integer).
+        title: Feature title (required).
+        hero_deck: Hero card destination deck name (required).
+        code_deck: Code sub-card deck name (required).
+        design_deck: Design sub-card deck name (required).
+        art_deck: Art sub-card deck name (required unless skip_art=True).
+        skip_art: Skip creating the art lane sub-card.
+        description: Feature context/goal for the hero card body.
+        owner: Owner name for hero and all sub-cards.
+        priority: Priority for hero and sub-cards. Use 'null' to clear.
+        effort: Effort estimation (integer) for sub-cards.
         allow_duplicate: Bypass duplicate title protection.
 
     Returns:
-        FeatureScaffoldReport as dict.
+        dict with ok=True, hero (card dict), subcards (list), and summary.
     """
     return _call(
         "scaffold_feature",
@@ -455,8 +550,10 @@ def scaffold_feature(
 def create_comment(card_id: str, message: str) -> dict:
     """Start a new comment thread on a card.
 
+    Use this to leave feedback, ask questions, or document decisions.
+
     Args:
-        card_id: Card UUID.
+        card_id: Full 36-character card UUID.
         message: Comment text.
 
     Returns:
@@ -466,11 +563,63 @@ def create_comment(card_id: str, message: str) -> dict:
 
 
 @mcp.tool()
+def reply_comment(thread_id: str, message: str) -> dict:
+    """Reply to an existing comment thread.
+
+    Use this to continue a conversation in an existing thread.
+    Use list_conversations to find thread IDs.
+
+    Args:
+        thread_id: Thread/resolvable UUID from list_conversations.
+        message: Reply text.
+
+    Returns:
+        dict with ok=True and thread_id.
+    """
+    return _call("reply_comment", thread_id=thread_id, message=message)
+
+
+@mcp.tool()
+def close_comment(thread_id: str, card_id: str) -> dict:
+    """Close (resolve) a comment thread.
+
+    Use this to mark a discussion as resolved.
+
+    Args:
+        thread_id: Thread/resolvable UUID from list_conversations.
+        card_id: Full 36-character card UUID the thread belongs to.
+
+    Returns:
+        dict with ok=True and thread_id.
+    """
+    return _call("close_comment", thread_id=thread_id, card_id=card_id)
+
+
+@mcp.tool()
+def reopen_comment(thread_id: str, card_id: str) -> dict:
+    """Reopen a closed comment thread.
+
+    Use this to re-open a previously resolved discussion.
+
+    Args:
+        thread_id: Thread/resolvable UUID from list_conversations.
+        card_id: Full 36-character card UUID the thread belongs to.
+
+    Returns:
+        dict with ok=True and thread_id.
+    """
+    return _call("reopen_comment", thread_id=thread_id, card_id=card_id)
+
+
+@mcp.tool()
 def list_conversations(card_id: str) -> dict:
     """List all comment threads on a card.
 
+    Use this to read existing discussions and find thread IDs for
+    reply_comment, close_comment, or reopen_comment.
+
     Args:
-        card_id: Card UUID.
+        card_id: Full 36-character card UUID.
 
     Returns:
         dict with resolvable threads, messages, and referenced users.

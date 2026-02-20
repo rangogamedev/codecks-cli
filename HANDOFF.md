@@ -4,8 +4,16 @@ Last updated: 2026-02-21 | Version: 0.4.0
 
 ## Recent Changes
 
+### MCP Server Improvements
+- **25 tools** (was 22) — added `reply_comment`, `close_comment`, `reopen_comment`
+- **Literal types** for enum params (status, priority, sort, card_type, severity, doc)
+- **Pagination** on `list_cards` (limit/offset, default 50 cards per page)
+- **Cached client** — single `CodecksClient` instance reused across tool calls
+- **Agent-friendly docstrings** — "when to use" hints, return shapes, gotchas
+- **Enhanced server instructions** — UUID requirement, doc card constraints, rate limit
+
 ### MCP Server
-- **New `mcp_server.py`** — 22 MCP tools wrapping `CodecksClient` via FastMCP (stdio transport)
+- **New `mcp_server.py`** — 25 MCP tools wrapping `CodecksClient` via FastMCP (stdio transport)
 - **Install**: `pip install .[mcp]` (optional dep `mcp[cli]>=1.6.0`)
 - **Run**: `python -m codecks_cli.mcp_server` or `codecks-mcp` entry point
 - **Client fixes**: `_guard_duplicate_title()` returns warnings in dict (no stderr), `list_cards()` always returns `{cards, stats}` shape, improved docstrings for tool descriptions

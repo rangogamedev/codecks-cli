@@ -13,6 +13,14 @@ from unittest.mock import MagicMock, patch  # noqa: E402
 from codecks_cli.config import CliError, SetupError  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_client_cache():
+    """Reset the cached CodecksClient between tests."""
+    mcp_mod._client = None
+    yield
+    mcp_mod._client = None
+
+
 def _mock_client(**method_returns):
     """Return a patched CodecksClient whose methods return given values."""
     client = MagicMock()
@@ -39,6 +47,8 @@ class TestReadTools:
         MockClient.return_value = client
         result = mcp_mod.list_cards(status="started", sort="priority")
         assert len(result["cards"]) == 1
+        assert result["total_count"] == 1
+        assert result["has_more"] is False
         client.list_cards.assert_called_once_with(
             deck=None,
             status="started",
@@ -208,10 +218,124 @@ class TestCommentTools:
         assert result["ok"] is True
 
     @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_reply_comment(self, MockClient):
+        client = _mock_client(reply_comment={"ok": True, "thread_id": "t1", "data": {}})
+        MockClient.return_value = client
+        result = mcp_mod.reply_comment("t1", "Thanks!")
+        assert result["ok"] is True
+        client.reply_comment.assert_called_once_with(thread_id="t1", message="Thanks!")
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_close_comment(self, MockClient):
+        client = _mock_client(close_comment={"ok": True, "thread_id": "t1", "data": {}})
+        MockClient.return_value = client
+        result = mcp_mod.close_comment("t1", "c1")
+        assert result["ok"] is True
+        client.close_comment.assert_called_once_with(thread_id="t1", card_id="c1")
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_reopen_comment(self, MockClient):
+        client = _mock_client(reopen_comment={"ok": True, "thread_id": "t1", "data": {}})
+        MockClient.return_value = client
+        result = mcp_mod.reopen_comment("t1", "c1")
+        assert result["ok"] is True
+        client.reopen_comment.assert_called_once_with(thread_id="t1", card_id="c1")
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
     def test_list_conversations(self, MockClient):
         MockClient.return_value = _mock_client(list_conversations={"resolvable": {}})
         result = mcp_mod.list_conversations("c1")
         assert "resolvable" in result
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+
+
+class TestPagination:
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_defaults(self, MockClient):
+        """Default limit=50, offset=0 returns all cards when under limit."""
+        cards = [{"id": f"c{i}"} for i in range(10)]
+        MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
+        result = mcp_mod.list_cards()
+        assert len(result["cards"]) == 10
+        assert result["total_count"] == 10
+        assert result["has_more"] is False
+        assert result["limit"] == 50
+        assert result["offset"] == 0
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_limit(self, MockClient):
+        """Limit restricts the number of returned cards."""
+        cards = [{"id": f"c{i}"} for i in range(10)]
+        MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
+        result = mcp_mod.list_cards(limit=3)
+        assert len(result["cards"]) == 3
+        assert result["cards"][0]["id"] == "c0"
+        assert result["total_count"] == 10
+        assert result["has_more"] is True
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_offset(self, MockClient):
+        """Offset skips cards."""
+        cards = [{"id": f"c{i}"} for i in range(10)]
+        MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
+        result = mcp_mod.list_cards(limit=3, offset=7)
+        assert len(result["cards"]) == 3
+        assert result["cards"][0]["id"] == "c7"
+        assert result["total_count"] == 10
+        assert result["has_more"] is False
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_offset_past_end(self, MockClient):
+        """Offset past end returns empty cards list."""
+        cards = [{"id": f"c{i}"} for i in range(5)]
+        MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
+        result = mcp_mod.list_cards(limit=10, offset=20)
+        assert len(result["cards"]) == 0
+        assert result["total_count"] == 5
+        assert result["has_more"] is False
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_preserves_stats(self, MockClient):
+        """Stats are passed through from the client response."""
+        stats = {"by_status": {"started": 3}}
+        MockClient.return_value = _mock_client(
+            list_cards={"cards": [{"id": "c1"}], "stats": stats}
+        )
+        result = mcp_mod.list_cards(include_stats=True)
+        assert result["stats"] == stats
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_pagination_not_applied_to_errors(self, MockClient):
+        """Error dicts are returned as-is without pagination."""
+        client = MagicMock()
+        client.list_cards.side_effect = CliError("[ERROR] Bad filter")
+        MockClient.return_value = client
+        result = mcp_mod.list_cards()
+        assert result["ok"] is False
+        assert "total_count" not in result
+
+
+# ---------------------------------------------------------------------------
+# Client caching
+# ---------------------------------------------------------------------------
+
+
+class TestClientCaching:
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_client_is_cached(self, MockClient):
+        """CodecksClient is instantiated once and reused across calls."""
+        client = _mock_client(
+            get_account={"name": "Alice"},
+            list_decks=[],
+        )
+        MockClient.return_value = client
+        mcp_mod.get_account()
+        mcp_mod.list_decks()
+        MockClient.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
