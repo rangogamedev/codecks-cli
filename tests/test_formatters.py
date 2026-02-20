@@ -15,7 +15,9 @@ from codecks_cli.formatters import (
     format_conversations_table,
     format_decks_table,
     format_gdd_table,
+    format_milestones_table,
     format_pm_focus_table,
+    format_projects_table,
     format_standup_table,
     format_stats_table,
     mutation_response,
@@ -110,8 +112,9 @@ class TestFormatCardsTable:
     def test_formats_cards(self):
         result = format_cards_table(
             {
-                "card": {
-                    "c1": {
+                "cards": [
+                    {
+                        "id": "c1",
                         "status": "done",
                         "priority": "a",
                         "effort": 3,
@@ -121,7 +124,8 @@ class TestFormatCardsTable:
                         "owner_name": "Thomas",
                         "tags": ["bug"],
                     },
-                }
+                ],
+                "stats": None,
             }
         )
         assert "done" in result
@@ -134,15 +138,16 @@ class TestFormatCardsTable:
         assert "Total: 1 cards" in result
 
     def test_no_cards(self):
-        assert "No cards" in format_cards_table({"card": {}})
+        assert "No cards" in format_cards_table({"cards": [], "stats": None})
         assert "No cards" in format_cards_table({})
 
     def test_sub_card_count_shown(self):
         result = format_cards_table(
             {
-                "card": {
-                    "c1": {"title": "Hero", "sub_card_count": 5, "status": "started"},
-                }
+                "cards": [
+                    {"id": "c1", "title": "Hero", "sub_card_count": 5, "status": "started"},
+                ],
+                "stats": None,
             }
         )
         assert "[5 sub]" in result
@@ -157,24 +162,21 @@ class TestFormatCardDetail:
     def test_full_card_detail(self):
         result = format_card_detail(
             {
-                "card": {
-                    "c1": {
-                        "title": "Test Card",
-                        "status": "started",
-                        "priority": "b",
-                        "effort": 5,
-                        "severity": "high",
-                        "deck_name": "Features",
-                        "owner_name": "Thomas",
-                        "milestone_name": "MVP",
-                        "tags": ["ui"],
-                        "parentCardId": "hero-uuid-123",
-                        "in_hand": True,
-                        "createdAt": "2026-01-01T00:00:00Z",
-                        "lastUpdatedAt": "2026-01-02T00:00:00Z",
-                        "content": "Test Card\nSome description here",
-                    },
-                }
+                "id": "c1",
+                "title": "Test Card",
+                "status": "started",
+                "priority": "b",
+                "effort": 5,
+                "severity": "high",
+                "deck_name": "Features",
+                "owner_name": "Thomas",
+                "milestone_name": "MVP",
+                "tags": ["ui"],
+                "parentCardId": "hero-uuid-123",
+                "in_hand": True,
+                "createdAt": "2026-01-01T00:00:00Z",
+                "lastUpdatedAt": "2026-01-02T00:00:00Z",
+                "content": "Test Card\nSome description here",
             }
         )
         assert "Test Card" in result
@@ -190,66 +192,45 @@ class TestFormatCardDetail:
         assert "Some description" in result
 
     def test_card_not_found(self):
-        assert "not found" in format_card_detail({"card": {}})
+        assert "not found" in format_card_detail({})
+        assert "not found" in format_card_detail(None)
 
-    def test_supports_snake_case_created_and_is_closed(self):
+    def test_supports_snake_case_created(self):
         result = format_card_detail(
             {
-                "card": {
-                    "c1": {
-                        "title": "Snake Card",
-                        "status": "started",
-                        "created_at": "2026-01-03T00:00:00Z",
-                        "resolvables": ["r1"],
-                    },
-                },
-                "resolvable": {
-                    "r1": {
-                        "is_closed": True,
-                        "creator": "u1",
-                        "entries": [],
-                    },
-                },
-                "resolvableEntry": {},
-                "user": {"u1": {"name": "Alice"}},
+                "id": "c1",
+                "title": "Snake Card",
+                "status": "started",
+                "created_at": "2026-01-03T00:00:00Z",
             }
         )
         assert "Created:   2026-01-03T00:00:00Z" in result
-        assert "0 open, 1 closed" in result
 
-    def test_renders_checklist_and_subcards_and_thread_messages(self):
+    def test_renders_checklist_and_subcards_and_conversations(self):
         result = format_card_detail(
             {
-                "card": {
-                    "hero": {
-                        "title": "Hero Card",
-                        "status": "started",
-                        "checkboxStats": {"total": 4, "checked": 1},
-                        "childCards": ["sub1"],
-                        "resolvables": ["r1"],
+                "id": "hero",
+                "title": "Hero Card",
+                "status": "started",
+                "checkboxStats": {"total": 4, "checked": 1},
+                "sub_cards": [
+                    {"id": "sub1", "title": "Sub Task", "status": "done"},
+                ],
+                "conversations": [
+                    {
+                        "id": "r1-full-uuid",
+                        "status": "open",
+                        "creator": "Alice",
+                        "created_at": "2026-01-01",
+                        "messages": [
+                            {
+                                "author": "Bob",
+                                "content": "Looks good to me",
+                                "created_at": "2026-01-02",
+                            },
+                        ],
                     },
-                    "sub1": {
-                        "title": "Sub Task",
-                        "status": "done",
-                    },
-                },
-                "resolvable": {
-                    "r1": {
-                        "creator": "u1",
-                        "isClosed": False,
-                        "entries": ["e1"],
-                    },
-                },
-                "resolvableEntry": {
-                    "e1": {
-                        "author": "u2",
-                        "content": "Looks good to me",
-                    },
-                },
-                "user": {
-                    "u1": {"name": "Alice"},
-                    "u2": {"name": "Bob"},
-                },
+                ],
             }
         )
         assert "Checklist: 1/4 (25%)" in result
@@ -257,6 +238,24 @@ class TestFormatCardDetail:
         assert "[done] Sub Task" in result
         assert "Conversations (1: 1 open, 0 closed):" in result
         assert "Bob: Looks good to me" in result
+
+    def test_closed_conversations(self):
+        result = format_card_detail(
+            {
+                "id": "c1",
+                "title": "Card",
+                "status": "done",
+                "conversations": [
+                    {
+                        "id": "r1-full-uuid",
+                        "status": "closed",
+                        "creator": "Alice",
+                        "messages": [],
+                    },
+                ],
+            }
+        )
+        assert "0 open, 1 closed" in result
 
 
 # ---------------------------------------------------------------------------
@@ -292,47 +291,64 @@ class TestFormatStatsTable:
 
 
 class TestFormatDecksTable:
-    def test_formats_decks(self, monkeypatch):
-        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+    def test_formats_decks(self):
         result = format_decks_table(
-            {
-                "deck": {
-                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-                }
-            }
+            [
+                {"id": "d1", "title": "Features", "project_name": "Tea Shop", "card_count": 5},
+            ]
         )
         assert "Features" in result
         assert "Tea Shop" in result
 
-    def test_shows_card_counts(self, monkeypatch):
-        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+    def test_shows_card_counts(self):
         result = format_decks_table(
-            {
-                "deck": {
-                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-                    "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
-                },
-                "_deck_counts": {"d1": 5, "d2": 12},
-            }
+            [
+                {"id": "d1", "title": "Features", "project_name": "Tea Shop", "card_count": 5},
+                {"id": "d2", "title": "Tasks", "project_name": "Tea Shop", "card_count": 12},
+            ]
         )
         assert "Cards" in result  # column header
         assert "5" in result
         assert "12" in result
 
-    def test_no_counts_shows_dash(self, monkeypatch):
-        monkeypatch.setattr(config, "env", {})
-        result = format_decks_table(
-            {
-                "deck": {
-                    "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-                }
-            }
-        )
-        # No _deck_counts key → shows "-"
-        assert "Cards" in result
-
     def test_no_decks(self):
-        assert "No decks" in format_decks_table({"deck": {}})
+        assert "No decks" in format_decks_table([])
+
+
+# ---------------------------------------------------------------------------
+# format_projects_table
+# ---------------------------------------------------------------------------
+
+
+class TestFormatProjectsTable:
+    def test_formats_projects(self):
+        result = format_projects_table(
+            [{"id": "p1", "name": "Tea Shop", "deck_count": 3, "decks": ["A", "B", "C"]}]
+        )
+        assert "Tea Shop" in result
+        assert "p1" in result
+        assert "Decks (3)" in result
+
+    def test_no_projects(self):
+        assert "No projects" in format_projects_table([])
+
+
+# ---------------------------------------------------------------------------
+# format_milestones_table
+# ---------------------------------------------------------------------------
+
+
+class TestFormatMilestonesTable:
+    def test_formats_milestones(self):
+        result = format_milestones_table(
+            [{"id": "m1", "name": "MVP", "card_count": 5}]
+        )
+        assert "MVP" in result
+        assert "m1" in result
+        assert "Cards (5)" in result
+
+    def test_no_milestones(self):
+        assert "No milestones" in format_milestones_table([])
 
 
 # ---------------------------------------------------------------------------
@@ -370,8 +386,9 @@ class TestFormatCardsCsv:
     def test_csv_output(self):
         result = format_cards_csv(
             {
-                "card": {
-                    "c1": {
+                "cards": [
+                    {
+                        "id": "c1",
                         "status": "done",
                         "priority": "a",
                         "effort": 3,
@@ -381,10 +398,11 @@ class TestFormatCardsCsv:
                         "owner_name": "Thomas",
                         "tags": ["bug", "ui"],
                     },
-                }
+                ],
+                "stats": None,
             }
         )
-        lines = [l.rstrip("\r") for l in result.strip().split("\n")]
+        lines = [line.rstrip("\r") for line in result.strip().split("\n")]
         assert lines[0] == "status,priority,effort,deck,milestone,owner,title,tags,id"
         assert "done" in lines[1]
         assert "high" in lines[1]

@@ -48,106 +48,81 @@ def _ns(**kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Regression: Sort with None values (known bug #3)
+# Regression: Sort delegation (known bug #3 — sorting tested in test_client)
 # ---------------------------------------------------------------------------
 
 
-class TestSortWithNone:
-    """Known bug regression: sorting by effort crashed with mixed int/None."""
+class TestSortDelegation:
+    """Sorting is delegated to CodecksClient. Verify passthrough."""
 
-    MOCK_CARDS = {
-        "card": {
-            "c1": {
-                "status": "done",
-                "priority": "a",
-                "effort": 5,
-                "title": "A",
-                "deck_name": "D",
-                "owner_name": "O",
-                "createdAt": "2026-01-01",
-                "lastUpdatedAt": "2026-01-02",
-            },
-            "c2": {
-                "status": "started",
-                "priority": None,
-                "effort": None,
-                "title": "B",
-                "deck_name": "D",
-                "owner_name": "",
-                "createdAt": "2026-01-03",
-                "lastUpdatedAt": "2026-01-04",
-            },
-            "c3": {
-                "status": "done",
-                "priority": "b",
-                "effort": 3,
-                "title": "C",
-                "deck_name": "D",
-                "owner_name": "P",
-                "createdAt": "2026-01-05",
-                "lastUpdatedAt": "2026-01-06",
-            },
-        },
-        "user": {},
-    }
-
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.enrich_cards", side_effect=lambda c, u: c)
-    def test_sort_effort_no_crash(self, mock_enrich, mock_list, capsys):
-        mock_list.return_value = self.MOCK_CARDS.copy()
-        cmd_cards(_ns(sort="effort", format="json"))
-        out = json.loads(capsys.readouterr().out)
-        # Should not crash — None effort goes last
-        card_keys = list(out["card"].keys())
-        assert len(card_keys) == 3
-
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.enrich_cards", side_effect=lambda c, u: c)
-    def test_sort_priority_none_last(self, mock_enrich, mock_list, capsys):
-        mock_list.return_value = self.MOCK_CARDS.copy()
-        cmd_cards(_ns(sort="priority", format="json"))
-        out = json.loads(capsys.readouterr().out)
-        keys = list(out["card"].keys())
-        # c1 (a) should come before c3 (b), c2 (None) should be last
-        assert keys.index("c1") < keys.index("c3")
-        assert keys[-1] == "c2"
-
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.enrich_cards", side_effect=lambda c, u: c)
-    def test_sort_updated_newest_first(self, mock_enrich, mock_list, capsys):
-        """Known bug regression: sort by updated should be newest first."""
-        mock_list.return_value = self.MOCK_CARDS.copy()
-        cmd_cards(_ns(sort="updated", format="json"))
-        out = json.loads(capsys.readouterr().out)
-        keys = list(out["card"].keys())
-        # c2 (2026-01-04) should come before c1 (2026-01-02) — newest first
-        assert keys.index("c2") < keys.index("c1")
-
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.enrich_cards", side_effect=lambda c, u: c)
-    def test_sort_owner_empty_last(self, mock_enrich, mock_list, capsys):
-        mock_list.return_value = self.MOCK_CARDS.copy()
-        cmd_cards(_ns(sort="owner", format="json"))
-        out = json.loads(capsys.readouterr().out)
-        keys = list(out["card"].keys())
-        # c2 has empty owner -> should be last
-        assert keys[-1] == "c2"
-
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.enrich_cards", side_effect=lambda c, u: c)
-    def test_sort_updated_supports_snake_case(self, mock_enrich, mock_list, capsys):
-        mock_cards = {
-            "card": {
-                "old": {"title": "Old", "last_updated_at": "2026-01-02"},
-                "new": {"title": "New", "last_updated_at": "2026-01-04"},
-            },
-            "user": {},
+    @patch("codecks_cli.commands._get_client")
+    def test_sort_param_passed_to_client(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": "c1", "status": "done", "priority": "a", "effort": 5, "title": "A"},
+                {"id": "c3", "status": "done", "priority": "b", "effort": 3, "title": "C"},
+                {"id": "c2", "status": "started", "priority": None, "effort": None, "title": "B"},
+            ],
+            "stats": None,
         }
-        mock_list.return_value = mock_cards
-        cmd_cards(_ns(sort="updated", format="json"))
+        cmd_cards(_ns(sort="effort", format="json"))
+        mock_client.list_cards.assert_called_once()
+        assert mock_client.list_cards.call_args[1]["sort"] == "effort"
         out = json.loads(capsys.readouterr().out)
-        keys = list(out["card"].keys())
-        assert keys == ["new", "old"]
+        assert len(out["cards"]) == 3
+
+    @patch("codecks_cli.commands._get_client")
+    def test_all_filter_params_forwarded(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {"cards": [], "stats": None}
+        cmd_cards(
+            _ns(
+                deck="Features",
+                status="started",
+                project="Tea Shop",
+                search="combat",
+                milestone="MVP",
+                tag="bug",
+                owner="Alice",
+                sort="priority",
+                type="hero",
+                hero="hero-id",
+                hand=True,
+                archived=True,
+            )
+        )
+        kwargs = mock_client.list_cards.call_args[1]
+        assert kwargs["deck"] == "Features"
+        assert kwargs["status"] == "started"
+        assert kwargs["project"] == "Tea Shop"
+        assert kwargs["search"] == "combat"
+        assert kwargs["milestone"] == "MVP"
+        assert kwargs["tag"] == "bug"
+        assert kwargs["owner"] == "Alice"
+        assert kwargs["sort"] == "priority"
+        assert kwargs["card_type"] == "hero"
+        assert kwargs["hero"] == "hero-id"
+        assert kwargs["hand_only"] is True
+        assert kwargs["archived"] is True
+
+    @patch("codecks_cli.commands._get_client")
+    def test_stats_mode_outputs_stats(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": "c1", "title": "A"}],
+            "stats": {
+                "total": 1,
+                "total_effort": 5,
+                "avg_effort": 5.0,
+                "by_status": {"done": 1},
+                "by_priority": {"a": 1},
+                "by_deck": {"Features": 1},
+            },
+        }
+        cmd_cards(_ns(stats=True, format="table"))
+        out = capsys.readouterr().out
+        assert "Total cards: 1" in out
 
 
 # ---------------------------------------------------------------------------
@@ -156,11 +131,13 @@ class TestSortWithNone:
 
 
 class TestUpdateTitleBug:
-    """Bug: --title on nonexistent card silently dropped the title change."""
+    """Bug: --title on nonexistent card silently dropped the title change.
+    Now tested via client delegation — client raises CliError."""
 
-    @patch("codecks_cli.commands.get_card")
-    def test_title_on_missing_card_exits(self, mock_get_card):
-        mock_get_card.return_value = {"card": {}}
+    @patch("codecks_cli.commands._get_client")
+    def test_title_on_missing_card_exits(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError("[ERROR] Card 'nonexistent' not found.")
         ns = argparse.Namespace(
             card_ids=["nonexistent"],
             status=None,
@@ -180,13 +157,15 @@ class TestUpdateTitleBug:
             cmd_update(ns)
         assert exc_info.value.exit_code == 1
 
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.get_card")
-    def test_title_preserves_body(self, mock_get_card, mock_update, capsys):
-        mock_get_card.return_value = {
-            "card": {"c1": {"content": "Old Title\nBody line 1\nBody line 2"}}
+    @patch("codecks_cli.commands._get_client")
+    def test_title_passed_to_client(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"content": "New Title\nBody"},
+            "data": {},
         }
-        mock_update.return_value = {}
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -203,33 +182,8 @@ class TestUpdateTitleBug:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "New Title\nBody line 1\nBody line 2"
-
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.get_card")
-    def test_title_handles_none_content(self, mock_get_card, mock_update, capsys):
-        """Regression: --title crashed with AttributeError when card content is None."""
-        mock_get_card.return_value = {"card": {"c1": {"content": None}}}
-        mock_update.return_value = {}
-        ns = argparse.Namespace(
-            card_ids=["c1"],
-            status=None,
-            priority=None,
-            effort=None,
-            deck=None,
-            title="New Title",
-            content=None,
-            milestone=None,
-            hero=None,
-            owner=None,
-            tag=None,
-            doc=None,
-            format="table",
-        )
-        cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "New Title"
+        mock_client.update_cards.assert_called_once()
+        assert mock_client.update_cards.call_args[1]["title"] == "New Title"
 
 
 # ---------------------------------------------------------------------------
@@ -238,12 +192,17 @@ class TestUpdateTitleBug:
 
 
 class TestUpdateClearValues:
-    """Known bug: update_card used to filter out None values, breaking
-    --priority null, --milestone none, --owner none, --hero none."""
+    """Known bug: clearing fields. Now validated via client delegation."""
 
-    @patch("codecks_cli.commands.update_card")
-    def test_priority_null(self, mock_update, capsys):
-        mock_update.return_value = {}
+    @patch("codecks_cli.commands._get_client")
+    def test_priority_null_passed(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"priority": None},
+            "data": {},
+        }
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -260,12 +219,17 @@ class TestUpdateClearValues:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["priority"] is None
+        assert mock_client.update_cards.call_args[1]["priority"] == "null"
 
-    @patch("codecks_cli.commands.update_card")
-    def test_milestone_none(self, mock_update, capsys):
-        mock_update.return_value = {}
+    @patch("codecks_cli.commands._get_client")
+    def test_milestone_none_passed(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"milestoneId": None},
+            "data": {},
+        }
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -282,12 +246,17 @@ class TestUpdateClearValues:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["milestoneId"] is None
+        assert mock_client.update_cards.call_args[1]["milestone"] == "none"
 
-    @patch("codecks_cli.commands.update_card")
-    def test_owner_none(self, mock_update, capsys):
-        mock_update.return_value = {}
+    @patch("codecks_cli.commands._get_client")
+    def test_owner_none_passed(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"assigneeId": None},
+            "data": {},
+        }
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -304,12 +273,17 @@ class TestUpdateClearValues:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["assigneeId"] is None
+        assert mock_client.update_cards.call_args[1]["owner"] == "none"
 
-    @patch("codecks_cli.commands.update_card")
-    def test_tag_none(self, mock_update, capsys):
-        mock_update.return_value = {}
+    @patch("codecks_cli.commands._get_client")
+    def test_tag_none_passed(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"masterTags": []},
+            "data": {},
+        }
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -326,12 +300,17 @@ class TestUpdateClearValues:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["masterTags"] == []
+        assert mock_client.update_cards.call_args[1]["tags"] == "none"
 
-    @patch("codecks_cli.commands.update_card")
-    def test_effort_null(self, mock_update, capsys):
-        mock_update.return_value = {}
+    @patch("codecks_cli.commands._get_client")
+    def test_effort_null_passed(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "fields": {"effort": None},
+            "data": {},
+        }
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -348,146 +327,22 @@ class TestUpdateClearValues:
             format="table",
         )
         cmd_update(ns)
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["effort"] is None
+        assert mock_client.update_cards.call_args[1]["effort"] == "null"
 
 
 # ---------------------------------------------------------------------------
 # Regression: no update flags provided
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Regression: cmd_create with missing cardId in API response
-# ---------------------------------------------------------------------------
-
-
-class TestCreateMissingCardId:
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.create_card")
-    def test_raises_on_missing_card_id(self, mock_create, _mock_guard):
-        mock_create.return_value = {}
-        ns = argparse.Namespace(
-            title="Test Card",
-            content=None,
-            severity=None,
-            deck=None,
-            project=None,
-            doc=False,
-            format="json",
-        )
-        with pytest.raises(CliError) as exc_info:
-            cmd_create(ns)
-        assert "cardId" in str(exc_info.value)
-
-
-class TestCreateProjectNotFound:
-    """Critical fix #2: --project on nonexistent project should raise CliError,
-    not silently print to stderr."""
-
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.load_project_names")
-    @patch("codecks_cli.commands.get_project_deck_ids")
-    @patch("codecks_cli.commands.list_decks")
-    @patch("codecks_cli.commands.create_card")
-    def test_raises_on_unknown_project(
-        self, mock_create, mock_list_decks, mock_get_project, mock_proj_names, _mock_guard
-    ):
-        mock_create.return_value = {"cardId": "new-card-id"}
-        mock_list_decks.return_value = {"deck": {}}
-        mock_get_project.return_value = None
-        mock_proj_names.return_value = {"p1": "Tea Shop"}
-        ns = argparse.Namespace(
-            title="Test Card",
-            content=None,
-            severity=None,
-            deck=None,
-            project="Nonexistent",
-            doc=False,
-            format="json",
-        )
-        with pytest.raises(CliError) as exc_info:
-            cmd_create(ns)
-        assert "Nonexistent" in str(exc_info.value)
-        assert "Tea Shop" in str(exc_info.value)
-
-
-class TestCreateDuplicateGuard:
-    @patch("codecks_cli.client.list_cards")
-    @patch("codecks_cli.commands.create_card")
-    def test_blocks_exact_duplicate_without_override(self, mock_create, mock_list_cards):
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "Combat Revamp", "status": "started"},
-            }
-        }
-        ns = argparse.Namespace(
-            title="Combat Revamp",
-            content=None,
-            severity=None,
-            deck=None,
-            project=None,
-            doc=False,
-            format="json",
-            allow_duplicate=False,
-        )
-        with pytest.raises(CliError) as exc_info:
-            cmd_create(ns)
-        assert "Duplicate card title detected" in str(exc_info.value)
-        assert "--allow-duplicate" in str(exc_info.value)
-        mock_create.assert_not_called()
-
-    @patch("codecks_cli.commands.mutation_response")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.client.list_cards")
-    def test_allows_duplicate_when_overridden(self, mock_list_cards, mock_create, mock_mutation):
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "Combat Revamp", "status": "started"},
-            }
-        }
-        mock_create.return_value = {"cardId": "new-card-id"}
-        ns = argparse.Namespace(
-            title="Combat Revamp",
-            content=None,
-            severity=None,
-            deck=None,
-            project=None,
-            doc=False,
-            format="json",
-            allow_duplicate=True,
-        )
-        cmd_create(ns)
-        mock_create.assert_called_once()
-        mock_mutation.assert_called_once()
-
-    @patch("codecks_cli.commands.mutation_response")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.client.list_cards")
-    def test_warns_on_similar_title(self, mock_list_cards, mock_create, mock_mutation, capsys):
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "Combat Revamp v2", "status": "not_started"},
-            }
-        }
-        mock_create.return_value = {"cardId": "new-card-id"}
-        ns = argparse.Namespace(
-            title="Combat Revamp",
-            content=None,
-            severity=None,
-            deck=None,
-            project=None,
-            doc=False,
-            format="json",
-            allow_duplicate=False,
-        )
-        cmd_create(ns)
-        captured = capsys.readouterr()
-        assert "[WARN] Similar card titles found" in captured.err
-        mock_mutation.assert_called_once()
-
 
 class TestUpdateNoFlags:
-    def test_exits_with_error(self):
+    @patch("codecks_cli.commands._get_client")
+    def test_exits_with_error(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError(
+            "[ERROR] No update flags provided. Use --status, "
+            "--priority, --effort, --owner, --tag, --doc, etc."
+        )
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -508,9 +363,136 @@ class TestUpdateNoFlags:
         assert exc_info.value.exit_code == 1
 
 
+# ---------------------------------------------------------------------------
+# Regression: cmd_create with missing cardId in API response
+# ---------------------------------------------------------------------------
+
+
+class TestCreateMissingCardId:
+    @patch("codecks_cli.commands._get_client")
+    def test_raises_on_missing_card_id(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.side_effect = CliError(
+            "[ERROR] Card creation failed: API response missing 'cardId'."
+        )
+        ns = argparse.Namespace(
+            title="Test Card",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "cardId" in str(exc_info.value)
+
+
+class TestCreateProjectNotFound:
+    """Critical fix #2: --project on nonexistent project should raise CliError."""
+
+    @patch("codecks_cli.commands._get_client")
+    def test_raises_on_unknown_project(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.side_effect = CliError(
+            "[ERROR] Project 'Nonexistent' not found. Available: Tea Shop"
+        )
+        ns = argparse.Namespace(
+            title="Test Card",
+            content=None,
+            severity=None,
+            deck=None,
+            project="Nonexistent",
+            doc=False,
+            format="json",
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "Nonexistent" in str(exc_info.value)
+        assert "Tea Shop" in str(exc_info.value)
+
+
+class TestCreateDuplicateGuard:
+    @patch("codecks_cli.commands._get_client")
+    def test_blocks_exact_duplicate_without_override(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.side_effect = CliError(
+            "[ERROR] Duplicate card title detected: 'Combat Revamp'.\n"
+            "[ERROR] Re-run with --allow-duplicate to bypass this check."
+        )
+        ns = argparse.Namespace(
+            title="Combat Revamp",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="json",
+            allow_duplicate=False,
+        )
+        with pytest.raises(CliError) as exc_info:
+            cmd_create(ns)
+        assert "Duplicate card title detected" in str(exc_info.value)
+        assert "--allow-duplicate" in str(exc_info.value)
+
+    @patch("codecks_cli.commands._get_client")
+    def test_allows_duplicate_when_overridden(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.return_value = {
+            "ok": True,
+            "card_id": "new-card-id",
+            "title": "Combat Revamp",
+            "deck": None,
+            "doc": False,
+        }
+        ns = argparse.Namespace(
+            title="Combat Revamp",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="table",
+            allow_duplicate=True,
+        )
+        cmd_create(ns)
+        mock_client.create_card.assert_called_once()
+        assert mock_client.create_card.call_args[1]["allow_duplicate"] is True
+
+    @patch("codecks_cli.commands._get_client")
+    def test_warns_on_similar_title(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.return_value = {
+            "ok": True,
+            "card_id": "new-card-id",
+            "title": "Combat Revamp",
+            "deck": None,
+            "doc": False,
+            "warnings": ["Similar card titles found for 'Combat Revamp': c1 ('Combat Revamp v2')"],
+        }
+        ns = argparse.Namespace(
+            title="Combat Revamp",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="table",
+            allow_duplicate=False,
+        )
+        cmd_create(ns)
+        captured = capsys.readouterr()
+        assert "[WARN] Similar card titles found" in captured.err
+
+
 class TestUpdateValidation:
-    @patch("codecks_cli.commands.update_card")
-    def test_rejects_invalid_effort_value(self, mock_update):
+    @patch("codecks_cli.commands._get_client")
+    def test_rejects_invalid_effort_value(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError(
+            "[ERROR] Invalid effort value 'abc': must be a number or 'null'"
+        )
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -529,10 +511,13 @@ class TestUpdateValidation:
         with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
         assert "Invalid effort value" in str(exc_info.value)
-        mock_update.assert_not_called()
 
-    @patch("codecks_cli.commands.update_card")
-    def test_rejects_invalid_doc_value(self, mock_update):
+    @patch("codecks_cli.commands._get_client")
+    def test_rejects_invalid_doc_value(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError(
+            "[ERROR] Invalid --doc value 'maybe'. Use true or false."
+        )
         ns = argparse.Namespace(
             card_ids=["c1"],
             status=None,
@@ -551,10 +536,13 @@ class TestUpdateValidation:
         with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
         assert "Invalid --doc value" in str(exc_info.value)
-        mock_update.assert_not_called()
 
-    @patch("codecks_cli.commands.update_card")
-    def test_rejects_title_with_multiple_cards(self, mock_update):
+    @patch("codecks_cli.commands._get_client")
+    def test_rejects_title_with_multiple_cards(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError(
+            "[ERROR] --title can only be used with a single card."
+        )
         ns = argparse.Namespace(
             card_ids=["c1", "c2"],
             status=None,
@@ -573,10 +561,13 @@ class TestUpdateValidation:
         with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
         assert "--title can only be used with a single card" in str(exc_info.value)
-        mock_update.assert_not_called()
 
-    @patch("codecks_cli.commands.update_card")
-    def test_rejects_content_with_multiple_cards(self, mock_update):
+    @patch("codecks_cli.commands._get_client")
+    def test_rejects_content_with_multiple_cards(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.side_effect = CliError(
+            "[ERROR] --content can only be used with a single card."
+        )
         ns = argparse.Namespace(
             card_ids=["c1", "c2"],
             status=None,
@@ -595,11 +586,11 @@ class TestUpdateValidation:
         with pytest.raises(CliError) as exc_info:
             cmd_update(ns)
         assert "--content can only be used with a single card" in str(exc_info.value)
-        mock_update.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
 # Regression: False TOKEN_EXPIRED on filtered empty results (known bug #1)
+# (Tests cards.py directly — no change needed)
 # ---------------------------------------------------------------------------
 
 
@@ -613,7 +604,7 @@ class TestFilteredEmptyResults:
         mock_query.return_value = {"card": {}}
         from codecks_cli.cards import list_cards
 
-        result = list_cards(status_filter="started")
+        list_cards(status_filter="started")
         err = capsys.readouterr().err
         assert "[TOKEN_EXPIRED]" not in err
 
@@ -627,7 +618,7 @@ class TestFilteredEmptyResults:
         }
         from codecks_cli.cards import list_cards
 
-        result = list_cards(deck_filter="Features")
+        list_cards(deck_filter="Features")
         err = capsys.readouterr().err
         assert "[TOKEN_EXPIRED]" not in err
 
@@ -636,7 +627,7 @@ class TestFilteredEmptyResults:
         mock_query.return_value = {"card": {}}
         from codecks_cli.cards import list_cards
 
-        result = list_cards()
+        list_cards()
         err = capsys.readouterr().err
         assert "[TOKEN_EXPIRED]" in err
 
@@ -718,144 +709,98 @@ class TestCommentValidation:
 
 
 class TestActivityValidation:
-    def test_rejects_non_positive_limit(self):
+    @patch("codecks_cli.commands._get_client")
+    def test_rejects_non_positive_limit(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.list_activity.side_effect = CliError(
+            "[ERROR] --limit must be a positive integer."
+        )
         ns = argparse.Namespace(limit=0, format="json")
         with pytest.raises(CliError):
             cmd_activity(ns)
 
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.list_activity")
-    def test_forwards_limit_to_list_activity(self, mock_list_activity, mock_output):
+    @patch("codecks_cli.commands._get_client")
+    def test_forwards_limit_to_client(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_activity.return_value = {"activity": {}}
         ns = argparse.Namespace(limit=5, format="json")
-        mock_list_activity.return_value = {"activity": {}}
         cmd_activity(ns)
-        mock_list_activity.assert_called_once_with(5)
-        mock_output.assert_called_once()
+        mock_client.list_activity.assert_called_once_with(limit=5)
 
 
 class TestPmFocus:
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    @patch("codecks_cli.commands.enrich_cards")
-    @patch("codecks_cli.commands.list_cards")
-    def test_generates_focus_report(
-        self, mock_list_cards, mock_enrich, mock_list_hand, mock_extract, mock_output
-    ):
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "A", "status": "blocked", "priority": "a", "effort": 5},
-                "c2": {
-                    "title": "B",
-                    "status": "started",
-                    "priority": "b",
-                    "effort": 3,
-                    "lastUpdatedAt": "2026-02-19T00:00:00Z",
-                },
-                "c3": {"title": "C", "status": "not_started", "priority": "a", "effort": 8},
-                "c4": {"title": "D", "status": "not_started", "priority": "c", "effort": 2},
-                "c5": {
-                    "title": "E",
-                    "status": "in_review",
-                    "priority": "b",
-                    "effort": 2,
-                    "lastUpdatedAt": "2026-02-19T00:00:00Z",
-                },
+    @patch("codecks_cli.commands._get_client")
+    def test_generates_focus_report(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.pm_focus.return_value = {
+            "counts": {
+                "started": 1,
+                "blocked": 1,
+                "in_review": 1,
+                "hand": 1,
+                "stale": 0,
             },
-            "user": {},
+            "blocked": [{"id": "c1", "title": "A", "priority": "a", "effort": 5}],
+            "in_review": [{"id": "c5", "title": "E", "priority": "b", "effort": 2}],
+            "hand": [{"id": "c2", "title": "B", "priority": "b", "effort": 3}],
+            "stale": [],
+            "suggested": [
+                {"id": "c3", "title": "C", "priority": "a", "effort": 8},
+                {"id": "c4", "title": "D", "priority": "c", "effort": 2},
+            ],
+            "filters": {"project": None, "owner": None, "limit": 2, "stale_days": 14},
         }
-        mock_enrich.side_effect = lambda cards, user: cards
-        mock_list_hand.return_value = {}
-        mock_extract.return_value = {"c2"}
-
         ns = argparse.Namespace(project=None, owner=None, limit=2, stale_days=14, format="json")
         cmd_pm_focus(ns)
+        out = json.loads(capsys.readouterr().out)
+        assert out["counts"]["blocked"] == 1
+        assert out["counts"]["started"] == 1
+        assert out["counts"]["in_review"] == 1
+        assert out["counts"]["hand"] == 1
+        assert len(out["suggested"]) == 2
+        assert out["suggested"][0]["id"] == "c3"
 
-        report = mock_output.call_args.args[0]
-        assert report["counts"]["blocked"] == 1
-        assert report["counts"]["started"] == 1
-        assert report["counts"]["in_review"] == 1
-        assert report["counts"]["hand"] == 1
-        assert len(report["suggested"]) == 2
-        assert report["suggested"][0]["id"] == "c3"
-
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    @patch("codecks_cli.commands.enrich_cards")
-    @patch("codecks_cli.commands.list_cards")
-    def test_detects_stale_cards(
-        self, mock_list_cards, mock_enrich, mock_list_hand, mock_extract, mock_output
-    ):
-        mock_list_cards.return_value = {
-            "card": {
-                "stale": {
-                    "title": "Old",
-                    "status": "started",
-                    "priority": "a",
-                    "lastUpdatedAt": "2025-01-01T00:00:00Z",
-                },
-                "fresh": {
-                    "title": "New",
-                    "status": "started",
-                    "priority": "a",
-                    "lastUpdatedAt": "2026-02-19T00:00:00Z",
-                },
-            },
-            "user": {},
+    @patch("codecks_cli.commands._get_client")
+    def test_detects_stale_cards(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.pm_focus.return_value = {
+            "counts": {"started": 2, "blocked": 0, "in_review": 0, "hand": 0, "stale": 1},
+            "blocked": [],
+            "in_review": [],
+            "hand": [],
+            "stale": [{"id": "stale", "title": "Old", "priority": "a"}],
+            "suggested": [],
+            "filters": {"stale_days": 14},
         }
-        mock_enrich.side_effect = lambda cards, user: cards
-        mock_list_hand.return_value = {}
-        mock_extract.return_value = set()
-
         ns = argparse.Namespace(project=None, owner=None, limit=5, stale_days=14, format="json")
         cmd_pm_focus(ns)
-
-        report = mock_output.call_args.args[0]
-        assert report["counts"]["stale"] == 1
-        assert report["stale"][0]["title"] == "Old"
+        out = json.loads(capsys.readouterr().out)
+        assert out["counts"]["stale"] == 1
+        assert out["stale"][0]["title"] == "Old"
 
 
 class TestStandup:
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    @patch("codecks_cli.commands.enrich_cards")
-    @patch("codecks_cli.commands.list_cards")
-    def test_categorizes_cards(
-        self, mock_list_cards, mock_enrich, mock_list_hand, mock_extract, mock_output
-    ):
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {
-                    "title": "Done Yesterday",
-                    "status": "done",
-                    "lastUpdatedAt": "2026-02-19T12:00:00Z",
-                },
-                "c2": {
-                    "title": "Done Long Ago",
-                    "status": "done",
-                    "lastUpdatedAt": "2025-01-01T00:00:00Z",
-                },
-                "c3": {"title": "Working On", "status": "started"},
-                "c4": {"title": "Stuck", "status": "blocked"},
-                "c5": {"title": "In Hand", "status": "started"},
-            },
-            "user": {},
+    @patch("codecks_cli.commands._get_client")
+    def test_categorizes_cards(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.standup.return_value = {
+            "recently_done": [{"id": "c1", "title": "Done Yesterday"}],
+            "in_progress": [
+                {"id": "c3", "title": "Working On"},
+                {"id": "c5", "title": "In Hand"},
+            ],
+            "blocked": [{"id": "c4", "title": "Stuck"}],
+            "hand": [{"id": "c5", "title": "In Hand"}],
+            "filters": {"project": None, "owner": None, "days": 2},
         }
-        mock_enrich.side_effect = lambda cards, user: cards
-        mock_list_hand.return_value = {}
-        mock_extract.return_value = {"c5"}
-
         ns = argparse.Namespace(project=None, owner=None, days=2, format="json")
         cmd_standup(ns)
-
-        report = mock_output.call_args.args[0]
-        assert len(report["recently_done"]) == 1
-        assert report["recently_done"][0]["title"] == "Done Yesterday"
-        assert len(report["in_progress"]) == 2  # c3 + c5
-        assert len(report["blocked"]) == 1
-        assert len(report["hand"]) == 1  # c5 (not done)
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["recently_done"]) == 1
+        assert out["recently_done"][0]["title"] == "Done Yesterday"
+        assert len(out["in_progress"]) == 2
+        assert len(out["blocked"]) == 1
+        assert len(out["hand"]) == 1
 
 
 class TestRawCommandValidation:
@@ -901,21 +846,19 @@ class TestRawCommandValidation:
 
 
 class TestFeatureScaffold:
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.commands.resolve_deck_id")
-    def test_creates_hero_and_subcards(
-        self, mock_resolve_deck, mock_create, mock_update, mock_output, _mock_guard
-    ):
-        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design", "d-art"]
-        mock_create.side_effect = [
-            {"cardId": "hero-1"},
-            {"cardId": "code-1"},
-            {"cardId": "design-1"},
-            {"cardId": "art-1"},
-        ]
+    @patch("codecks_cli.commands._get_client")
+    def test_creates_hero_and_subcards(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.return_value = {
+            "ok": True,
+            "hero": {"id": "hero-1", "title": "Feature: Inventory 2.0"},
+            "subcards": [
+                {"lane": "code", "id": "code-1"},
+                {"lane": "design", "id": "design-1"},
+                {"lane": "art", "id": "art-1"},
+            ],
+            "decks": {"hero": "Features", "code": "Code", "design": "Design", "art": "Art"},
+        }
         ns = argparse.Namespace(
             title="Inventory 2.0",
             hero_deck="Features",
@@ -930,35 +873,25 @@ class TestFeatureScaffold:
             format="json",
         )
         cmd_feature(ns)
-        assert mock_create.call_count == 4
-        assert mock_update.call_count == 4
-        # hero update + 3 sub updates
-        hero_kwargs = mock_update.call_args_list[0].kwargs
-        assert hero_kwargs["deckId"] == "d-hero"
-        assert hero_kwargs["masterTags"] == ["hero", "feature"]
-        code_kwargs = mock_update.call_args_list[1].kwargs
-        assert code_kwargs["parentCardId"] == "hero-1"
-        assert code_kwargs["deckId"] == "d-code"
-        design_kwargs = mock_update.call_args_list[2].kwargs
-        assert design_kwargs["deckId"] == "d-design"
-        art_kwargs = mock_update.call_args_list[3].kwargs
-        assert art_kwargs["deckId"] == "d-art"
-        mock_output.assert_called_once()
+        mock_client.scaffold_feature.assert_called_once()
+        out = json.loads(capsys.readouterr().out)
+        assert out["ok"] is True
+        assert out["hero"]["id"] == "hero-1"
+        assert len(out["subcards"]) == 3
 
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.commands.resolve_deck_id")
-    def test_auto_skips_art_when_art_deck_missing(
-        self, mock_resolve_deck, mock_create, mock_update, mock_output, _mock_guard
-    ):
-        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
-        mock_create.side_effect = [
-            {"cardId": "hero-1"},
-            {"cardId": "code-1"},
-            {"cardId": "design-1"},
-        ]
+    @patch("codecks_cli.commands._get_client")
+    def test_auto_skips_art_when_art_deck_missing(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.return_value = {
+            "ok": True,
+            "hero": {"id": "hero-1", "title": "Feature: Audio Mix"},
+            "subcards": [
+                {"lane": "code", "id": "code-1"},
+                {"lane": "design", "id": "design-1"},
+            ],
+            "decks": {"hero": "Features", "code": "Code", "design": "Design", "art": None},
+            "notes": ["Art lane auto-skipped (no --art-deck provided)."],
+        }
         ns = argparse.Namespace(
             title="Audio Mix",
             hero_deck="Features",
@@ -973,25 +906,23 @@ class TestFeatureScaffold:
             format="json",
         )
         cmd_feature(ns)
-        assert mock_create.call_count == 3
-        assert mock_update.call_count == 3
-        report = mock_output.call_args.args[0]
-        assert report["decks"]["art"] is None
+        mock_client.scaffold_feature.assert_called_once()
+        out = json.loads(capsys.readouterr().out)
+        assert out["decks"]["art"] is None
+        assert len(out["subcards"]) == 2
 
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.commands.resolve_deck_id")
-    def test_skip_art_creates_two_subcards(
-        self, mock_resolve_deck, mock_create, mock_update, mock_output, _mock_guard
-    ):
-        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
-        mock_create.side_effect = [
-            {"cardId": "hero-1"},
-            {"cardId": "code-1"},
-            {"cardId": "design-1"},
-        ]
+    @patch("codecks_cli.commands._get_client")
+    def test_skip_art_creates_two_subcards(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.return_value = {
+            "ok": True,
+            "hero": {"id": "hero-1", "title": "Feature: Economy Tuning"},
+            "subcards": [
+                {"lane": "code", "id": "code-1"},
+                {"lane": "design", "id": "design-1"},
+            ],
+            "decks": {"hero": "Features", "code": "Code", "design": "Design", "art": None},
+        }
         ns = argparse.Namespace(
             title="Economy Tuning",
             hero_deck="Features",
@@ -1006,24 +937,16 @@ class TestFeatureScaffold:
             format="json",
         )
         cmd_feature(ns)
-        assert mock_create.call_count == 3
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["subcards"]) == 2
 
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.archive_card")
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.commands.resolve_deck_id")
-    def test_rolls_back_on_partial_failure(
-        self, mock_resolve_deck, mock_create, mock_update, mock_archive, _mock_guard
-    ):
-        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
-        mock_create.side_effect = [
-            {"cardId": "hero-1"},
-            {"cardId": "code-1"},
-            {"cardId": "design-1"},
-        ]
-        # Hero update succeeds, code update fails -> rollback hero + code created cards.
-        mock_update.side_effect = [None, CliError("[ERROR] update failed")]
+    @patch("codecks_cli.commands._get_client")
+    def test_rolls_back_on_partial_failure(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.side_effect = CliError(
+            "[ERROR] Feature scaffold failed: update failed\n"
+            "[ERROR] Rollback archived 2/2 created cards."
+        )
         ns = argparse.Namespace(
             title="Combat Feel",
             hero_deck="Features",
@@ -1042,26 +965,13 @@ class TestFeatureScaffold:
         msg = str(exc_info.value)
         assert "Feature scaffold failed" in msg
         assert "Rollback archived" in msg
-        # Reversed rollback order: code first, then hero.
-        assert mock_archive.call_count == 2
-        assert mock_archive.call_args_list[0].args[0] == "code-1"
-        assert mock_archive.call_args_list[1].args[0] == "hero-1"
 
-    @patch("codecks_cli.commands._guard_duplicate_title")
-    @patch("codecks_cli.commands.archive_card")
-    @patch("codecks_cli.commands.update_card")
-    @patch("codecks_cli.commands.create_card")
-    @patch("codecks_cli.commands.resolve_deck_id")
-    def test_preserves_setup_error_during_rollback(
-        self, mock_resolve_deck, mock_create, mock_update, mock_archive, _mock_guard
-    ):
-        mock_resolve_deck.side_effect = ["d-hero", "d-code", "d-design"]
-        mock_create.side_effect = [
-            {"cardId": "hero-1"},
-            {"cardId": "code-1"},
-            {"cardId": "design-1"},
-        ]
-        mock_update.side_effect = [None, SetupError("[TOKEN_EXPIRED] expired")]
+    @patch("codecks_cli.commands._get_client")
+    def test_preserves_setup_error_during_rollback(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.side_effect = SetupError(
+            "[TOKEN_EXPIRED] expired\n[ERROR] Rollback archived 2/2 created cards."
+        )
         ns = argparse.Namespace(
             title="Combat Feel",
             hero_deck="Features",
@@ -1080,18 +990,14 @@ class TestFeatureScaffold:
         msg = str(exc_info.value)
         assert msg.startswith("[TOKEN_EXPIRED]")
         assert "Rollback archived" in msg
-        assert mock_archive.call_count == 2
-        assert mock_archive.call_args_list[0].args[0] == "code-1"
-        assert mock_archive.call_args_list[1].args[0] == "hero-1"
 
-    @patch("codecks_cli.client.list_cards")
-    @patch("codecks_cli.commands.create_card")
-    def test_blocks_duplicate_feature_hero_by_default(self, mock_create, mock_list_cards):
-        mock_list_cards.return_value = {
-            "card": {
-                "h1": {"title": "Feature: Combat Revamp", "status": "started"},
-            }
-        }
+    @patch("codecks_cli.commands._get_client")
+    def test_blocks_duplicate_feature_hero_by_default(self, mock_get_client):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.side_effect = CliError(
+            "[ERROR] Duplicate feature hero title detected: 'Feature: Combat Revamp'.\n"
+            "[ERROR] Re-run with --allow-duplicate to bypass this check."
+        )
         ns = argparse.Namespace(
             title="Combat Revamp",
             hero_deck="Features",
@@ -1109,117 +1015,107 @@ class TestFeatureScaffold:
         with pytest.raises(CliError) as exc_info:
             cmd_feature(ns)
         assert "Duplicate feature hero title detected" in str(exc_info.value)
-        mock_create.assert_not_called()
+
+    @patch("codecks_cli.commands._get_client")
+    def test_table_format_output(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.scaffold_feature.return_value = {
+            "ok": True,
+            "hero": {"id": "hero-1", "title": "Feature: Test"},
+            "subcards": [
+                {"lane": "code", "id": "code-1"},
+                {"lane": "design", "id": "design-1"},
+            ],
+            "decks": {"hero": "Features", "code": "Code", "design": "Design", "art": None},
+        }
+        ns = argparse.Namespace(
+            title="Test",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=True,
+            description=None,
+            owner=None,
+            priority=None,
+            effort=None,
+            format="table",
+        )
+        cmd_feature(ns)
+        out = capsys.readouterr().out
+        assert "Hero created: hero-1" in out
+        assert "Sub-cards created: 2" in out
+        assert "[code] code-1" in out
 
 
 # ---------------------------------------------------------------------------
-# Hand sort order (item 1.7)
+# Hand sort order
 # ---------------------------------------------------------------------------
 
 
 class TestHandSortOrder:
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.enrich_cards")
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    def test_hand_sorted_by_sort_index(
-        self, mock_list_hand, mock_extract, mock_list_cards, mock_enrich, mock_output
-    ):
-        mock_list_hand.return_value = {
-            "queueEntry": {
-                "e1": {"card": "c1", "sortIndex": 300},
-                "e2": {"card": "c2", "sortIndex": 100},
-                "e3": {"card": "c3", "sortIndex": 200},
-            }
-        }
-        mock_extract.return_value = {"c1", "c2", "c3"}
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "Third", "status": "started"},
-                "c2": {"title": "First", "status": "done"},
-                "c3": {"title": "Second", "status": "started"},
-            },
-            "user": {},
-        }
-        mock_enrich.side_effect = lambda cards, user: cards
+    @patch("codecks_cli.commands._get_client")
+    def test_hand_sorted_by_sort_index(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_hand.return_value = [
+            {"id": "c2", "title": "First", "status": "done"},
+            {"id": "c3", "title": "Second", "status": "started"},
+            {"id": "c1", "title": "Third", "status": "started"},
+        ]
         ns = argparse.Namespace(card_ids=None, format="json")
         cmd_hand(ns)
-        # Check the order passed to output
-        result = mock_output.call_args.args[0]
-        card_keys = list(result["card"].keys())
-        assert card_keys == ["c2", "c3", "c1"]
+        out = json.loads(capsys.readouterr().out)
+        card_ids = [c["id"] for c in out["cards"]]
+        assert card_ids == ["c2", "c3", "c1"]
 
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.enrich_cards")
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    def test_hand_sort_handles_missing_sort_index(
-        self, mock_list_hand, mock_extract, mock_list_cards, mock_enrich, mock_output
-    ):
-        mock_list_hand.return_value = {
-            "queueEntry": {
-                "e1": {"card": "c1", "sortIndex": 200},
-                "e2": {"card": "c2"},  # no sortIndex
-            }
-        }
-        mock_extract.return_value = {"c1", "c2"}
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"title": "B", "status": "started"},
-                "c2": {"title": "A", "status": "done"},
-            },
-            "user": {},
-        }
-        mock_enrich.side_effect = lambda cards, user: cards
+    @patch("codecks_cli.commands._get_client")
+    def test_hand_sort_handles_missing_sort_index(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_hand.return_value = [
+            {"id": "c2", "title": "A", "status": "done"},
+            {"id": "c1", "title": "B", "status": "started"},
+        ]
         ns = argparse.Namespace(card_ids=None, format="json")
         cmd_hand(ns)
-        result = mock_output.call_args.args[0]
-        card_keys = list(result["card"].keys())
-        # c2 has sortIndex 0 (default), c1 has 200
-        assert card_keys == ["c2", "c1"]
+        out = json.loads(capsys.readouterr().out)
+        card_ids = [c["id"] for c in out["cards"]]
+        assert card_ids == ["c2", "c1"]
 
 
 # ---------------------------------------------------------------------------
-# Deck card counts (item 1.8)
+# Hand empty
 # ---------------------------------------------------------------------------
 
 
 class TestHandEmptyReturns:
     """Critical fix #5: cmd_hand with empty hand should return, not sys.exit(0)."""
 
-    @patch("codecks_cli.commands.extract_hand_card_ids")
-    @patch("codecks_cli.commands.list_hand")
-    def test_empty_hand_returns_without_exit(self, mock_list_hand, mock_extract, capsys):
-        mock_list_hand.return_value = {"queueEntry": {}}
-        mock_extract.return_value = set()
+    @patch("codecks_cli.commands._get_client")
+    def test_empty_hand_returns_without_exit(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_hand.return_value = []
         ns = argparse.Namespace(card_ids=None, format="json")
-        # Should return normally, not raise SystemExit
         cmd_hand(ns)
         err = capsys.readouterr().err
         assert "empty" in err.lower()
 
 
+# ---------------------------------------------------------------------------
+# Deck card counts
+# ---------------------------------------------------------------------------
+
+
 class TestDeckCardCounts:
-    @patch("codecks_cli.commands.output")
-    @patch("codecks_cli.commands.list_cards")
-    @patch("codecks_cli.commands.list_decks")
-    def test_deck_counts_passed_to_formatter(self, mock_list_decks, mock_list_cards, mock_output):
-        mock_list_decks.return_value = {
-            "deck": {
-                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
-                "dk2": {"id": "d2", "title": "Tasks", "projectId": "p1"},
-            }
-        }
-        mock_list_cards.return_value = {
-            "card": {
-                "c1": {"deckId": "d1"},
-                "c2": {"deckId": "d1"},
-                "c3": {"deckId": "d2"},
-            }
-        }
+    @patch("codecks_cli.commands._get_client")
+    def test_deck_counts_in_output(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_decks.return_value = [
+            {"id": "d1", "title": "Features", "project_name": "Tea Shop", "card_count": 2},
+            {"id": "d2", "title": "Tasks", "project_name": "Tea Shop", "card_count": 1},
+        ]
         ns = argparse.Namespace(format="json")
         cmd_decks(ns)
-        result = mock_output.call_args.args[0]
-        assert result["_deck_counts"] == {"d1": 2, "d2": 1}
+        out = json.loads(capsys.readouterr().out)
+        assert len(out) == 2
+        counts = {d["id"]: d["card_count"] for d in out}
+        assert counts == {"d1": 2, "d2": 1}

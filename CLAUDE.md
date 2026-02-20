@@ -6,7 +6,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (389 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (433 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -22,7 +22,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 | `api.py` | HTTP layer: `query()`, `dispatch()`, token validation |
 | `cards.py` | Card CRUD, hand, conversations, enrichment, `_get_field()` |
 | `client.py` | **`CodecksClient` class** — public API (27 keyword-only methods returning flat dicts) |
-| `commands.py` | CLI `cmd_*()` handlers (argparse → formatters). Imports helpers from `client.py` |
+| `commands.py` | Thin CLI `cmd_*()` wrappers: argparse → `CodecksClient` → formatters |
 | `formatters.py` | JSON/table/CSV output dispatch |
 | `mcp_server.py` | MCP server: wraps `CodecksClient` as 25 MCP tools (stdio) |
 | `models.py` | `ObjectPayload`, `FeatureSpec` dataclasses |

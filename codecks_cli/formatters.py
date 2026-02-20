@@ -13,7 +13,6 @@ from codecks_cli.cards import (
     _get_field,
     get_card_tags,
     load_milestone_names,
-    load_project_names,
     load_users,
 )
 
@@ -188,8 +187,11 @@ def format_account_table(result):
 
 
 def format_cards_table(result):
-    """Format cards as a readable table."""
-    cards = result.get("card", {})
+    """Format cards as a readable table.
+
+    Accepts {"cards": [flat_dicts], "stats": ...} from CodecksClient.
+    """
+    cards = result.get("cards", [])
     if not cards:
         return "No cards found."
     cols = [
@@ -204,7 +206,7 @@ def format_cards_table(result):
         ("ID", 0),
     ]
     rows = []
-    for key, card in cards.items():
+    for card in cards:
         title_text = card.get("title", "")
         sub_count = card.get("sub_card_count")
         if sub_count:
@@ -220,107 +222,95 @@ def format_cards_table(result):
                 _trunc(card.get("milestone_name") or "-", 10),
                 _trunc(title_text, 34),
                 _trunc(", ".join(tags), 14) if tags else "-",
-                key,
+                card.get("id", ""),
             )
         )
     return _table(cols, rows, f"Total: {len(cards)} cards")
 
 
-def format_card_detail(result):
-    """Format a single card with full details."""
-    cards = result.get("card", {})
-    if not cards:
+def format_card_detail(card):
+    """Format a single card with full details.
+
+    Accepts a flat card dict from CodecksClient.get_card() with sub_cards
+    and conversations already resolved inline.
+    """
+    if not card:
         return "Card not found."
     lines = []
-    for key, card in cards.items():
-        lines.append(f"Card:      {key}")
-        lines.append(f"Title:     {card.get('title', '')}")
-        is_doc = _get_field(card, "is_doc", "isDoc")
-        if is_doc:
-            lines.append("Type:      doc card")
-        lines.append(f"Status:    {card.get('status', '')}")
-        pri_raw = card.get("priority")
-        pri_display = (
-            f"{pri_raw} ({config.PRI_LABELS[pri_raw]})" if pri_raw in config.PRI_LABELS else "none"
+    lines.append(f"Card:      {card.get('id', '')}")
+    lines.append(f"Title:     {card.get('title', '')}")
+    is_doc = _get_field(card, "is_doc", "isDoc")
+    if is_doc:
+        lines.append("Type:      doc card")
+    lines.append(f"Status:    {card.get('status', '')}")
+    pri_raw = card.get("priority")
+    pri_display = (
+        f"{pri_raw} ({config.PRI_LABELS[pri_raw]})" if pri_raw in config.PRI_LABELS else "none"
+    )
+    lines.append(f"Priority:  {pri_display}")
+    sev = card.get("severity")
+    if sev:
+        lines.append(f"Severity:  {sev}")
+    lines.append(f"Effort:    {card.get('effort') or '-'}")
+    lines.append(f"Deck:      {card.get('deck_name', card.get('deck_id', ''))}")
+    lines.append(f"Owner:     {card.get('owner_name') or '-'}")
+    ms = card.get("milestone_name", card.get("milestone_id"))
+    lines.append(f"Milestone: {ms or '-'}")
+    tags = get_card_tags(card)
+    lines.append(f"Tags:      {', '.join(tags) if tags else '-'}")
+    parent = _get_field(card, "parent_card_id", "parentCardId")
+    if parent:
+        lines.append(f"Hero:      {parent}")
+    lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
+    created = _get_field(card, "created_at", "createdAt") or ""
+    lines.append(f"Created:   {created}")
+    updated = _get_field(card, "last_updated_at", "lastUpdatedAt") or ""
+    if updated:
+        lines.append(f"Updated:   {updated}")
+    content = card.get("content", "")
+    if content:
+        body_lines = content.split("\n", 1)
+        body = body_lines[1].strip() if len(body_lines) > 1 else ""
+        if body:
+            lines.append(f"Content:   {body[:300]}")
+    # Checklist progress
+    cb_stats = _get_field(card, "checkbox_stats", "checkboxStats")
+    if cb_stats and isinstance(cb_stats, dict) and cb_stats.get("total", 0) > 0:
+        total = cb_stats["total"]
+        checked = cb_stats.get("checked", 0)
+        pct = int(100 * checked / total) if total else 0
+        lines.append(f"Checklist: {checked}/{total} ({pct}%)")
+    # Sub-cards (already resolved by client)
+    sub_cards = card.get("sub_cards", [])
+    if sub_cards:
+        lines.append(f"Sub-cards ({len(sub_cards)}):")
+        for sc in sub_cards[:10]:
+            lines.append(f"  - [{sc.get('status', '?')}] {sc.get('title', sc.get('id', '?'))}")
+        if len(sub_cards) > 10:
+            lines.append(f"  ... and {len(sub_cards) - 10} more")
+    # Conversations (already resolved by client)
+    conversations = card.get("conversations", [])
+    if conversations:
+        open_count = sum(1 for c in conversations if c.get("status") == "open")
+        closed_count = len(conversations) - open_count
+        lines.append(
+            f"Conversations ({len(conversations)}: {open_count} open, {closed_count} closed):"
         )
-        lines.append(f"Priority:  {pri_display}")
-        sev = card.get("severity")
-        if sev:
-            lines.append(f"Severity:  {sev}")
-        lines.append(f"Effort:    {card.get('effort') or '-'}")
-        lines.append(f"Deck:      {card.get('deck_name', card.get('deck_id', ''))}")
-        lines.append(f"Owner:     {card.get('owner_name') or '-'}")
-        ms = card.get("milestone_name", card.get("milestone_id"))
-        lines.append(f"Milestone: {ms or '-'}")
-        tags = get_card_tags(card)
-        lines.append(f"Tags:      {', '.join(tags) if tags else '-'}")
-        parent = _get_field(card, "parent_card_id", "parentCardId")
-        if parent:
-            lines.append(f"Hero:      {parent}")
-        lines.append(f"In hand:   {'yes' if card.get('in_hand') else 'no'}")
-        created = _get_field(card, "created_at", "createdAt") or ""
-        lines.append(f"Created:   {created}")
-        updated = _get_field(card, "last_updated_at", "lastUpdatedAt") or ""
-        if updated:
-            lines.append(f"Updated:   {updated}")
-        content = card.get("content", "")
-        if content:
-            body_lines = content.split("\n", 1)
-            body = body_lines[1].strip() if len(body_lines) > 1 else ""
-            if body:
-                lines.append(f"Content:   {body[:300]}")
-        # Checklist progress
-        cb_stats = _get_field(card, "checkbox_stats", "checkboxStats")
-        if cb_stats and isinstance(cb_stats, dict) and cb_stats.get("total", 0) > 0:
-            total = cb_stats["total"]
-            checked = cb_stats.get("checked", 0)
-            pct = int(100 * checked / total) if total else 0
-            lines.append(f"Checklist: {checked}/{total} ({pct}%)")
-        # Sub-cards
-        child_cards = card.get("childCards")
-        if child_cards:
-            child_data = result.get("card", {})
-            lines.append(f"Sub-cards ({len(child_cards)}):")
-            for ckey in child_cards[:10]:
-                child = child_data.get(ckey, {})
-                lines.append(f"  - [{child.get('status', '?')}] {child.get('title', ckey)}")
-            if len(child_cards) > 10:
-                lines.append(f"  ... and {len(child_cards) - 10} more")
-        # Conversations
-        resolvables = card.get("resolvables") or []
-        if resolvables:
-            resolvable_data = result.get("resolvable", {})
-            entry_data = result.get("resolvableEntry", {})
-            user_data = result.get("user", {})
-            open_count = sum(
-                1
-                for rid in resolvables
-                if not _get_field(resolvable_data.get(rid, {}), "is_closed", "isClosed")
-            )
-            closed_count = len(resolvables) - open_count
-            lines.append(
-                f"Conversations ({len(resolvables)}: {open_count} open, {closed_count} closed):"
-            )
-            for rid in resolvables[:5]:
-                r = resolvable_data.get(rid, {})
-                creator_id = r.get("creator")
-                creator_name = user_data.get(creator_id, {}).get("name", "?") if creator_id else "?"
-                status = "closed" if _get_field(r, "is_closed", "isClosed") else "open"
-                lines.append(f"  Thread {rid[:8]}.. ({status}, by {creator_name}):")
-                entries = r.get("entries") or []
-                for eid in entries[:3]:
-                    e = entry_data.get(eid, {})
-                    author_id = e.get("author")
-                    author_name = (
-                        user_data.get(author_id, {}).get("name", "?") if author_id else "?"
-                    )
-                    msg = (e.get("content") or "")[:120]
-                    lines.append(f"    {author_name}: {msg}")
-                if len(entries) > 3:
-                    lines.append(f"    ... and {len(entries) - 3} more replies")
-            if len(resolvables) > 5:
-                lines.append(f"  ... and {len(resolvables) - 5} more threads")
-        lines.append("")
+        for conv in conversations[:5]:
+            status = conv.get("status", "open")
+            creator = conv.get("creator", "?")
+            cid = conv.get("id", "?")
+            lines.append(f"  Thread {cid[:8]}.. ({status}, by {creator}):")
+            messages = conv.get("messages", [])
+            for msg in messages[:3]:
+                author = msg.get("author", "?")
+                content = (msg.get("content") or "")[:120]
+                lines.append(f"    {author}: {content}")
+            if len(messages) > 3:
+                lines.append(f"    ... and {len(messages) - 3} more replies")
+        if len(conversations) > 5:
+            lines.append(f"  ... and {len(conversations) - 5} more threads")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -359,57 +349,56 @@ def format_conversations_table(result):
     return "\n".join(lines)
 
 
-def format_decks_table(result):
-    """Format decks as a readable table."""
-    decks = result.get("deck", {})
+def format_decks_table(decks):
+    """Format decks as a readable table.
+
+    Accepts list of flat dicts from CodecksClient.list_decks().
+    """
     if not decks:
         return "No decks found."
-    project_names = load_project_names()
-    deck_counts = result.get("_deck_counts", {})
     cols = [("Title", 30), ("Project", 20), ("Cards", 6), ("ID", 0)]
     rows = []
-    for key, deck in decks.items():
-        pid = _get_field(deck, "project_id", "projectId") or ""
-        did = deck.get("id", key)
-        count = deck_counts.get(did, 0)
+    for deck in decks:
         rows.append(
             (
                 _trunc(deck.get("title", ""), 30),
-                project_names.get(pid, pid[:12]),
-                str(count) if deck_counts else "-",
-                did,
+                deck.get("project_name", ""),
+                str(deck.get("card_count", 0)),
+                deck.get("id", ""),
             )
         )
     return _table(cols, rows, f"Total: {len(decks)} decks")
 
 
-def format_projects_table(result):
-    """Format projects as a readable table."""
-    if not result:
+def format_projects_table(projects):
+    """Format projects as a readable table.
+
+    Accepts list of flat dicts from CodecksClient.list_projects().
+    """
+    if not projects:
         return "No projects found."
     lines = []
-    for pid, info in result.items():
-        lines.append(f"Project: {info.get('name', pid)}")
-        lines.append(f"  ID:    {pid}")
-        lines.append(f"  Decks ({info.get('deck_count', 0)}): {', '.join(info.get('decks', []))}")
+    for p in projects:
+        lines.append(f"Project: {p.get('name', p.get('id', '?'))}")
+        lines.append(f"  ID:    {p.get('id', '')}")
+        lines.append(f"  Decks ({p.get('deck_count', 0)}): {', '.join(p.get('decks', []))}")
         lines.append("")
     return "\n".join(lines)
 
 
-def format_milestones_table(result):
-    """Format milestones as a readable table."""
-    if not result:
+def format_milestones_table(milestones):
+    """Format milestones as a readable table.
+
+    Accepts list of flat dicts from CodecksClient.list_milestones().
+    """
+    if not milestones:
         return "No milestones found."
     lines = []
-    for mid, info in result.items():
-        name = info.get("name", mid)
-        cards = info.get("cards", [])
-        lines.append(f"Milestone: {name}  (ID: {mid})")
-        lines.append(f"  Cards ({len(cards)}):")
-        for c in cards[:8]:
-            lines.append(f"    - {c}")
-        if len(cards) > 8:
-            lines.append(f"    ... and {len(cards) - 8} more")
+    for m in milestones:
+        name = m.get("name", m.get("id", "?"))
+        card_count = m.get("card_count", 0)
+        lines.append(f"Milestone: {name}  (ID: {m.get('id', '')})")
+        lines.append(f"  Cards ({card_count})")
         lines.append("")
     return "\n".join(lines)
 
@@ -464,7 +453,7 @@ def format_activity_table(result):
     user_names = load_users()
     cols = [("Time", 18), ("Type", 18), ("By", 12), ("Deck", 14), ("Card", 20), ("Details", 0)]
     rows = []
-    for key, act in activities.items():
+    for _key, act in activities.items():
         ts = (_get_field(act, "created_at", "createdAt") or "")[:16].replace("T", " ")
         changer_id = act.get("changer")
         changer = users.get(changer_id, {}).get("name", "") if changer_id else ""
@@ -614,14 +603,17 @@ def format_sync_report(report):
 
 
 def format_cards_csv(result):
-    """Format cards as CSV for export."""
-    cards = result.get("card", {})
+    """Format cards as CSV for export.
+
+    Accepts {"cards": [flat_dicts], "stats": ...} from CodecksClient.
+    """
+    cards = result.get("cards", [])
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(
         ["status", "priority", "effort", "deck", "milestone", "owner", "title", "tags", "id"]
     )
-    for key, card in cards.items():
+    for card in cards:
         tags = get_card_tags(card)
         writer.writerow(
             [
@@ -633,7 +625,7 @@ def format_cards_csv(result):
                 card.get("owner_name", ""),
                 card.get("title", ""),
                 ", ".join(tags) if tags else "",
-                key,
+                card.get("id", ""),
             ]
         )
     return buf.getvalue().rstrip()
