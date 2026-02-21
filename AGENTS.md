@@ -1,8 +1,11 @@
-# CLAUDE.md — codecks-cli
+# AGENTS.md — codecks-cli
+
+Agent-agnostic project instructions for AI coding agents.
+For Claude Code specifics, see `CLAUDE.md`.
+For a fast navigation map, see `PROJECT_INDEX.md`.
 
 Python CLI + library for managing Codecks project cards. Zero runtime dependencies (stdlib only).
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
-Fast navigation map: `PROJECT_INDEX.md`.
 
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
@@ -17,19 +20,19 @@ Fast navigation map: `PROJECT_INDEX.md`.
 ## Architecture
 
 ```
-codecks_api.py          ← CLI entry point (backward-compat wrapper)
+codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
-  cli.py                ← argparse, build_parser(), main() dispatch
-  commands.py           ← cmd_*() wrappers: argparse → CodecksClient → formatters (+ cards pagination metadata)
-  client.py             ← CodecksClient: 27 public methods (the API surface, stable mutation contracts)
-  cards.py              ← Card CRUD, hand, conversations, enrichment
-  api.py                ← HTTP layer: query(), dispatch(), retries, token check
-  config.py             ← Env, tokens, constants, runtime state, contract settings
-  exceptions.py         ← CliError, SetupError, HTTPError
-  _utils.py             ← _get_field(), get_card_tags(), date/multi-value parsers
-  types.py              ← TypedDict response shapes (CardRow, CardDetail, etc.)
-  models.py             ← ObjectPayload, FeatureSpec dataclasses
-  formatters/           ← JSON/table/CSV output (7 sub-modules)
+  cli.py                <- argparse, build_parser(), main() dispatch
+  commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
+  client.py             <- CodecksClient: 27 public methods (the API surface, stable mutation contracts)
+  cards.py              <- Card CRUD, hand, conversations, enrichment
+  api.py                <- HTTP layer: query(), dispatch(), retries, token check
+  config.py             <- Env, tokens, constants, runtime state, contract settings
+  exceptions.py         <- CliError, SetupError, HTTPError
+  _utils.py             <- _get_field(), get_card_tags(), date/multi-value parsers
+  types.py              <- TypedDict response shapes (CardRow, CardDetail, etc.)
+  models.py             <- ObjectPayload, FeatureSpec dataclasses
+  formatters/           <- JSON/table/CSV output (7 sub-modules)
     __init__.py          re-exports all 24 names
     _table.py            _table(), _trunc(), _sanitize_str()
     _core.py             output(), mutation_response(), pretty_print()
@@ -38,17 +41,17 @@ codecks_cli/
     _activity.py         format_activity_table, format_activity_diff
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
-  gdd.py                ← Google OAuth2, GDD fetch/parse/sync
-  setup_wizard.py       ← Interactive .env bootstrap
-  mcp_server.py         ← MCP server: 28 tools wrapping CodecksClient (stdio, legacy/envelope modes)
-  pm_playbook.md        ← Agent-agnostic PM methodology (read by MCP tool)
+  gdd.py                <- Google OAuth2, GDD fetch/parse/sync
+  setup_wizard.py       <- Interactive .env bootstrap
+  mcp_server.py         <- MCP server: 28 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 ```
 
 ### Import graph (no circular deps)
 ```
-exceptions.py  ←  config.py  ←  _utils.py  ←  api.py  ←  cards.py  ←  client.py
-                                                                          ↑
-types.py (standalone)    formatters/ ← commands.py ← cli.py          models.py
+exceptions.py  <-  config.py  <-  _utils.py  <-  api.py  <-  cards.py  <-  client.py
+                                                                              |
+types.py (standalone)    formatters/ <- commands.py <- cli.py          models.py
 ```
 
 ### Key design patterns
@@ -112,23 +115,15 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`
 
 ## Commands
-Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.
+Use `py codecks_api.py <cmd> --help` for flags.
 - `cards` supports pagination flags: `--limit <n>` and `--offset <n>` (non-negative).
-
-## Skills (`.claude/commands/`)
-`/pm` (PM session), `/test-all` (regression), `/release` (version bump), `/api-ref` (command ref), `/security-audit` (secrets scan), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues)
 
 ## Git
 - Commit style: short present tense ("Add X", "Fix Y")
 - Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
-- `.claude/` is gitignored
-- Run `/security-audit` before pushing (public repo)
 
 ## Maintenance
 When adding new modules, commands, tests, or fixing bugs:
-- Update the Architecture section and test count in this file
-- Keep `AGENTS.md` in sync with this file when architecture, commands, or pitfalls change
+- Update the Architecture section and test count in this file and `CLAUDE.md`
 - Update the mypy command if new modules need type checking
-- Keep `.claude/commands/quality.md`, `test-all.md`, `api-ref.md`, `mcp-validate.md`, `release.md`, and `security-audit.md` in sync
 - Add new bug patterns to "Known Bugs Fixed" so they aren't reintroduced
-- Update project memory at `C:\Users\USER\.claude\projects\C--Users-USER-GitHubDirectory-codecks-cli\memory\MEMORY.md` with stable patterns learned across sessions

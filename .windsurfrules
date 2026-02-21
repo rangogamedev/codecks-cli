@@ -1,0 +1,29 @@
+# Windsurf Rules — codecks-cli
+
+Read `AGENTS.md` in the repository root for full project instructions, architecture, and API pitfalls.
+Use `PROJECT_INDEX.md` for a fast file-level map before editing.
+
+## Essential Rules
+
+- **Python command**: Always use `py` (never `python` or `python3`). Requires 3.10+.
+- **Zero runtime dependencies**: stdlib only. Dev tools (`ruff`, `mypy`, `pytest-cov`) are optional extras.
+- **Test**: `pwsh -File scripts/run-tests.ps1` (544 tests, no API calls)
+- **Lint**: `py -m ruff check .`
+- **Format**: `py -m ruff format --check .`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
+- **Contracts**: CLI JSON errors include `schema_version` (`1.0`). MCP response mode is controlled by `CODECKS_MCP_RESPONSE_MODE` (`legacy` or `envelope`).
+- **Pagination**: `cards` supports `--limit` and `--offset` and returns `total_count`/`has_more` metadata in JSON.
+
+## Critical API Pitfalls
+
+- Response fields are snake_case, query fields are camelCase. Use `_get_field()` for safe lookups.
+- **Doc cards** cannot have priority, effort, or status set (API returns 400).
+- **Paid-only features** (do NOT use): Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards.
+- Never set `dueAt` on cards.
+- Card title = first line of `content` field.
+- Tags: set `masterTags` (not `tags`). Owner: `assigneeId` in `cards/update`.
+
+## Commit Style
+
+- Short present tense: "Add X", "Fix Y"
+- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
