@@ -4,39 +4,42 @@ Last updated: 2026-02-21 | Version: 0.4.0
 
 ## Recent Changes
 
-### MCP Server Improvements
-- **25 tools** (was 22) — added `reply_comment`, `close_comment`, `reopen_comment`
-- **Literal types** for enum params (status, priority, sort, card_type, severity, doc)
-- **Pagination** on `list_cards` (limit/offset, default 50 cards per page)
-- **Cached client** — single `CodecksClient` instance reused across tool calls
-- **Agent-friendly docstrings** — "when to use" hints, return shapes, gotchas
-- **Enhanced server instructions** — UUID requirement, doc card constraints, rate limit
+### Documentation Polish
+- README rewritten: added TOC, Installation, Python API, MCP Server sections; removed stale file structure
+- CHANGELOG v0.4.0 backfilled with full architecture refactoring, MCP, CodecksClient, new flags
+- pyproject.toml metadata: authors, keywords, classifiers, package-data, URLs
+- CONTRIBUTING.md, PR template modernized
 
-### MCP Server
-- **New `mcp_server.py`** — 25 MCP tools wrapping `CodecksClient` via FastMCP (stdio transport)
-- **Install**: `pip install .[mcp]` (optional dep `mcp[cli]>=1.6.0`)
-- **Run**: `python -m codecks_cli.mcp_server` or `codecks-mcp` entry point
-- **Client fixes**: `_guard_duplicate_title()` returns warnings in dict (no stderr), `list_cards()` always returns `{cards, stats}` shape, improved docstrings for tool descriptions
-- **New tests**: `test_mcp_server.py` (skipped if mcp not installed)
+### Architecture Refactoring (v0.4.0)
+- `exceptions.py` — all exception classes (`CliError`, `SetupError`, `HTTPError`)
+- `_utils.py` — pure utility helpers extracted from `cards.py`
+- `formatters/` — package with 7 sub-modules, `__init__.py` re-exports all 24 names
+- `types.py` — TypedDict response shapes for documentation
+- `commands.py` thinned to delegate all business logic to `CodecksClient`
+- CLI dispatch uses `set_defaults(func=cmd_xxx)` per subparser
 
-### API-First Library Refactoring
-- **New `CodecksClient`** (`client.py`, ~1300 lines) — 27 public methods, keyword-only args, flat dict returns
-- **Removed GUI** (~2000 lines) — `gui/` directory, 4 test files, `docs/` folder
-- **Updated**: `__init__.py` exports, `models.py` added `FeatureSpec.from_kwargs()`, `commands.py` imports helpers from `client.py`
-- **New tests**: `test_client.py` (60 tests). Suite: 329 existing + 60 new = 389 passing
+### MCP Server (28 tools)
+- 25 tools mapping 1:1 to CodecksClient methods
+- 3 PM session tools: `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences`
+- PM playbook (`pm_playbook.md`) — agent-agnostic PM methodology readable via MCP
+- Literal types, pagination, cached client, agent-friendly docstrings
 
-### Earlier (summarized)
-- Package restructuring into `codecks_cli/`
-- Duplicate title guardrails (`--allow-duplicate`)
-- Code quality hardening (safe .env parsing, atomic writes, exception chaining, response caps)
-- PM features (standup, pm-focus, multi-value filters, stale detection)
-- Strict mode, typed models, feature scaffolding with transaction-safe rollback
+### CodecksClient (27 methods)
+- Full programmatic API: read, create, update, archive, hand, comments, raw queries
+- `py.typed` marker for PEP 561 editor support
+- Keyword-only args, flat `dict[str, Any]` returns
+
+### CLI Enhancements
+- `--dry-run`, `--quiet`, `--verbose` flags
+- `--version` flag, `completion` command (bash/zsh/fish)
+- `--format csv`, `--milestone` filter, input validation, priority labels
 
 ## Next Work
-1. **Thin commands.py** — migrate `cmd_*` to delegate to `CodecksClient` (update test mocks)
-2. **Type annotations** — return type hints on `CodecksClient` using `TypedDict`
-3. **Open-LLM-VTuber fork** — register codecks MCP server in `mcp_servers.json`
+1. **Open-LLM-VTuber fork** — register codecks MCP server in `mcp_servers.json`
+2. **PyPI publish** — `python -m build && twine upload dist/*`
+3. **GitHub Actions release** — auto-publish on tag push
 
-## Notes
-- `commands.py` keeps original implementations (not delegating to `CodecksClient`) to preserve test mock compat
-- `_guard_duplicate_title`, `_sort_cards`, `_resolve_owner_id` etc. live in `client.py`, imported by `commands.py`
+## Stats
+- 491 tests, 12 test files, 22 source modules
+- 28 MCP tools, 27 CodecksClient methods
+- Zero runtime dependencies

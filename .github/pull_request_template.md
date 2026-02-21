@@ -13,13 +13,14 @@
 
 <!-- How did you test this? -->
 
-- Tested with: `py codecks_api.py [command]`
+- Tested with: `codecks-cli [command]`
 - Output matches expected behavior
 
 ## Checklist
 
 - [ ] Tested against a real Codecks account
-- [ ] Updated docstring in `codecks_api.py` (if adding/changing commands)
 - [ ] Updated `README.md` (if adding new features)
+- [ ] Updated `CHANGELOG.md` (if user-visible change)
+- [ ] Quality checks pass (`ruff check`, `ruff format`, `mypy`, `pytest`)
 - [ ] No external dependencies added
 - [ ] No secrets or `.env` values committed

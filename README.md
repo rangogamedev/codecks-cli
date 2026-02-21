@@ -2,56 +2,81 @@
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
+![Tests: 491](https://img.shields.io/badge/Tests-491-brightgreen)
 
-A command-line tool for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Built as an AI agent helper for [Claude Code](https://claude.ai/claude-code), but works just as well from a regular terminal.
+A command-line tool and Python library for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Zero runtime dependencies. Works from a terminal, as a Python API, or as an MCP server for AI agents.
 
-> **Experimental** — This tool was built with AI-assisted code generation (vibe-coded with Claude). It works reliably but the command set may evolve. Not affiliated with Codecks. Use at your own risk.
+## Table of Contents
 
-## Why this exists
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Python API](#python-api)
+- [MCP Server](#mcp-server)
+- [GDD Sync](#gdd-sync-game-design-document)
+- [Output Formats](#output-formats)
+- [Token Architecture](#token-architecture)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
 
-Codecks doesn't have a public REST API with standard endpoints. Instead it uses a custom JSON query language and dispatch-based mutations. This script wraps all of that into simple CLI commands so an AI agent (or a human) can manage cards without touching the browser.
+## Installation
 
-## Requirements
-
-- **Python 3.10+** (tested with 3.14)
-- A [Codecks](https://codecks.io) account (free tier works)
-- A `.env` file with your credentials (see Setup)
-
-No external dependencies. Uses only Python standard library (`urllib`, `json`, `os`, `sys`, `re`, `http.server`, `webbrowser`).
-
-## Setup
-
-### 1. Clone the repo
+### From source (recommended)
 
 ```bash
 git clone https://github.com/rangogamedev/codecks-cli.git
 cd codecks-cli
+py -m pip install .
 ```
 
-### 2. Run the setup wizard (recommended)
+This installs two entry points:
+
+| Command | What it does |
+|---------|-------------|
+| `codecks-cli` | CLI tool |
+| `codecks-mcp` | MCP server for AI agents |
+
+You can also run directly without installing: `py codecks_api.py <command>`
+
+### Requirements
+
+- **Python 3.10+** (tested with 3.14)
+- A [Codecks](https://codecks.io) account (free tier works)
+- Zero runtime dependencies (stdlib only)
+
+### Dev tools (optional)
 
 ```bash
-py codecks_api.py setup
+py -m pip install .[dev]   # ruff, mypy, pytest-cov
+py -m pip install .[mcp]   # MCP server (mcp[cli])
 ```
 
-The wizard walks you through everything:
-- Your Codecks account name
-- Session token (with step-by-step browser instructions)
-- Access key and report token (optional, for creating cards)
-- Auto-discovers your projects and milestones
-- Google Doc URL for GDD sync (optional)
+## Quick Start
+
+```bash
+# Interactive setup wizard — walks you through tokens, projects, milestones
+codecks-cli setup
+
+# List your cards
+codecks-cli cards --format table
+
+# Create a card
+codecks-cli create "Fix login bug" --deck "Backlog"
+
+# Daily standup snapshot
+codecks-cli standup --format table
+```
 
 Already set up? Running `setup` again detects your existing config and offers a menu: refresh project/milestone mappings, update your expired token, or start over.
 
 ### Manual setup (alternative)
 
-If you prefer to configure manually, copy the example and fill in your values:
+Copy the example and fill in your values:
 
 ```bash
 cp .env.example .env
 ```
-
-You'll need these tokens:
 
 | Token | Where to find it | What it does |
 |-------|-----------------|--------------|
@@ -68,56 +93,57 @@ CODECKS_MILESTONES=uuid1=MVP,uuid2=Beta
 
 The `setup` wizard handles this automatically by discovering projects and milestones from your data.
 
-## Usage
+## CLI Reference
 
-Run commands with `py codecks_api.py <command>`. On Mac/Linux you may need `python3` instead of `py`.
+Run commands with `codecks-cli <command>` (or `py codecks_api.py <command>` if not installed).
 
 ### Reading data
 
 ```bash
 # Account info
-py codecks_api.py account
+codecks-cli account
 
 # List all cards
-py codecks_api.py cards
+codecks-cli cards
 
 # Filter cards
-py codecks_api.py cards --deck "Backlog"
-py codecks_api.py cards --status started
-py codecks_api.py cards --project "My Project"
-py codecks_api.py cards --search "inventory"
-py codecks_api.py cards --owner "Thomas"
-py codecks_api.py cards --owner none               # unassigned cards
+codecks-cli cards --deck "Backlog"
+codecks-cli cards --status started
+codecks-cli cards --project "My Project"
+codecks-cli cards --search "inventory"
+codecks-cli cards --owner "Thomas"
+codecks-cli cards --owner none               # unassigned cards
+codecks-cli cards --milestone "Sprint 1"
 
 # Multi-value filters (comma-separated)
-py codecks_api.py cards --status started,blocked    # started OR blocked
-py codecks_api.py cards --priority a,b              # high or medium priority
-py codecks_api.py cards --priority null             # cards with no priority set
+codecks-cli cards --status started,blocked    # started OR blocked
+codecks-cli cards --priority a,b              # high or medium priority
+codecks-cli cards --priority null             # cards with no priority set
 
 # Date filters and stale detection
-py codecks_api.py cards --stale 14                  # not updated in 14 days
-py codecks_api.py cards --updated-after 2026-01-01
-py codecks_api.py cards --updated-before 2026-02-01
-py codecks_api.py cards --status started --stale 7  # combine with other filters
+codecks-cli cards --stale 14                  # not updated in 14 days
+codecks-cli cards --updated-after 2026-01-01
+codecks-cli cards --updated-before 2026-02-01
+codecks-cli cards --status started --stale 7  # combine with other filters
 
 # Combine filters
-py codecks_api.py cards --project "My Project" --status started --search "bug"
+codecks-cli cards --project "My Project" --status started --search "bug"
 
 # Card statistics (counts by status, priority, deck, owner)
-py codecks_api.py cards --stats
-py codecks_api.py cards --project "My Project" --stats
+codecks-cli cards --stats
+codecks-cli cards --project "My Project" --stats
 
 # Single card details (includes sub-cards, severity, hero parent)
-py codecks_api.py card <card-id>
+codecks-cli card <card-id>
 
 # Decks (with card counts), projects, milestones
-py codecks_api.py decks
-py codecks_api.py projects
-py codecks_api.py milestones
+codecks-cli decks
+codecks-cli projects
+codecks-cli milestones
 
 # Recent activity (shows card titles)
-py codecks_api.py activity
-py codecks_api.py activity --limit 50
+codecks-cli activity
+codecks-cli activity --limit 50
 ```
 
 ### Daily standup
@@ -126,14 +152,14 @@ Get a quick snapshot of what's done, in progress, blocked, and in your hand:
 
 ```bash
 # Default: last 2 days of activity
-py codecks_api.py standup --format table
+codecks-cli standup --format table
 
 # Look back further
-py codecks_api.py standup --days 5 --format table
+codecks-cli standup --days 5 --format table
 
 # Filter by project or owner
-py codecks_api.py standup --project "My Project" --format table
-py codecks_api.py standup --owner "Thomas" --format table
+codecks-cli standup --project "My Project" --format table
+codecks-cli standup --owner "Thomas" --format table
 ```
 
 The standup report has four sections:
@@ -148,13 +174,13 @@ Get a triage view of what needs attention:
 
 ```bash
 # Sprint health overview
-py codecks_api.py pm-focus --format table
+codecks-cli pm-focus --format table
 
 # Filter by project
-py codecks_api.py pm-focus --project "My Project" --format table
+codecks-cli pm-focus --project "My Project" --format table
 
 # Customize stale threshold (default: 14 days)
-py codecks_api.py pm-focus --stale-days 7 --format table
+codecks-cli pm-focus --stale-days 7 --format table
 ```
 
 The pm-focus report shows:
@@ -168,19 +194,19 @@ The pm-focus report shows:
 
 ```bash
 # Simple card (lands in Inbox by default)
-py codecks_api.py create "Fix login bug"
+codecks-cli create "Fix login bug"
 
 # Card with description and severity
-py codecks_api.py create "Server crash on startup" --content "Happens after the latest deploy" --severity critical
+codecks-cli create "Server crash on startup" --content "Happens after the latest deploy" --severity critical
 
 # Create directly into a specific deck
-py codecks_api.py create "Refactor save system" --deck "Backlog"
+codecks-cli create "Refactor save system" --deck "Backlog"
 
 # Create into the first deck of a project
-py codecks_api.py create "New feature idea" --project "My Project"
+codecks-cli create "New feature idea" --project "My Project"
 
 # Bypass duplicate-title protection (exact title match)
-py codecks_api.py create "Fix login bug" --allow-duplicate
+codecks-cli create "Fix login bug" --allow-duplicate
 ```
 
 Duplicate-title safety:
@@ -188,12 +214,12 @@ Duplicate-title safety:
 - Use `--allow-duplicate` to intentionally create a same-title card.
 - Near matches are shown as warnings only (they do not block creation).
 
-### Scaffold a feature (Hero + sub-cards, no Journey)
+### Scaffold a feature (Hero + sub-cards)
 
 Create one Hero card and linked lane sub-cards for Code/Design/(optional Art):
 
 ```bash
-py codecks_api.py feature "Inventory 2.0" \
+codecks-cli feature "Inventory 2.0" \
   --hero-deck "Features" \
   --code-deck "Code" \
   --design-deck "Design" \
@@ -204,7 +230,7 @@ py codecks_api.py feature "Inventory 2.0" \
 For non-visual features:
 
 ```bash
-py codecks_api.py feature "Economy Tuning" \
+codecks-cli feature "Economy Tuning" \
   --hero-deck "Features" \
   --code-deck "Code" \
   --design-deck "Design" \
@@ -225,82 +251,226 @@ Severity levels: `critical`, `high`, `low`, or `null`.
 
 ```bash
 # Change status
-py codecks_api.py update <id> --status started
+codecks-cli update <id> --status started
 
 # Set priority (a=high, b=medium, c=low, null=remove)
-py codecks_api.py update <id> --priority a
+codecks-cli update <id> --priority a
 
 # Set effort points
-py codecks_api.py update <id> --effort 5
+codecks-cli update <id> --effort 5
 
 # Move to a different deck
-py codecks_api.py update <id> --deck "In Progress"
+codecks-cli update <id> --deck "In Progress"
 
 # Rename
-py codecks_api.py update <id> --title "Better name for this card"
+codecks-cli update <id> --title "Better name for this card"
 
 # Update description
-py codecks_api.py update <id> --content "Updated description here"
+codecks-cli update <id> --content "Updated description here"
+
+# Assign or unassign an owner
+codecks-cli update <id> --owner "Thomas"
+codecks-cli update <id> --owner none
+
+# Manage tags
+codecks-cli update <id> --tags "bug,urgent"
+codecks-cli update <id> --tags none
 
 # Assign to a milestone (must be mapped in .env)
-py codecks_api.py update <id> --milestone "Sprint 1"
+codecks-cli update <id> --milestone "Sprint 1"
 
 # Clear milestone
-py codecks_api.py update <id> --milestone none
+codecks-cli update <id> --milestone none
 
 # Make a sub-card of a hero card
-py codecks_api.py update <id> --hero <parent-card-id>
+codecks-cli update <id> --hero <parent-card-id>
 
 # Detach from hero
-py codecks_api.py update <id> --hero none
+codecks-cli update <id> --hero none
 
 # Combine multiple updates in one call
-py codecks_api.py update <id> --status started --priority a --effort 3
+codecks-cli update <id> --status started --priority a --effort 3
+```
+
+### Hand management
+
+```bash
+# View cards in your hand
+codecks-cli hand
+
+# Add cards to your hand
+codecks-cli hand <id1> <id2>
+
+# Remove cards from your hand
+codecks-cli unhand <id1> <id2>
+```
+
+### Comments
+
+```bash
+# Add a comment to a card
+codecks-cli comment <card-id> "This needs review"
+
+# Reply in a thread
+codecks-cli comment <card-id> "Good point" --thread <comment-id>
+
+# Close a comment thread
+codecks-cli comment <card-id> --close <comment-id>
+
+# Reopen a comment thread
+codecks-cli comment <card-id> --reopen <comment-id>
+
+# List all conversations on a card
+codecks-cli conversations <card-id>
 ```
 
 ### Bulk status changes
 
 ```bash
 # Mark one or more cards as done
-py codecks_api.py done <id1> <id2> <id3>
+codecks-cli done <id1> <id2> <id3>
 
 # Mark one or more cards as started
-py codecks_api.py start <id1> <id2>
+codecks-cli start <id1> <id2>
 ```
 
 ### Archiving and deleting
 
 ```bash
 # Archive (reversible) — the default way to remove cards
-py codecks_api.py archive <id>
-py codecks_api.py remove <id>    # same as archive
+codecks-cli archive <id>
+codecks-cli remove <id>    # same as archive
 
 # Unarchive
-py codecks_api.py unarchive <id>
+codecks-cli unarchive <id>
 
 # Permanently delete (requires --confirm flag)
-py codecks_api.py delete <id> --confirm
+codecks-cli delete <id> --confirm
 ```
 
 Without `--confirm`, `delete` will remind you to use `archive` instead — just like Codecks does in the browser.
+
+### Shell completion
+
+```bash
+# Generate shell completions
+codecks-cli completion --shell bash
+codecks-cli completion --shell zsh
+codecks-cli completion --shell fish
+```
 
 ### Token management
 
 ```bash
 # Generate a new report token (saved to .env automatically)
-py codecks_api.py generate-token
-py codecks_api.py generate-token --label "my-integration"
+codecks-cli generate-token
+codecks-cli generate-token --label "my-integration"
 ```
+
+### Global flags
+
+| Flag | Description |
+|------|-------------|
+| `--format json\|table\|csv` | Output format (default: json) |
+| `--strict` | Fail-fast agent mode for raw API workflows |
+| `--dry-run` | Preview mutations without executing |
+| `--quiet` / `-q` | Suppress confirmations and warnings |
+| `--verbose` / `-v` | Enable HTTP request logging |
+| `--version` | Show version and exit |
+
+`--quiet` and `--verbose` are mutually exclusive.
 
 ### Advanced: raw API calls
 
 ```bash
 # Run a raw query
-py codecks_api.py query '{"_root": [{"account": ["name", "id"]}]}'
+codecks-cli query '{"_root": [{"account": ["name", "id"]}]}'
 
 # Run a raw dispatch mutation
-py codecks_api.py dispatch cards/update '{"id": "card-uuid", "status": "done"}'
+codecks-cli dispatch cards/update '{"id": "card-uuid", "status": "done"}'
 ```
+
+## Python API
+
+codecks-cli ships a typed Python library with `py.typed` marker for editor support.
+
+```python
+from codecks_cli import CodecksClient
+
+client = CodecksClient()  # validates token on init
+
+# List cards with filters
+cards = client.list_cards(status="started", sort="priority")
+
+# Create a card
+result = client.create_card(title="Fix login bug", deck="Backlog")
+
+# Update cards
+client.update_cards(card_ids=["abc-123"], status="done", priority="a")
+
+# Standup report
+report = client.standup(days=3, project="My Project")
+```
+
+### 27 methods
+
+| Category | Methods |
+|----------|---------|
+| **Read** | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_activity`, `pm_focus`, `standup` |
+| **Hand** | `list_hand`, `add_to_hand`, `remove_from_hand` |
+| **Mutations** | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature` |
+| **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
+| **Raw API** | `raw_query`, `raw_dispatch` |
+
+All methods use keyword-only arguments and return flat `dict[str, Any]` for easy consumption by AI agents and scripts.
+
+## MCP Server
+
+The MCP (Model Context Protocol) server exposes 28 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+
+### Setup
+
+```bash
+# Install MCP dependency
+py -m pip install .[mcp]
+
+# Run the server (stdio transport)
+codecks-mcp
+# or: py -m codecks_cli.mcp_server
+```
+
+### Claude Code configuration
+
+Add to your MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "codecks": {
+      "command": "codecks-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+### 28 tools
+
+| Category | Tools |
+|----------|-------|
+| **Read** (9) | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_activity`, `pm_focus`, `standup` |
+| **Hand** (3) | `list_hand`, `add_to_hand`, `remove_from_hand` |
+| **Mutations** (7) | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature` |
+| **Comments** (6) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
+| **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
+
+### Features
+
+- **Cached client** — single `CodecksClient` instance reused across tool calls
+- **Literal types** — enum parameters (status, priority, sort) use Literal types for validation
+- **Pagination** — `list_cards` supports limit/offset (default 50 cards per page)
+- **Agent-friendly docstrings** — "when to use" hints, return shapes, and gotchas in every tool
+- **Token-efficient responses** — card lists omit descriptions, API metadata is stripped
 
 ## GDD Sync (Game Design Document)
 
@@ -335,22 +505,22 @@ Tags are optional: `[P:a]` = priority (a/b/c), `[E:5]` = effort, `[P:a E:5]` = b
 
 ```bash
 # View parsed GDD tasks
-py codecks_api.py gdd --format table
+codecks-cli gdd --format table
 
 # Re-fetch from Google Doc (ignore cache)
-py codecks_api.py gdd --refresh --format table
+codecks-cli gdd --refresh --format table
 
 # Use a local file
-py codecks_api.py gdd --file "my_gdd.md" --format table
+codecks-cli gdd --file "my_gdd.md" --format table
 
 # Dry-run sync (shows what would be created, no changes)
-py codecks_api.py gdd-sync --project "My Project"
+codecks-cli gdd-sync --project "My Project"
 
 # Apply sync (actually creates cards)
-py codecks_api.py gdd-sync --project "My Project" --apply
+codecks-cli gdd-sync --project "My Project" --apply
 
 # Sync one section only
-py codecks_api.py gdd-sync --project "My Project" --section "Core Gameplay" --apply
+codecks-cli gdd-sync --project "My Project" --section "Core Gameplay" --apply
 ```
 
 ### How sync works
@@ -376,11 +546,11 @@ If your GDD is private, set up Google OAuth2 (free, one-time, ~5 minutes):
    ```
 6. Run the authorization flow (opens your browser):
    ```bash
-   py codecks_api.py gdd-auth
+   codecks-cli gdd-auth
    ```
 7. Done! The script will now fetch your private Google Doc automatically. Tokens refresh silently.
 
-To revoke access later: `py codecks_api.py gdd-revoke`
+To revoke access later: `codecks-cli gdd-revoke`
 
 **Other options** (no OAuth needed):
 - **Local file**: Export the Google Doc as `.md` and use `--file "path/to/gdd.md"`
@@ -393,19 +563,22 @@ By default, all commands output JSON. Add `--format table` for human-readable ou
 
 ```bash
 # JSON (default, best for AI agents)
-py codecks_api.py cards
+codecks-cli cards
 
 # Table (best for humans)
-py codecks_api.py cards --format table
+codecks-cli cards --format table
+
+# CSV (for spreadsheets)
+codecks-cli cards --format csv
 
 # Stats as readable text
-py codecks_api.py cards --stats --format table
+codecks-cli cards --stats --format table
 
 # Works with all read commands
-py codecks_api.py decks --format table
-py codecks_api.py projects --format table
-py codecks_api.py milestones --format table
-py codecks_api.py card <id> --format table
+codecks-cli decks --format table
+codecks-cli projects --format table
+codecks-cli milestones --format table
+codecks-cli card <id> --format table
 ```
 
 ### Example table output
@@ -450,22 +623,9 @@ By Owner:
   unassigned         11
 ```
 
-## Card enrichment
-
-All card output automatically includes resolved names and extra context:
-- `deck_name` — the deck's title (instead of just `deck_id`)
-- `owner_name` — the assignee's display name (instead of raw user ID)
-- `milestone_name` — the milestone's name from `.env` mapping (instead of just `milestone_id`)
-- `tags` — normalized tag list from `masterTags`
-- `sub_card_count` — number of sub-cards for hero cards
-
-Single card detail (`card <id>`) also shows severity and parent hero card when present.
-
-These extra fields appear in both JSON and table output.
-
 ## Token architecture
 
-The script uses three tokens, each for a different purpose:
+The tool uses three tokens, each for a different purpose:
 
 | Token | Used for | Auth method | Expiry |
 |-------|----------|-------------|--------|
@@ -473,109 +633,53 @@ The script uses three tokens, each for a different purpose:
 | `CODECKS_REPORT_TOKEN` | Creating cards | URL query parameter | Never (until disabled) |
 | `CODECKS_ACCESS_KEY` | Generating new report tokens | URL query parameter | Never |
 
-**The session token is validated automatically** every time you run a command. If it's expired, the script prints `[TOKEN_EXPIRED]` with instructions to refresh it (or run `setup` again). If no configuration exists at all, it prints `[SETUP_NEEDED]`. All other errors are prefixed with `[ERROR]` for easy detection.
+The session token is validated automatically every time you run a command. If it's expired, the tool prints `[TOKEN_EXPIRED]` with instructions to refresh it (or run `setup` again). If no configuration exists at all, it prints `[SETUP_NEEDED]`.
+
 With `--format json`, errors are emitted as JSON envelopes on stderr (`{"ok": false, "error": ...}`) so AI agents can parse failures consistently.
-Use `--strict` for fail-fast agent mode on raw API workflows (`query`/`dispatch`) when ambiguous responses should be treated as errors.
 
-## Known quirks
+API notes:
+- **Rate limit:** 40 requests per 5 seconds per IP. Transient errors (429/502/503/504) are retried with backoff.
+- **Expired tokens return empty data**, not 401. The tool detects this and warns you.
+- **Response fields are snake_case** (`deck_id`) but query fields are camelCase (`deckId`).
 
-These are Codecks API behaviors to be aware of:
-
-- **Card title = first line of content.** Renaming a card means updating the first line of its `content` field. The `--title` flag handles this automatically.
-- **No project/milestone name queries.** The API doesn't expose these, so they're stored in `.env` as ID-to-name mappings.
-- **Response fields are snake_case** (`deck_id`, `project_id`) but query fields are camelCase (`deckId`, `projectId`).
-- **Expired tokens return empty data**, not a 401 error. The script detects this and warns you.
-- **Rate limit:** 40 requests per 5 seconds per IP.
-- **Configurable HTTP timeout** (default 30s) on all requests to prevent hangs.
-- **Safe retries for read/query calls** on transient gateway errors (`429/502/503/504`) with backoff.
-- **Per-request tracing header** (`X-Request-Id`) is sent for easier API/gateway log correlation.
-- **Optional structured HTTP logs** to stderr via `CODECKS_HTTP_LOG=true` (secrets in URL query are masked), with sampling via `CODECKS_HTTP_LOG_SAMPLE_RATE`.
-- **Delete requires `--confirm`** to prevent accidental permanent deletion. Without it, the script suggests `archive` instead.
-- **Report tokens in URL params** is the official API design. Treat them as rotatable credentials.
-
-## Using with an AI agent
-
-This script is designed to be called by an AI coding agent like Claude Code. The AI agent should:
-
-1. Default to JSON output (no `--format` flag) for structured parsing
-2. Use `--format table` when presenting information to a human
-3. Start sessions with `standup` for an immediate status snapshot
-4. Use `pm-focus` for sprint health checks (blocked, stale, unassigned cards)
-5. Use `--stats` to get a quick overview without dumping every card
-6. Use `--search` to find specific cards without scanning everything
-7. Use comma-separated `--status` and `--priority` for multi-value filters
-8. Use `--stale <days>` to find neglected cards, `--owner none` for unassigned work
-9. Chain `--project`, `--deck`, `--status`, `--priority`, and `--search` filters to narrow results
-10. For non-strict mode, look for `OK:` on mutation responses; in strict JSON mode parse structured mutation JSON
-11. Check for `[ERROR]` prefix to detect failures, and `[TOKEN_EXPIRED]` for expired sessions
-12. Use `create --deck "Name"` to place cards directly — avoids a separate `update` call
-13. Use `remove` as a natural alias for `archive`
-14. Use `gdd-sync --project "Name"` for dry-run, add `--apply` only after reviewing the report
-15. Pipe GDD content via `--file -` if the agent has its own document access (e.g. MCP)
-
-The AI agent's project memory file should include the full command reference and the project/milestone UUID mappings.
-
-### Token efficiency
-
-The script is optimized to minimize context window usage for AI agents:
-
-- **Card lists omit descriptions** — the `content` field is only included when using `--search` (which needs it for matching). Use `card <id>` to get full details for a specific card.
-- **Mutation responses are clean** — non-strict mode prints `OK: ...`; strict+JSON mode emits structured JSON mutation envelopes for agent parsing.
-- **API metadata is stripped** — internal `_root` keys are removed from all query responses.
-- **Deck lookups are cached** — commands that need deck data make only one API call per invocation, even if multiple filters reference decks.
-
-## File structure
+## Project structure
 
 ```
 codecks-cli/
-  codecks_api.py    # Entry point — argparse, help text, command dispatch
-  config.py         # Constants, .env loading, module-level state
-  models.py         # Typed input/output contracts for feature and raw payloads
-  api.py            # HTTP layer, security helpers, token validation
-  cards.py          # Card CRUD, hand ops, conversations, enrichment
-  commands.py       # Command handlers (one cmd_*() per CLI command)
-  formatters.py     # Table, CSV, JSON output formatters
-  gdd.py            # Google OAuth2, GDD fetch/parse/sync
-  setup_wizard.py   # Interactive setup wizard
-  tests/            # pytest unit tests (no live API calls)
-  .env              # Your tokens and config (gitignored)
-  .env.example      # Template showing required env vars
-  .gitignore        # Protects .env from commits
-  README.md         # This file
-  LICENSE           # MIT license
-  CONTRIBUTING.md   # How to contribute
-  SECURITY.md       # Vulnerability reporting
-  CHANGELOG.md      # Version history
+  codecks_api.py              ← CLI entry point (backward-compat wrapper)
+  codecks_cli/
+    cli.py                    ← argparse, build_parser(), main() dispatch
+    commands.py               ← cmd_*() wrappers: argparse → CodecksClient → formatters
+    client.py                 ← CodecksClient: 27 public methods (the API surface)
+    cards.py                  ← Card CRUD, hand ops, conversations, enrichment
+    api.py                    ← HTTP layer: query(), dispatch(), retries, token check
+    config.py                 ← Env vars, tokens, constants, runtime state
+    exceptions.py             ← CliError, SetupError, HTTPError
+    _utils.py                 ← _get_field(), get_card_tags(), date/multi-value parsers
+    types.py                  ← TypedDict response shapes (CardRow, CardDetail, etc.)
+    models.py                 ← ObjectPayload, FeatureSpec dataclasses
+    formatters/               ← JSON/table/CSV output (7 sub-modules)
+      __init__.py             re-exports all 24 formatter names
+      _table.py               _table(), _trunc(), _sanitize_str()
+      _core.py                output(), mutation_response(), pretty_print()
+      _cards.py               format_cards_table, format_card_detail, format_cards_csv
+      _entities.py            format_decks_table, format_projects_table, format_milestones_table
+      _activity.py            format_activity_table, format_activity_diff
+      _dashboards.py          format_pm_focus_table, format_standup_table
+      _gdd.py                 format_gdd_table, format_sync_report
+    gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
+    setup_wizard.py           ← Interactive .env bootstrap
+    mcp_server.py             ← MCP server: 28 tools (stdio transport)
+    pm_playbook.md            ← Agent-agnostic PM methodology
+    py.typed                  ← PEP 561 type marker
+  tests/                      ← 491 pytest tests (no live API calls)
+  .env                        ← Your tokens and config (gitignored)
+  .env.example                ← Template showing required env vars
 ```
 
 ## Contributing
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Quality Checks
-
-The project keeps **runtime dependencies at zero** (stdlib only), while using
-optional dev tooling for quality gates.
-
-Install dev tools:
-
-```powershell
-py -m pip install .[dev]
-```
-
-Run checks:
-
-```powershell
-py -m ruff check .
-py -m ruff format --check .
-py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py
-pwsh -File scripts/run-tests.ps1
-```
-
-`scripts/run-tests.ps1` sets `TEMP`/`TMP` to `.tmp/` and uses a unique
-`.tmp/pytest-<timestamp>-<pid>` base temp per run to reduce Windows lock/permission collisions.
-It prefers `py` and falls back to `CODECKS_PYTHON_PATH` (or
-`C:\Users\USER\AppData\Local\Python\bin\python.exe`).
 
 ## Security
 

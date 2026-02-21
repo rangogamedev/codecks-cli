@@ -6,9 +6,9 @@ For architecture details, see `CLAUDE.md`. For current project state, see `HANDO
 
 ## Development setup
 
-1. Clone the repo and create a `.env` file (see [README.md](README.md#setup))
+1. Clone the repo and create a `.env` file (see [README.md](README.md#quick-start))
 2. You need a [Codecks](https://codecks.io) account to test against (free tier works)
-3. Run `py codecks_api.py` with no arguments to see all available commands
+3. Run `codecks-cli` with no arguments to see all available commands
 
 ## Project principles
 
@@ -46,7 +46,8 @@ Open an issue describing:
    - `pwsh -File scripts/run-tests.ps1`
 5. Test your changes with real Codecks API calls if they touch the API layer
 6. Update `README.md` if you add new commands or flags
-7. Open a pull request with a clear description
+7. Update `CHANGELOG.md` with user-visible changes
+8. Open a pull request with a clear description
 
 ### Commit messages
 
@@ -70,6 +71,16 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
 - All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
 
+## Testing
+
+The test suite has **491 tests** across 12 test files. All must pass before submitting:
+
+```bash
+pwsh -File scripts/run-tests.ps1
+```
+
+Tests mock at module boundaries — no live API calls are made.
+
 ## Important constraints
 
 - **Zero runtime dependencies.** Do not add non-stdlib runtime requirements.
@@ -77,7 +88,6 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
-- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 464 tests. All must pass before submitting.
 
 See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
 

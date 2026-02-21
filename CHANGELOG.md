@@ -14,25 +14,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Auto-generates report token if access key is provided
   - Optional GDD URL configuration
   - Returning users get a menu: refresh mappings, update token, or full setup
-- Automatic token validation on every API command
-  - Catches expired tokens immediately with clear instructions
-  - `[SETUP_NEEDED]` prefix when no configuration found
-  - Skips check for commands that don't need the session token
+- `CodecksClient` class (`client.py`) — 27 public methods, keyword-only args, flat dict returns
+  - Full programmatic API: read, create, update, archive, hand, comments, raw queries
+  - `py.typed` marker for PEP 561 editor support
+- MCP server (`mcp_server.py`) — 28 tools wrapping CodecksClient via FastMCP (stdio transport)
+  - 25 tools mapping 1:1 to CodecksClient methods
+  - 3 PM session tools: `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences`
+  - PM playbook (`pm_playbook.md`) — agent-agnostic PM methodology readable via MCP
+  - Literal types for enum params (status, priority, sort, card_type, severity)
+  - Pagination on `list_cards` (limit/offset, default 50)
+  - Cached client instance reused across tool calls
+  - Agent-friendly docstrings with "when to use" hints and return shapes
+  - Install: `pip install .[mcp]`, run: `codecks-mcp` or `py -m codecks_cli.mcp_server`
+- `--dry-run` flag — preview mutations without executing
+- `--quiet` / `-q` flag — suppress confirmations and warnings
+- `--verbose` / `-v` flag — enable HTTP request logging
 - `--version` flag to show current version
 - `--format csv` output format on card listings
 - `--milestone` filter on `cards` command
-- `--quiet` flag on `gdd-sync` to suppress per-item listings
+- `completion` command — shell completions for bash, zsh, and fish
 - Input validation for `--status` and `--priority` values with helpful error messages
 - Priority labels in table output (high/med/low instead of a/b/c)
 - Helpful error messages that list available options (decks, projects, milestones, statuses)
 - Unmatched GDD section warning in sync reports
 
+### Changed
+- Architecture refactored into clean module hierarchy:
+  - `exceptions.py` — all exception classes (`CliError`, `SetupError`, `HTTPError`)
+  - `_utils.py` — pure utility helpers (`_get_field`, `get_card_tags`, parsers)
+  - `formatters/` — package with 7 sub-modules, `__init__.py` re-exports all 24 names
+  - `types.py` — TypedDict response shapes for documentation and consumers
+- `commands.py` thinned to delegate all business logic to `CodecksClient`
+- CLI dispatch uses `set_defaults(func=cmd_xxx)` per subparser (no DISPATCH dict)
+- Client and MCP layer optimized for AI token efficiency (stripped metadata, cached lookups)
+
 ### Fixed
 - `account --format table` now shows formatted output instead of raw JSON
 - `cards --status started` no longer shows false TOKEN_EXPIRED warning when 0 cards match
-
-### Changed
-- Version bumped to 0.4.0
 
 ## [0.3.0] - 2026-02-18
 
