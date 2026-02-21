@@ -8,6 +8,7 @@ import pytest
 
 mcp_mod = pytest.importorskip("codecks_cli.mcp_server", reason="mcp package not installed")
 
+import json  # noqa: E402
 from unittest.mock import MagicMock, patch  # noqa: E402
 
 from codecks_cli.exceptions import CliError, SetupError  # noqa: E402
@@ -456,3 +457,131 @@ class TestSlimCard:
         result = mcp_mod.list_hand()
         assert "assignee" not in result[0]
         assert result[0]["owner_name"] == "Alice"
+
+
+# ---------------------------------------------------------------------------
+# PM session tools
+# ---------------------------------------------------------------------------
+
+
+class TestPMPlaybook:
+    def test_get_pm_playbook(self):
+        result = mcp_mod.get_pm_playbook()
+        assert result["ok"] is True
+        assert isinstance(result["playbook"], str)
+        assert len(result["playbook"]) > 100
+
+    def test_get_pm_playbook_contains_key_sections(self):
+        result = mcp_mod.get_pm_playbook()
+        text = result["playbook"]
+        assert "Session Start" in text
+        assert "Safety Rules" in text
+        assert "Core Execution Loop" in text
+        assert "Token Efficiency" in text
+        assert "Workflow Learning" in text
+        assert "Feature Decomposition" in text
+
+    def test_get_pm_playbook_missing_file(self):
+        original = mcp_mod._PLAYBOOK_PATH
+        try:
+            mcp_mod._PLAYBOOK_PATH = "/nonexistent/playbook.md"
+            result = mcp_mod.get_pm_playbook()
+            assert result["ok"] is False
+            assert "Cannot read playbook" in result["error"]
+        finally:
+            mcp_mod._PLAYBOOK_PATH = original
+
+
+class TestWorkflowPreferences:
+    def test_get_workflow_preferences_no_file(self):
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = "/nonexistent/.pm_preferences.json"
+            result = mcp_mod.get_workflow_preferences()
+            assert result["ok"] is True
+            assert result["found"] is False
+            assert result["preferences"] == []
+        finally:
+            mcp_mod._PREFS_PATH = original
+
+    def test_get_workflow_preferences_reads_file(self, tmp_path):
+        prefs_file = tmp_path / ".pm_preferences.json"
+        prefs_file.write_text(
+            json.dumps(
+                {
+                    "observations": ["Likes priority-first triage", "Uses hand daily"],
+                    "updated_at": "2026-02-21T10:00:00+00:00",
+                }
+            )
+        )
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = str(prefs_file)
+            result = mcp_mod.get_workflow_preferences()
+            assert result["ok"] is True
+            assert result["found"] is True
+            assert len(result["preferences"]) == 2
+            assert "priority-first" in result["preferences"][0]
+        finally:
+            mcp_mod._PREFS_PATH = original
+
+    def test_save_workflow_preferences_writes_file(self, tmp_path):
+        prefs_file = tmp_path / ".pm_preferences.json"
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = str(prefs_file)
+            result = mcp_mod.save_workflow_preferences(
+                ["Picks own cards", "Finishes started before new"]
+            )
+            assert result["ok"] is True
+            assert result["saved"] == 2
+
+            data = json.loads(prefs_file.read_text())
+            assert data["observations"] == [
+                "Picks own cards",
+                "Finishes started before new",
+            ]
+            assert "updated_at" in data
+        finally:
+            mcp_mod._PREFS_PATH = original
+
+    def test_save_workflow_preferences_atomic(self, tmp_path):
+        """Verify atomic write: no partial files left on success."""
+        prefs_file = tmp_path / ".pm_preferences.json"
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = str(prefs_file)
+            mcp_mod.save_workflow_preferences(["Test observation"])
+
+            # Only the final file should exist, no .tmp leftovers
+            files = list(tmp_path.iterdir())
+            assert len(files) == 1
+            assert files[0].name == ".pm_preferences.json"
+        finally:
+            mcp_mod._PREFS_PATH = original
+
+    def test_save_workflow_preferences_overwrites(self, tmp_path):
+        """Second save fully replaces the first."""
+        prefs_file = tmp_path / ".pm_preferences.json"
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = str(prefs_file)
+            mcp_mod.save_workflow_preferences(["First pattern"])
+            mcp_mod.save_workflow_preferences(["Second pattern", "Third pattern"])
+
+            data = json.loads(prefs_file.read_text())
+            assert data["observations"] == ["Second pattern", "Third pattern"]
+        finally:
+            mcp_mod._PREFS_PATH = original
+
+    def test_get_workflow_preferences_invalid_json(self, tmp_path):
+        prefs_file = tmp_path / ".pm_preferences.json"
+        prefs_file.write_text("not valid json {{{")
+        original = mcp_mod._PREFS_PATH
+        try:
+            mcp_mod._PREFS_PATH = str(prefs_file)
+            result = mcp_mod.get_workflow_preferences()
+            assert result["ok"] is False
+            assert "Cannot read preferences" in result["error"]
+        finally:
+            mcp_mod._PREFS_PATH = original

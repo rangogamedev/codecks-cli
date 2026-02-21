@@ -6,11 +6,16 @@ Requires: pip install codecks-cli[mcp]
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+from datetime import datetime, timezone
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli import CliError, CodecksClient, SetupError
+from codecks_cli.config import _PROJECT_ROOT
 
 mcp = FastMCP(
     "codecks",
@@ -33,7 +38,11 @@ mcp = FastMCP(
         "- Pagination: list_cards returns 50 cards by default. Use limit/offset "
         "to page through large sets.\n"
         "- Prefer pm_focus or standup for dashboards instead of assembling them "
-        "from raw card lists."
+        "from raw card lists.\n"
+        "\n"
+        "For PM sessions: call get_pm_playbook for the full PM methodology guide.\n"
+        "Call get_workflow_preferences at session start to learn the user's patterns.\n"
+        "Call save_workflow_preferences at session end with observed patterns."
     ),
 )
 
@@ -677,6 +686,89 @@ def list_conversations(card_id: str) -> dict:
         dict with resolvable threads, messages, and referenced users.
     """
     return _call("list_conversations", card_id=card_id)
+
+
+# -------------------------------------------------------------------
+# PM session tools (local, no CodecksClient needed)
+# -------------------------------------------------------------------
+
+_PLAYBOOK_PATH = os.path.join(os.path.dirname(__file__), "pm_playbook.md")
+_PREFS_PATH = os.path.join(_PROJECT_ROOT, ".pm_preferences.json")
+
+
+@mcp.tool()
+def get_pm_playbook() -> dict:
+    """Get the PM session playbook — a full methodology guide for running
+    project management sessions on Codecks via MCP tools.
+
+    No authentication needed. Call this at the start of a PM session
+    to learn the recommended workflow, safety rules, and tool patterns.
+
+    Returns:
+        dict with ok=True and playbook (markdown text).
+    """
+    try:
+        with open(_PLAYBOOK_PATH, encoding="utf-8") as f:
+            return {"ok": True, "playbook": f.read()}
+    except OSError as e:
+        return {"ok": False, "error": f"Cannot read playbook: {e}"}
+
+
+@mcp.tool()
+def get_workflow_preferences() -> dict:
+    """Load the user's workflow preferences observed from past PM sessions.
+
+    No authentication needed. Call this at session start to adapt to
+    the user's patterns (e.g. card selection style, hand usage, focus area).
+
+    Returns:
+        dict with ok=True, found (bool), and preferences (list of strings).
+        If no preferences file exists, found=False with an empty list.
+    """
+    try:
+        with open(_PREFS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "ok": True,
+            "found": True,
+            "preferences": data.get("observations", []),
+        }
+    except FileNotFoundError:
+        return {"ok": True, "found": False, "preferences": []}
+    except (json.JSONDecodeError, OSError) as e:
+        return {"ok": False, "error": f"Cannot read preferences: {e}"}
+
+
+@mcp.tool()
+def save_workflow_preferences(observations: list[str]) -> dict:
+    """Save observed workflow preferences from the current PM session.
+
+    No authentication needed. Call this at session end with patterns
+    you observed (e.g. 'Prefers finishing started cards before new work').
+    Only record patterns seen at least twice or explicitly stated by the user.
+
+    Args:
+        observations: List of observation strings describing user patterns.
+
+    Returns:
+        dict with ok=True and saved (count of observations written).
+    """
+    data = {
+        "observations": observations,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_PREFS_PATH), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, _PREFS_PATH)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
+        return {"ok": True, "saved": len(observations)}
+    except OSError as e:
+        return {"ok": False, "error": f"Cannot save preferences: {e}"}
 
 
 # -------------------------------------------------------------------

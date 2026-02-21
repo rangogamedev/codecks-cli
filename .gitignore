@@ -3,6 +3,7 @@
 !.env.example
 .gdd_cache.md
 .gdd_tokens.json
+.pm_preferences.json
 __pycache__/
 *.pyc
 build/
