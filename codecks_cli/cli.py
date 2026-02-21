@@ -74,6 +74,8 @@ Commands:
     --stale <days>          Find cards not updated in N days
     --updated-after <date>  Cards updated after date (YYYY-MM-DD)
     --updated-before <date> Cards updated before date (YYYY-MM-DD)
+    --limit <n>             Limit results (pagination)
+    --offset <n>            Skip first N results (pagination)
     --stats                 Show card count summary instead of card list
     --hand                  Show only cards in your hand
     --hero <id>             Show only sub-cards of a hero card
@@ -231,6 +233,16 @@ def _positive_int(value):
     return parsed
 
 
+def _non_negative_int(value):
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
 def build_parser():
     parser = _SubcommandParser(
         prog="codecks-cli",
@@ -271,6 +283,8 @@ def build_parser():
     p.add_argument("--stale", type=_positive_int, metavar="DAYS")
     p.add_argument("--updated-after", dest="updated_after")
     p.add_argument("--updated-before", dest="updated_before")
+    p.add_argument("--limit", type=_positive_int)
+    p.add_argument("--offset", type=_non_negative_int, default=0)
     p.add_argument("--stats", action="store_true")
     p.add_argument("--hand", action="store_true")
     p.add_argument("--archived", action="store_true")
@@ -458,6 +472,7 @@ def _emit_cli_error(err, fmt):
     if fmt == "json":
         payload = {
             "ok": False,
+            "schema_version": config.CONTRACT_SCHEMA_VERSION,
             "error": {
                 "type": _error_type_from_message(msg),
                 "message": msg,

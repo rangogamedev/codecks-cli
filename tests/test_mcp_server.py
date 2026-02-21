@@ -366,16 +366,20 @@ class TestErrorHandling:
         MockClient.return_value = client
         result = mcp_mod.list_cards()
         assert result["ok"] is False
+        assert result["schema_version"] == "1.0"
         assert result["type"] == "error"
         assert "Invalid sort field" in result["error"]
+        assert result["error_detail"]["type"] == "error"
 
     @patch("codecks_cli.mcp_server.CodecksClient")
     def test_setup_error_returns_setup_dict(self, MockClient):
         MockClient.side_effect = SetupError("[TOKEN_EXPIRED] Session expired")
         result = mcp_mod.get_account()
         assert result["ok"] is False
+        assert result["schema_version"] == "1.0"
         assert result["type"] == "setup"
         assert "TOKEN_EXPIRED" in result["error"]
+        assert result["error_detail"]["type"] == "setup"
 
     @patch("codecks_cli.mcp_server.CodecksClient")
     def test_error_result_is_json_serializable(self, MockClient):
@@ -388,6 +392,55 @@ class TestErrorHandling:
         # Must not raise
         serialized = json.dumps(result)
         assert "Not found" in serialized
+
+
+# ---------------------------------------------------------------------------
+# Response mode compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestResponseModes:
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_envelope_mode_wraps_success_dict(self, MockClient):
+        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        try:
+            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            MockClient.return_value = _mock_client(get_account={"name": "Alice", "id": "u1"})
+            result = mcp_mod.get_account()
+            assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
+            assert result["data"]["name"] == "Alice"
+        finally:
+            mcp_mod.MCP_RESPONSE_MODE = original_mode
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_envelope_mode_wraps_success_list(self, MockClient):
+        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        try:
+            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            MockClient.return_value = _mock_client(list_decks=[{"id": "d1", "title": "Features"}])
+            result = mcp_mod.list_decks()
+            assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
+            assert isinstance(result["data"], list)
+            assert result["data"][0]["id"] == "d1"
+        finally:
+            mcp_mod.MCP_RESPONSE_MODE = original_mode
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_envelope_mode_keeps_error_shape(self, MockClient):
+        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        try:
+            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            client = MagicMock()
+            client.list_cards.side_effect = CliError("[ERROR] Bad filter")
+            MockClient.return_value = client
+            result = mcp_mod.list_cards()
+            assert result["ok"] is False
+            assert result["type"] == "error"
+            assert "Bad filter" in result["error"]
+        finally:
+            mcp_mod.MCP_RESPONSE_MODE = original_mode
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +521,7 @@ class TestPMPlaybook:
     def test_get_pm_playbook(self):
         result = mcp_mod.get_pm_playbook()
         assert result["ok"] is True
+        assert result["schema_version"] == "1.0"
         assert isinstance(result["playbook"], str)
         assert len(result["playbook"]) > 100
 
@@ -487,7 +541,9 @@ class TestPMPlaybook:
             mcp_mod._PLAYBOOK_PATH = "/nonexistent/playbook.md"
             result = mcp_mod.get_pm_playbook()
             assert result["ok"] is False
+            assert result["schema_version"] == "1.0"
             assert "Cannot read playbook" in result["error"]
+            assert result["type"] == "error"
         finally:
             mcp_mod._PLAYBOOK_PATH = original
 
@@ -499,6 +555,7 @@ class TestWorkflowPreferences:
             mcp_mod._PREFS_PATH = "/nonexistent/.pm_preferences.json"
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
             assert result["found"] is False
             assert result["preferences"] == []
         finally:
@@ -519,6 +576,7 @@ class TestWorkflowPreferences:
             mcp_mod._PREFS_PATH = str(prefs_file)
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
             assert result["found"] is True
             assert len(result["preferences"]) == 2
             assert "priority-first" in result["preferences"][0]
@@ -534,6 +592,7 @@ class TestWorkflowPreferences:
                 ["Picks own cards", "Finishes started before new"]
             )
             assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
             assert result["saved"] == 2
 
             data = json.loads(prefs_file.read_text())
@@ -582,7 +641,9 @@ class TestWorkflowPreferences:
             mcp_mod._PREFS_PATH = str(prefs_file)
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is False
+            assert result["schema_version"] == "1.0"
             assert "Cannot read preferences" in result["error"]
+            assert result["type"] == "error"
         finally:
             mcp_mod._PREFS_PATH = original
 
@@ -876,6 +937,7 @@ class TestInputValidationIntegration:
         MockClient.return_value = _mock_client(create_card={"ok": True})
         result = mcp_mod.create_card("x" * 501)
         assert result["ok"] is False
+        assert result["schema_version"] == "1.0"
         assert "exceeds maximum length" in result["error"]
 
     @patch("codecks_cli.mcp_server.CodecksClient")
@@ -891,10 +953,12 @@ class TestInputValidationIntegration:
         MockClient.return_value = _mock_client(create_comment={"ok": True})
         result = mcp_mod.create_comment("c1", "x" * 10_001)
         assert result["ok"] is False
+        assert result["schema_version"] == "1.0"
         assert "exceeds maximum length" in result["error"]
 
     @patch("codecks_cli.mcp_server.CodecksClient")
     def test_save_preferences_validates_observations(self, MockClient):
         result = mcp_mod.save_workflow_preferences("not a list")
         assert result["ok"] is False
+        assert result["schema_version"] == "1.0"
         assert "must be a list" in result["error"]

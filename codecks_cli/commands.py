@@ -123,6 +123,22 @@ def cmd_cards(ns):
     if ns.stats:
         output(result["stats"], format_stats_table, fmt)
     else:
+        cards = result.get("cards", [])
+        total = len(cards)
+        limit = getattr(ns, "limit", None)
+        offset = getattr(ns, "offset", 0) or 0
+        if limit is not None:
+            paged_cards = cards[offset : offset + limit]
+            has_more = offset + limit < total
+        else:
+            paged_cards = cards[offset:]
+            has_more = False
+        result = dict(result)
+        result["cards"] = paged_cards
+        result["total_count"] = total
+        result["has_more"] = has_more
+        result["limit"] = limit
+        result["offset"] = offset
         output(result, format_cards_table, fmt, csv_formatter=format_cards_csv)
 
 

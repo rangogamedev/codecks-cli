@@ -179,6 +179,15 @@ class TestBuildParser:
         assert ns.updated_after == "2026-01-01"
         assert ns.updated_before == "2026-02-01"
 
+    def test_cards_pagination_flags(self):
+        ns = self.parser.parse_args(["cards", "--limit", "25", "--offset", "10"])
+        assert ns.limit == 25
+        assert ns.offset == 10
+
+    def test_cards_offset_must_be_non_negative(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["cards", "--offset", "-1"])
+
     def test_cards_sort_validation(self):
         with pytest.raises(CliError):
             self.parser.parse_args(["cards", "--sort", "invalid"])
@@ -381,6 +390,7 @@ class TestCliErrorOutput:
         err = capsys.readouterr().err.strip()
         payload = json.loads(err)
         assert payload["ok"] is False
+        assert payload["schema_version"] == "1.0"
         assert payload["error"]["type"] == "error"
         assert payload["error"]["exit_code"] == 1
 

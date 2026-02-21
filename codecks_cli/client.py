@@ -762,7 +762,12 @@ class CodecksClient:
         """
         add_to_hand(card_ids)
         config._cache.pop("hand", None)
-        return {"ok": True, "added": len(card_ids)}
+        return {
+            "ok": True,
+            "added": len(card_ids),
+            "failed": 0,
+            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
+        }
 
     def remove_from_hand(self, card_ids: list[str]) -> dict[str, Any]:
         """Remove cards from the user's hand (personal work queue).
@@ -775,7 +780,12 @@ class CodecksClient:
         """
         remove_from_hand(card_ids)
         config._cache.pop("hand", None)
-        return {"ok": True, "removed": len(card_ids)}
+        return {
+            "ok": True,
+            "removed": len(card_ids),
+            "failed": 0,
+            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
+        }
 
     # -------------------------------------------------------------------
     # Mutation commands
@@ -862,6 +872,7 @@ class CodecksClient:
         owner: str | None = None,
         tags: str | None = None,
         doc: str | None = None,
+        continue_on_error: bool = False,
     ) -> dict[str, Any]:
         """Update one or more cards.
 
@@ -878,6 +889,8 @@ class CodecksClient:
             owner: Owner name (or 'none' to unassign).
             tags: Comma-separated tags (or 'none' to clear all).
             doc: 'true'/'false' to toggle doc card mode.
+            continue_on_error: If True, continue updating remaining cards
+                after a per-card failure and report partial results.
 
         Returns:
             dict with ok=True, updated count, and fields changed.
@@ -963,13 +976,35 @@ class CodecksClient:
                 "--priority, --effort, --owner, --tag, --doc, etc."
             )
 
+        per_card: list[dict[str, Any]] = []
+        updated = 0
+        failed = 0
+        first_error: CliError | None = None
+
         for cid in card_ids:
-            update_card(cid, **update_kwargs)
+            try:
+                update_card(cid, **update_kwargs)
+                updated += 1
+                per_card.append({"card_id": cid, "ok": True})
+            except CliError as e:
+                failed += 1
+                per_card.append({"card_id": cid, "ok": False, "error": str(e)})
+                if first_error is None:
+                    first_error = e
+                if not continue_on_error:
+                    break
+
+        if first_error is not None and not continue_on_error:
+            raise CliError(
+                f"[ERROR] Failed to update card '{per_card[-1]['card_id']}': {first_error}"
+            ) from first_error
 
         return {
-            "ok": True,
-            "updated": len(card_ids),
+            "ok": failed == 0,
+            "updated": updated,
+            "failed": failed,
             "fields": update_kwargs,
+            "per_card": per_card,
         }
 
     def mark_done(self, card_ids: list[str]) -> dict[str, Any]:
@@ -982,7 +1017,12 @@ class CodecksClient:
             dict with ok=True and count.
         """
         bulk_status(card_ids, "done")
-        return {"ok": True, "count": len(card_ids)}
+        return {
+            "ok": True,
+            "count": len(card_ids),
+            "failed": 0,
+            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
+        }
 
     def mark_started(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as started.
@@ -994,7 +1034,12 @@ class CodecksClient:
             dict with ok=True and count.
         """
         bulk_status(card_ids, "started")
-        return {"ok": True, "count": len(card_ids)}
+        return {
+            "ok": True,
+            "count": len(card_ids),
+            "failed": 0,
+            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
+        }
 
     def archive_card(self, card_id: str) -> dict[str, Any]:
         """Archive a card (reversible).
@@ -1006,7 +1051,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         archive_card(card_id)
-        return {"ok": True, "card_id": card_id}
+        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
 
     def unarchive_card(self, card_id: str) -> dict[str, Any]:
         """Restore an archived card.
@@ -1018,7 +1063,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         unarchive_card(card_id)
-        return {"ok": True, "card_id": card_id}
+        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
 
     def delete_card(self, card_id: str) -> dict[str, Any]:
         """Permanently delete a card.
@@ -1030,7 +1075,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         delete_card(card_id)
-        return {"ok": True, "card_id": card_id}
+        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
 
     def scaffold_feature(
         self,

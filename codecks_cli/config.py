@@ -105,6 +105,7 @@ def _env_float(key, default):
 # ---------------------------------------------------------------------------
 
 VERSION = "0.4.0"
+CONTRACT_SCHEMA_VERSION = "1.0"
 
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
@@ -132,6 +133,9 @@ HTTP_RETRY_BASE_SECONDS = _env_float("CODECKS_HTTP_RETRY_BASE_SECONDS", 1.0)
 HTTP_MAX_RESPONSE_BYTES = _env_int("CODECKS_HTTP_MAX_RESPONSE_BYTES", 5_000_000)
 HTTP_LOG_ENABLED = _env_bool("CODECKS_HTTP_LOG", False)
 HTTP_LOG_SAMPLE_RATE = min(1.0, max(0.0, _env_float("CODECKS_HTTP_LOG_SAMPLE_RATE", 1.0)))
+MCP_RESPONSE_MODE = env.get("CODECKS_MCP_RESPONSE_MODE", "legacy").strip().lower()
+if MCP_RESPONSE_MODE not in {"legacy", "envelope"}:
+    MCP_RESPONSE_MODE = "legacy"
 
 # ---------------------------------------------------------------------------
 # GDD-related paths and Google OAuth constants

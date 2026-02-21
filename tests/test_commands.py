@@ -127,6 +127,21 @@ class TestSortDelegation:
         out = capsys.readouterr().out
         assert "Total cards: 1" in out
 
+    @patch("codecks_cli.commands._get_client")
+    def test_pagination_applied_in_cmd_cards_json(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(6)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=2, offset=3))
+        out = json.loads(capsys.readouterr().out)
+        assert out["total_count"] == 6
+        assert out["limit"] == 2
+        assert out["offset"] == 3
+        assert out["has_more"] is True
+        assert [c["id"] for c in out["cards"]] == ["c3", "c4"]
+
 
 # ---------------------------------------------------------------------------
 # Regression: --title on missing card (the bug we fixed)

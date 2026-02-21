@@ -399,6 +399,8 @@ class TestUpdateCards:
         result = client.update_cards(["c1"], status="done")
         assert result["ok"] is True
         assert result["updated"] == 1
+        assert result["failed"] == 0
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
         mock_update.assert_called_once()
 
     @patch("codecks_cli.client.update_card")
@@ -455,6 +457,22 @@ class TestUpdateCards:
             client.update_cards(["c1"], doc="maybe")
         assert "Invalid --doc value" in str(exc_info.value)
 
+    @patch("codecks_cli.client.update_card")
+    def test_continue_on_error_reports_partial_results(self, mock_update):
+        mock_update.side_effect = [
+            {},
+            CliError("[ERROR] bad id"),
+            {},
+        ]
+        client = _client()
+        result = client.update_cards(["c1", "c2", "c3"], status="done", continue_on_error=True)
+        assert result["ok"] is False
+        assert result["updated"] == 2
+        assert result["failed"] == 1
+        assert result["per_card"][1]["card_id"] == "c2"
+        assert result["per_card"][1]["ok"] is False
+        assert "bad id" in result["per_card"][1]["error"]
+
 
 # ---------------------------------------------------------------------------
 # mark_done / mark_started
@@ -469,6 +487,8 @@ class TestBulkStatus:
         result = client.mark_done(["c1", "c2"])
         assert result["ok"] is True
         assert result["count"] == 2
+        assert result["failed"] == 0
+        assert len(result["per_card"]) == 2
         mock_bulk.assert_called_once_with(["c1", "c2"], "done")
 
     @patch("codecks_cli.client.bulk_status")
@@ -477,6 +497,7 @@ class TestBulkStatus:
         client = _client()
         result = client.mark_started(["c1"])
         assert result["count"] == 1
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
         mock_bulk.assert_called_once_with(["c1"], "started")
 
 
@@ -493,6 +514,7 @@ class TestArchiveOps:
         result = client.archive_card("c1")
         assert result["ok"] is True
         assert result["card_id"] == "c1"
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
 
     @patch("codecks_cli.client.unarchive_card")
     def test_unarchive(self, mock_unarchive):
@@ -500,6 +522,7 @@ class TestArchiveOps:
         client = _client()
         result = client.unarchive_card("c1")
         assert result["ok"] is True
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
 
     @patch("codecks_cli.client.delete_card")
     def test_delete(self, mock_delete):
@@ -507,6 +530,7 @@ class TestArchiveOps:
         client = _client()
         result = client.delete_card("c1")
         assert result["ok"] is True
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
 
 
 # ---------------------------------------------------------------------------
@@ -704,6 +728,8 @@ class TestHandOperations:
         result = client.add_to_hand(["c1", "c2"])
         assert result["ok"] is True
         assert result["added"] == 2
+        assert result["failed"] == 0
+        assert len(result["per_card"]) == 2
 
     @patch("codecks_cli.client.remove_from_hand")
     def test_remove_from_hand(self, mock_remove):
@@ -712,6 +738,7 @@ class TestHandOperations:
         result = client.remove_from_hand(["c1"])
         assert result["ok"] is True
         assert result["removed"] == 1
+        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """MCP server exposing CodecksClient methods as tools.
 
-Run: python -m codecks_cli.mcp_server
-Requires: pip install codecks-cli[mcp]
+Run: py -m codecks_cli.mcp_server
+Requires: py -m pip install .[mcp]
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli import CliError, CodecksClient, SetupError
-from codecks_cli.config import _PROJECT_ROOT
+from codecks_cli.config import _PROJECT_ROOT, CONTRACT_SCHEMA_VERSION, MCP_RESPONSE_MODE
 
 mcp = FastMCP(
     "codecks",
@@ -68,15 +68,82 @@ def _get_client() -> CodecksClient:
     return _client
 
 
+def _contract_error(message: str, error_type: str = "error") -> dict:
+    """Return a stable MCP error envelope with legacy compatibility fields."""
+    return {
+        "ok": False,
+        "schema_version": CONTRACT_SCHEMA_VERSION,
+        "type": error_type,  # legacy
+        "error": message,  # legacy
+        "error_detail": {
+            "type": error_type,
+            "message": message,
+        },
+    }
+
+
+def _ensure_contract_dict(payload: dict) -> dict:
+    """Add stable contract metadata to dict responses."""
+    out = dict(payload)
+    out.setdefault("schema_version", CONTRACT_SCHEMA_VERSION)
+    if out.get("ok") is False:
+        error_type = str(out.get("type", "error"))
+        error_message = out.get("error", "Unknown error")
+        if not isinstance(error_message, str):
+            error_message = str(error_message)
+            out["error"] = error_message
+        out.setdefault(
+            "error_detail",
+            {
+                "type": error_type,
+                "message": error_message,
+            },
+        )
+        return out
+    out.setdefault("ok", True)
+    return out
+
+
+def _finalize_tool_result(result):
+    """Finalize tool response based on configured MCP response mode.
+
+    Modes:
+        - legacy (default): preserve existing top-level shapes; dicts gain
+          contract metadata (ok/schema_version).
+        - envelope: always return {"ok", "schema_version", "data"} for success.
+    """
+    if isinstance(result, dict):
+        normalized = _ensure_contract_dict(result)
+        if normalized.get("ok") is False:
+            return normalized
+        if MCP_RESPONSE_MODE == "envelope":
+            data = dict(normalized)
+            data.pop("ok", None)
+            data.pop("schema_version", None)
+            return {
+                "ok": True,
+                "schema_version": CONTRACT_SCHEMA_VERSION,
+                "data": data,
+            }
+        return normalized
+    if MCP_RESPONSE_MODE == "envelope":
+        return {
+            "ok": True,
+            "schema_version": CONTRACT_SCHEMA_VERSION,
+            "data": result,
+        }
+    return result
+
+
 def _call(method_name: str, **kwargs):
     """Call a CodecksClient method, converting exceptions to error dicts."""
     try:
         client = _get_client()
         return getattr(client, method_name)(**kwargs)
     except SetupError as e:
-        return {"ok": False, "error": str(e), "type": "setup"}
+        return _contract_error(str(e), "setup")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
+        return _contract_error(str(e), "error")
 
 
 _SLIM_DROP = {
@@ -303,7 +370,7 @@ def get_account() -> dict:
     Returns:
         dict with keys: name, id, email, organizationId, role.
     """
-    return _call("get_account")
+    return _finalize_tool_result(_call("get_account"))
 
 
 @mcp.tool()
@@ -382,12 +449,14 @@ def list_cards(
         archived=archived,
         include_stats=include_stats,
     )
-    # Apply client-side pagination (error dicts pass through unchanged)
+    if isinstance(result, dict) and result.get("ok") is False:
+        return _finalize_tool_result(result)
+    # Apply client-side pagination.
     if isinstance(result, dict) and "cards" in result:
         all_cards = result["cards"]
         total = len(all_cards)
         page = all_cards[offset : offset + limit]
-        return {
+        payload = {
             "cards": [_sanitize_card(_slim_card(c)) for c in page],
             "stats": result.get("stats"),
             "total_count": total,
@@ -395,7 +464,8 @@ def list_cards(
             "limit": limit,
             "offset": offset,
         }
-    return result
+        return _finalize_tool_result(payload)
+    return _finalize_tool_result(result)
 
 
 @mcp.tool()
@@ -428,8 +498,8 @@ def get_card(
         include_conversations=include_conversations,
     )
     if isinstance(result, dict) and result.get("ok") is not False:
-        return _sanitize_card(result)
-    return result
+        return _finalize_tool_result(_sanitize_card(result))
+    return _finalize_tool_result(result)
 
 
 @mcp.tool()
@@ -447,7 +517,7 @@ def list_decks(include_card_counts: bool = False) -> dict:
         list of dicts with id, title, project_name, card_count
         (null when include_card_counts=False).
     """
-    return _call("list_decks", include_card_counts=include_card_counts)
+    return _finalize_tool_result(_call("list_decks", include_card_counts=include_card_counts))
 
 
 @mcp.tool()
@@ -459,7 +529,7 @@ def list_projects() -> dict:
     Returns:
         list of dicts with id, name, deck_count, decks.
     """
-    return _call("list_projects")
+    return _finalize_tool_result(_call("list_projects"))
 
 
 @mcp.tool()
@@ -471,7 +541,7 @@ def list_milestones() -> dict:
     Returns:
         list of dicts with id, name, card_count.
     """
-    return _call("list_milestones")
+    return _finalize_tool_result(_call("list_milestones"))
 
 
 @mcp.tool()
@@ -488,8 +558,8 @@ def list_activity(limit: int = 20) -> dict:
     """
     result = _call("list_activity", limit=limit)
     if isinstance(result, dict) and result.get("ok") is not False:
-        return _sanitize_activity(result)
-    return result
+        return _finalize_tool_result(_sanitize_activity(result))
+    return _finalize_tool_result(result)
 
 
 @mcp.tool()
@@ -519,7 +589,7 @@ def pm_focus(
         for key in ("blocked", "in_review", "hand", "stale", "suggested"):
             if key in result and isinstance(result[key], list):
                 result[key] = _sanitize_rows(result[key])
-    return result
+    return _finalize_tool_result(result)
 
 
 @mcp.tool()
@@ -543,7 +613,7 @@ def standup(days: int = 2, project: str | None = None, owner: str | None = None)
         for key in ("recently_done", "in_progress", "blocked", "hand"):
             if key in result and isinstance(result[key], list):
                 result[key] = _sanitize_rows(result[key])
-    return result
+    return _finalize_tool_result(result)
 
 
 # -------------------------------------------------------------------
@@ -562,8 +632,8 @@ def list_hand() -> dict:
     """
     result = _call("list_hand")
     if isinstance(result, list):
-        return [_sanitize_card(_slim_card(c)) for c in result]
-    return result
+        return _finalize_tool_result([_sanitize_card(_slim_card(c)) for c in result])
+    return _finalize_tool_result(result)
 
 
 @mcp.tool()
@@ -578,7 +648,7 @@ def add_to_hand(card_ids: list[str]) -> dict:
     Returns:
         dict with ok=True and count of added cards.
     """
-    return _call("add_to_hand", card_ids=card_ids)
+    return _finalize_tool_result(_call("add_to_hand", card_ids=card_ids))
 
 
 @mcp.tool()
@@ -593,7 +663,7 @@ def remove_from_hand(card_ids: list[str]) -> dict:
     Returns:
         dict with ok=True and count of removed cards.
     """
-    return _call("remove_from_hand", card_ids=card_ids)
+    return _finalize_tool_result(_call("remove_from_hand", card_ids=card_ids))
 
 
 # -------------------------------------------------------------------
@@ -633,8 +703,9 @@ def create_card(
         if content is not None:
             content = _validate_input(content, "content")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
-    return _call(
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    return _finalize_tool_result(
+        _call(
         "create_card",
         title=title,
         content=content,
@@ -643,6 +714,7 @@ def create_card(
         severity=severity,
         doc=doc,
         allow_duplicate=allow_duplicate,
+        )
     )
 
 
@@ -690,8 +762,9 @@ def update_cards(
         if content is not None:
             content = _validate_input(content, "content")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
-    return _call(
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    return _finalize_tool_result(
+        _call(
         "update_cards",
         card_ids=card_ids,
         status=status,
@@ -705,6 +778,7 @@ def update_cards(
         owner=owner,
         tags=tags,
         doc=doc,
+        )
     )
 
 
@@ -720,7 +794,7 @@ def mark_done(card_ids: list[str]) -> dict:
     Returns:
         dict with ok=True and count.
     """
-    return _call("mark_done", card_ids=card_ids)
+    return _finalize_tool_result(_call("mark_done", card_ids=card_ids))
 
 
 @mcp.tool()
@@ -735,7 +809,7 @@ def mark_started(card_ids: list[str]) -> dict:
     Returns:
         dict with ok=True and count.
     """
-    return _call("mark_started", card_ids=card_ids)
+    return _finalize_tool_result(_call("mark_started", card_ids=card_ids))
 
 
 @mcp.tool()
@@ -750,7 +824,7 @@ def archive_card(card_id: str) -> dict:
     Returns:
         dict with ok=True and card_id.
     """
-    return _call("archive_card", card_id=card_id)
+    return _finalize_tool_result(_call("archive_card", card_id=card_id))
 
 
 @mcp.tool()
@@ -765,7 +839,7 @@ def unarchive_card(card_id: str) -> dict:
     Returns:
         dict with ok=True and card_id.
     """
-    return _call("unarchive_card", card_id=card_id)
+    return _finalize_tool_result(_call("unarchive_card", card_id=card_id))
 
 
 @mcp.tool()
@@ -780,7 +854,7 @@ def delete_card(card_id: str) -> dict:
     Returns:
         dict with ok=True and card_id.
     """
-    return _call("delete_card", card_id=card_id)
+    return _finalize_tool_result(_call("delete_card", card_id=card_id))
 
 
 @mcp.tool()
@@ -824,8 +898,9 @@ def scaffold_feature(
         if description is not None:
             description = _validate_input(description, "description")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
-    return _call(
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    return _finalize_tool_result(
+        _call(
         "scaffold_feature",
         title=title,
         hero_deck=hero_deck,
@@ -838,6 +913,7 @@ def scaffold_feature(
         priority=priority,
         effort=effort,
         allow_duplicate=allow_duplicate,
+        )
     )
 
 
@@ -862,8 +938,8 @@ def create_comment(card_id: str, message: str) -> dict:
     try:
         message = _validate_input(message, "message")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
-    return _call("create_comment", card_id=card_id, message=message)
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    return _finalize_tool_result(_call("create_comment", card_id=card_id, message=message))
 
 
 @mcp.tool()
@@ -883,8 +959,8 @@ def reply_comment(thread_id: str, message: str) -> dict:
     try:
         message = _validate_input(message, "message")
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
-    return _call("reply_comment", thread_id=thread_id, message=message)
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    return _finalize_tool_result(_call("reply_comment", thread_id=thread_id, message=message))
 
 
 @mcp.tool()
@@ -900,7 +976,7 @@ def close_comment(thread_id: str, card_id: str) -> dict:
     Returns:
         dict with ok=True and thread_id.
     """
-    return _call("close_comment", thread_id=thread_id, card_id=card_id)
+    return _finalize_tool_result(_call("close_comment", thread_id=thread_id, card_id=card_id))
 
 
 @mcp.tool()
@@ -916,7 +992,7 @@ def reopen_comment(thread_id: str, card_id: str) -> dict:
     Returns:
         dict with ok=True and thread_id.
     """
-    return _call("reopen_comment", thread_id=thread_id, card_id=card_id)
+    return _finalize_tool_result(_call("reopen_comment", thread_id=thread_id, card_id=card_id))
 
 
 @mcp.tool()
@@ -934,8 +1010,8 @@ def list_conversations(card_id: str) -> dict:
     """
     result = _call("list_conversations", card_id=card_id)
     if isinstance(result, dict) and result.get("ok") is not False:
-        return _sanitize_conversations(result)
-    return result
+        return _finalize_tool_result(_sanitize_conversations(result))
+    return _finalize_tool_result(result)
 
 
 # -------------------------------------------------------------------
@@ -959,9 +1035,9 @@ def get_pm_playbook() -> dict:
     """
     try:
         with open(_PLAYBOOK_PATH, encoding="utf-8") as f:
-            return {"ok": True, "playbook": f.read()}
+            return _finalize_tool_result({"playbook": f.read()})
     except OSError as e:
-        return {"ok": False, "error": f"Cannot read playbook: {e}"}
+        return _finalize_tool_result(_contract_error(f"Cannot read playbook: {e}", "error"))
 
 
 @mcp.tool()
@@ -979,15 +1055,16 @@ def get_workflow_preferences() -> dict:
         with open(_PREFS_PATH, encoding="utf-8") as f:
             data = json.load(f)
         raw_prefs = data.get("observations", [])
-        return {
-            "ok": True,
-            "found": True,
-            "preferences": [_tag_user_text(p) if isinstance(p, str) else p for p in raw_prefs],
-        }
+        return _finalize_tool_result(
+            {
+                "found": True,
+                "preferences": [_tag_user_text(p) if isinstance(p, str) else p for p in raw_prefs],
+            }
+        )
     except FileNotFoundError:
-        return {"ok": True, "found": False, "preferences": []}
+        return _finalize_tool_result({"found": False, "preferences": []})
     except (json.JSONDecodeError, OSError) as e:
-        return {"ok": False, "error": f"Cannot read preferences: {e}"}
+        return _finalize_tool_result(_contract_error(f"Cannot read preferences: {e}", "error"))
 
 
 @mcp.tool()
@@ -1007,7 +1084,7 @@ def save_workflow_preferences(observations: list[str]) -> dict:
     try:
         observations = _validate_preferences(observations)
     except CliError as e:
-        return {"ok": False, "error": str(e), "type": "error"}
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     data = {
         "observations": observations,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1021,9 +1098,9 @@ def save_workflow_preferences(observations: list[str]) -> dict:
         except BaseException:
             os.unlink(tmp_path)
             raise
-        return {"ok": True, "saved": len(observations)}
+        return _finalize_tool_result({"saved": len(observations)})
     except OSError as e:
-        return {"ok": False, "error": f"Cannot save preferences: {e}"}
+        return _finalize_tool_result(_contract_error(f"Cannot save preferences: {e}", "error"))
 
 
 # -------------------------------------------------------------------
