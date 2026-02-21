@@ -9,8 +9,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from codecks_cli import config
+from codecks_cli._utils import (  # noqa: F401 — re-exported for existing consumers
+    _get_field,
+    _parse_date,
+    _parse_iso_timestamp,
+    _parse_multi_value,
+    get_card_tags,
+)
 from codecks_cli.api import _try_call, query, report_request, session_request, warn_if_empty
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
 # Config helpers (.env name mappings)
@@ -58,18 +65,6 @@ def load_users():
 # ---------------------------------------------------------------------------
 
 
-def _get_field(d, snake, camel):
-    """Get a value from a dict trying snake_case then camelCase key."""
-    if snake in d:
-        return d.get(snake)
-    return d.get(camel)
-
-
-def get_card_tags(card):
-    """Get normalized tag list from a card dict (handles API key variants)."""
-    return card.get("tags") or card.get("master_tags") or card.get("masterTags") or []
-
-
 def _filter_cards(result, predicate):
     """Filter result['card'] dict by predicate(key, card). Returns result."""
     result["card"] = {k: v for k, v in result.get("card", {}).items() if predicate(k, v)}
@@ -89,38 +84,6 @@ def list_decks():
     warn_if_empty(result, "deck")
     config._cache["decks"] = result
     return result
-
-
-def _parse_multi_value(raw, valid_set, field_name):
-    """Parse a comma-separated filter string and validate each value.
-    Returns a list of validated values."""
-    values = [v.strip() for v in raw.split(",") if v.strip()]
-    for v in values:
-        if v not in valid_set:
-            raise CliError(
-                f"[ERROR] Invalid {field_name} '{v}'. Valid: {', '.join(sorted(valid_set))}"
-            )
-    return values
-
-
-def _parse_date(date_str):
-    """Parse a YYYY-MM-DD date string into a datetime. Raises CliError on bad format."""
-    try:
-        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except ValueError as e:
-        raise CliError(f"[ERROR] Invalid date '{date_str}'. Use YYYY-MM-DD format.") from e
-
-
-def _parse_iso_timestamp(ts):
-    """Parse an ISO timestamp from the API into a datetime."""
-    if not ts:
-        return None
-    try:
-        # Handle both "2026-01-15T10:30:00Z" and "2026-01-15T10:30:00.000Z"
-        clean = ts.replace("Z", "+00:00")
-        return datetime.fromisoformat(clean)
-    except (ValueError, TypeError):
-        return None
 
 
 def list_cards(
@@ -169,7 +132,7 @@ def list_cards(
     if deck_filter:
         decks_result = list_decks()
         deck_id = None
-        for key, deck in decks_result.get("deck", {}).items():
+        for _key, deck in decks_result.get("deck", {}).items():
             if deck.get("title", "").lower() == deck_filter.lower():
                 deck_id = deck.get("id")
                 break
@@ -298,7 +261,7 @@ def list_cards(
 def get_project_deck_ids(decks_result, project_name):
     """Return set of deck IDs belonging to a project, matched by name."""
     projects = _build_project_map(decks_result)
-    for pid, info in projects.items():
+    for _pid, info in projects.items():
         if info["name"].lower() == project_name.lower():
             return info["deck_ids"]
     return None
@@ -308,8 +271,8 @@ def _build_project_map(decks_result):
     """Build a map of projectId -> {name, deck_ids} from deck data.
     Project names come from CODECKS_PROJECTS in .env (API can't query them)."""
     project_names = load_project_names()
-    project_decks = {}
-    for key, deck in decks_result.get("deck", {}).items():
+    project_decks: dict[str, dict] = {}
+    for _key, deck in decks_result.get("deck", {}).items():
         pid = _get_field(deck, "project_id", "projectId")
         if pid:
             if pid not in project_decks:
@@ -370,8 +333,8 @@ def list_milestones():
     """List milestones. Scans cards for milestone IDs and uses .env names."""
     milestone_names = load_milestone_names()
     result = list_cards()
-    used_ids = {}
-    for key, card in result.get("card", {}).items():
+    used_ids: dict[str, list] = {}
+    for _key, card in result.get("card", {}).items():
         mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
             if mid not in used_ids:
@@ -436,7 +399,7 @@ def enrich_cards(cards_dict, user_data=None):
     """Add deck_name, milestone_name, owner_name to card dicts."""
     decks_result = list_decks()
     deck_names = {}
-    for key, deck in decks_result.get("deck", {}).items():
+    for _key, deck in decks_result.get("deck", {}).items():
         deck_names[deck.get("id")] = deck.get("title", "")
 
     milestone_names = load_milestone_names()
@@ -449,7 +412,7 @@ def enrich_cards(cards_dict, user_data=None):
     if not user_names:
         user_names = load_users()
 
-    for key, card in cards_dict.items():
+    for _key, card in cards_dict.items():
         did = _get_field(card, "deck_id", "deckId")
         if did:
             card["deck_name"] = deck_names.get(did, did)
@@ -478,7 +441,7 @@ def enrich_cards(cards_dict, user_data=None):
 
 def compute_card_stats(cards_dict):
     """Compute summary statistics from card data."""
-    stats = {
+    stats: dict = {
         "total": len(cards_dict),
         "by_status": {},
         "by_priority": {},
@@ -487,7 +450,7 @@ def compute_card_stats(cards_dict):
     }
     total_effort = 0
     effort_count = 0
-    for key, card in cards_dict.items():
+    for _key, card in cards_dict.items():
         status = card.get("status", "unknown")
         stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
 
@@ -746,7 +709,7 @@ def resolve_deck_id(deck_name):
     """Resolve deck name to ID."""
     decks_result = list_decks()
     available = []
-    for key, deck in decks_result.get("deck", {}).items():
+    for _key, deck in decks_result.get("deck", {}).items():
         title = deck.get("title", "")
         if title.lower() == deck_name.lower():
             return deck.get("id")

@@ -4,7 +4,7 @@ Typed models for command payloads and PM feature scaffolding.
 
 from dataclasses import dataclass
 
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 
 
 @dataclass(frozen=True)

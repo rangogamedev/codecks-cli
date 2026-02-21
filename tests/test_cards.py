@@ -21,7 +21,7 @@ from codecks_cli.cards import (
     resolve_deck_id,
     resolve_milestone_id,
 )
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
 # _load_env_mapping / load_project_names / load_milestone_names

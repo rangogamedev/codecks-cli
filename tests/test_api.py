@@ -22,7 +22,7 @@ from codecks_cli.api import (
     session_request,
     warn_if_empty,
 )
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 
 
 class TestMaskToken:

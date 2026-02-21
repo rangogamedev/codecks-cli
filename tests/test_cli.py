@@ -10,7 +10,7 @@ from codecks_cli.cli import (
     _extract_global_flags,
     build_parser,
 )
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
 # _extract_global_flags
@@ -297,6 +297,14 @@ class TestBuildParser:
         assert ns1.command == "archive"
         assert ns2.command == "remove"
         assert ns1.card_id == ns2.card_id == "card-1"
+
+    def test_every_subparser_has_func_default(self):
+        """Every subparser must set a func default for dispatch."""
+        for action in self.parser._subparsers._actions:
+            if hasattr(action, "_name_parser_map"):
+                for name, subparser in action._name_parser_map.items():
+                    defaults = subparser._defaults
+                    assert "func" in defaults, f"Subparser '{name}' missing func default"
 
 
 class TestCliErrorOutput:

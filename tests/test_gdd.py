@@ -5,7 +5,7 @@ from unittest.mock import mock_open, patch
 import pytest
 
 from codecks_cli import config
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 from codecks_cli.gdd import (
     _extract_google_doc_id,
     _fuzzy_match,

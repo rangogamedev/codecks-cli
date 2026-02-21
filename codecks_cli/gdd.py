@@ -3,6 +3,8 @@ Google Docs integration for codecks-cli.
 OAuth2 flow, GDD fetch/parse, and sync to Codecks cards.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import http.server
@@ -20,7 +22,7 @@ import webbrowser
 
 from codecks_cli import config
 from codecks_cli.cards import create_card, list_cards, list_decks, update_card
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 
 # ---------------------------------------------------------------------------
 # Google OAuth2 helpers (for private Google Doc access)
@@ -200,8 +202,8 @@ def _run_google_auth_flow():
     sock.close()
 
     redirect_uri = f"http://127.0.0.1:{port}"
-    auth_code = [None]  # mutable container for closure
-    server_error = [None]
+    auth_code: list[str | None] = [None]  # mutable container for closure
+    server_error: list[str | None] = [None]
 
     # CSRF protection (RFC 6749 §10.12)
     oauth_state = secrets.token_urlsafe(32)
@@ -425,7 +427,7 @@ def parse_gdd(content):
     """
     sections = []
     current_section = None
-    current_task = None
+    current_task: dict | None = None
     # Match [P:a], [E:5], or combined [P:a E:5]
     tag_re = re.compile(r"\[P:([abc])\]", re.IGNORECASE)
     effort_re = re.compile(r"\[E:(\d+)\]", re.IGNORECASE)
@@ -536,7 +538,7 @@ def sync_gdd(sections, project_name, target_section=None, apply=False, quiet=Fal
     # Resolve deck names -> IDs for placement
     decks_result = list_decks()
     deck_name_to_id = {}
-    for key, deck in decks_result.get("deck", {}).items():
+    for _key, deck in decks_result.get("deck", {}).items():
         deck_name_to_id[deck.get("title", "").lower()] = deck.get("id")
 
     report = {

@@ -340,9 +340,7 @@ class TestFormatProjectsTable:
 
 class TestFormatMilestonesTable:
     def test_formats_milestones(self):
-        result = format_milestones_table(
-            [{"id": "m1", "name": "MVP", "card_count": 5}]
-        )
+        result = format_milestones_table([{"id": "m1", "name": "MVP", "card_count": 5}])
         assert "MVP" in result
         assert "m1" in result
         assert "Cards (5)" in result

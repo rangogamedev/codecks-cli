@@ -152,21 +152,11 @@ GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 # Runtime cache (populated lazily by query helpers)
 # ---------------------------------------------------------------------------
 
-_cache = {}
+_cache: dict[str, object] = {}
 RUNTIME_STRICT = False
 
 # ---------------------------------------------------------------------------
-# Custom exceptions (defined here to avoid circular imports)
+# Re-export exceptions for backward compatibility
 # ---------------------------------------------------------------------------
 
-
-class CliError(Exception):
-    """Exit code 1 — validation, not-found, network, parse errors."""
-
-    exit_code = 1
-
-
-class SetupError(CliError):
-    """Exit code 2 — token expired, no config."""
-
-    exit_code = 2
+from codecks_cli.exceptions import CliError, SetupError  # noqa: E402, F401

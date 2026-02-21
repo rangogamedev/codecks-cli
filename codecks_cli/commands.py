@@ -11,7 +11,7 @@ import sys
 from codecks_cli import config
 from codecks_cli.api import _mask_token, _safe_json_parse, dispatch, generate_report_token, query
 from codecks_cli.client import CodecksClient, _normalize_dispatch_path
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 from codecks_cli.formatters import (
     format_account_table,
     format_activity_table,
@@ -200,7 +200,9 @@ def cmd_update(ns):
             fmt=fmt,
         )
     else:
-        mutation_response("Updated", ns.card_ids[0], ", ".join(detail_parts), result.get("data"), fmt)
+        mutation_response(
+            "Updated", ns.card_ids[0], ", ".join(detail_parts), result.get("data"), fmt
+        )
 
 
 def cmd_archive(ns):

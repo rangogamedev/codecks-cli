@@ -13,7 +13,7 @@ import urllib.request
 import uuid
 
 from codecks_cli import config
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, HTTPError, SetupError
 
 _RETRYABLE_HTTP_CODES = frozenset({429, 502, 503, 504})
 
@@ -33,7 +33,7 @@ def _safe_json_parse(text, context="input"):
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise CliError(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}")
+        raise CliError(f"[ERROR] Invalid JSON in {context}: {e.msg} at position {e.pos}") from None
 
 
 def _sanitize_error(body, max_len=500):
@@ -58,16 +58,6 @@ def _try_call(fn, *args, **kwargs):
 # ---------------------------------------------------------------------------
 # HTTP request layer
 # ---------------------------------------------------------------------------
-
-
-class HTTPError(Exception):
-    """Raised by _http_request for HTTP errors that callers want to handle."""
-
-    def __init__(self, code, reason, body, headers=None):
-        self.code = code
-        self.reason = reason
-        self.body = body
-        self.headers = headers or {}
 
 
 def _sanitize_url_for_log(url):
@@ -206,8 +196,10 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                             f"[ERROR] Unexpected Content-Type from server "
                             f"({content_type}). This may be a proxy or "
                             "network issue."
-                        )
-                    raise CliError("[ERROR] Unexpected response from Codecks API (not valid JSON).")
+                        ) from None
+                    raise CliError(
+                        "[ERROR] Unexpected response from Codecks API (not valid JSON)."
+                    ) from None
         except urllib.error.HTTPError as e:
             error_body = (
                 e.read(config.HTTP_MAX_RESPONSE_BYTES).decode("utf-8", errors="replace")
@@ -234,8 +226,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     retry_after = config.HTTP_RETRY_BASE_SECONDS * (2**attempt)
                 time.sleep(retry_after)
                 continue
-            raise HTTPError(e.code, e.reason, error_body, headers=e.headers)
-        except TimeoutError:
+            raise HTTPError(e.code, e.reason, error_body, headers=e.headers) from e
+        except TimeoutError as e:
             last_timeout = True
             if sampled:
                 _log_http_event(
@@ -256,7 +248,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     request_id=request_id,
                     retryable=False,
                 )
-            )
+            ) from e
         except urllib.error.URLError as e:
             last_url_error = e.reason
             if sampled:
@@ -278,7 +270,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     request_id=request_id,
                     retryable=False,
                 )
-            )
+            ) from e
 
     if last_timeout:
         raise CliError(
@@ -319,12 +311,12 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 "Please provide a fresh 'at' cookie from browser DevTools "
                 "(Brave > F12 > Network > api.codecks.io request > "
                 "Cookie header > at=...)."
-            )
+            ) from e
         if e.code == 429:
             raise CliError(
                 "[ERROR] Rate limit reached (Codecks allows ~40 req/5s). "
                 "Wait a few seconds and retry."
-            )
+            ) from e
         server_req_id = e.headers.get("X-Request-Id") if e.headers else None
         raise CliError(
             _error_envelope(
@@ -334,7 +326,7 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 retryable=e.code in _RETRYABLE_HTTP_CODES,
                 detail=_sanitize_error(e.body),
             )
-        )
+        ) from e
 
 
 def report_request(content, severity=None, email=None):
@@ -363,7 +355,7 @@ def report_request(content, severity=None, email=None):
             raise CliError(
                 "[ERROR] Report token is invalid or disabled. "
                 "Generate a new one: py codecks_api.py generate-token"
-            )
+            ) from e
         server_req_id = e.headers.get("X-Request-Id") if e.headers else None
         raise CliError(
             _error_envelope(
@@ -373,7 +365,7 @@ def report_request(content, severity=None, email=None):
                 retryable=e.code in _RETRYABLE_HTTP_CODES,
                 detail=_sanitize_error(e.body),
             )
-        )
+        ) from e
 
 
 def generate_report_token(label="claude-code"):
@@ -399,7 +391,7 @@ def generate_report_token(label="claude-code"):
                 retryable=e.code in _RETRYABLE_HTTP_CODES,
                 detail=_sanitize_error(e.body),
             )
-        )
+        ) from e
     if result.get("ok") and result.get("token"):
         config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
         return result

@@ -13,7 +13,7 @@ from codecks_cli.client import (
     _sort_cards,
     _to_legacy_format,
 )
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 
 # ---------------------------------------------------------------------------
 # Helpers

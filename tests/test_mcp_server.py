@@ -10,7 +10,7 @@ mcp_mod = pytest.importorskip("codecks_cli.mcp_server", reason="mcp package not 
 
 from unittest.mock import MagicMock, patch  # noqa: E402
 
-from codecks_cli.config import CliError, SetupError  # noqa: E402
+from codecks_cli.exceptions import CliError, SetupError  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -302,9 +302,7 @@ class TestPagination:
     def test_pagination_preserves_stats(self, MockClient):
         """Stats are passed through from the client response."""
         stats = {"by_status": {"started": 3}}
-        MockClient.return_value = _mock_client(
-            list_cards={"cards": [{"id": "c1"}], "stats": stats}
-        )
+        MockClient.return_value = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": stats})
         result = mcp_mod.list_cards(include_stats=True)
         assert result["stats"] == stats
 

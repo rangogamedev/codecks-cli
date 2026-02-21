@@ -22,7 +22,7 @@ from codecks_cli.commands import (
     cmd_standup,
     cmd_update,
 )
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 
 
 def _ns(**kwargs):

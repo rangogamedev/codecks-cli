@@ -38,7 +38,7 @@ from codecks_cli.commands import (
     cmd_unhand,
     cmd_update,
 )
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 from codecks_cli.setup_wizard import cmd_setup
 
 HELP_TEXT = """\
@@ -218,17 +218,18 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", parser_class=_SubcommandParser)
 
     # --- setup ---
-    sub.add_parser("setup")
+    sub.add_parser("setup").set_defaults(func=None)
 
     # --- query ---
     p = sub.add_parser("query")
     p.add_argument("json_query")
+    p.set_defaults(func=cmd_query)
 
     # --- account / decks / projects / milestones ---
-    sub.add_parser("account")
-    sub.add_parser("decks")
-    sub.add_parser("projects")
-    sub.add_parser("milestones")
+    sub.add_parser("account").set_defaults(func=cmd_account)
+    sub.add_parser("decks").set_defaults(func=cmd_decks)
+    sub.add_parser("projects").set_defaults(func=cmd_projects)
+    sub.add_parser("milestones").set_defaults(func=cmd_milestones)
 
     # --- cards ---
     p = sub.add_parser("cards")
@@ -249,10 +250,12 @@ def build_parser():
     p.add_argument("--stats", action="store_true")
     p.add_argument("--hand", action="store_true")
     p.add_argument("--archived", action="store_true")
+    p.set_defaults(func=cmd_cards)
 
     # --- card ---
     p = sub.add_parser("card")
     p.add_argument("card_id")
+    p.set_defaults(func=cmd_card)
 
     # --- create ---
     p = sub.add_parser("create")
@@ -263,6 +266,7 @@ def build_parser():
     p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
+    p.set_defaults(func=cmd_create)
 
     # --- update ---
     p = sub.add_parser("update")
@@ -278,6 +282,7 @@ def build_parser():
     p.add_argument("--owner")
     p.add_argument("--tag")
     p.add_argument("--doc")
+    p.set_defaults(func=cmd_update)
 
     # --- feature ---
     p = sub.add_parser("feature")
@@ -292,38 +297,47 @@ def build_parser():
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--effort", type=_positive_int)
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
+    p.set_defaults(func=cmd_feature)
 
     # --- archive / remove ---
     for name in ("archive", "remove"):
         p = sub.add_parser(name)
         p.add_argument("card_id")
+        p.set_defaults(func=cmd_archive)
 
     # --- unarchive ---
     p = sub.add_parser("unarchive")
     p.add_argument("card_id")
+    p.set_defaults(func=cmd_unarchive)
 
     # --- delete ---
     p = sub.add_parser("delete")
     p.add_argument("card_id")
     p.add_argument("--confirm", action="store_true")
+    p.set_defaults(func=cmd_delete)
 
     # --- done / start ---
     p = sub.add_parser("done")
     p.add_argument("card_ids", nargs="+")
+    p.set_defaults(func=cmd_done)
     p = sub.add_parser("start")
     p.add_argument("card_ids", nargs="+")
+    p.set_defaults(func=cmd_start)
 
     # --- hand ---
     p = sub.add_parser("hand")
     p.add_argument("card_ids", nargs="*")
+    p.set_defaults(func=cmd_hand)
 
     # --- unhand ---
     p = sub.add_parser("unhand")
     p.add_argument("card_ids", nargs="+")
+    p.set_defaults(func=cmd_unhand)
 
     # --- activity ---
     p = sub.add_parser("activity")
     p.add_argument("--limit", type=_positive_int, default=20)
+    p.set_defaults(func=cmd_activity)
 
     # --- pm-focus ---
     p = sub.add_parser("pm-focus")
@@ -331,12 +345,14 @@ def build_parser():
     p.add_argument("--owner")
     p.add_argument("--limit", type=_positive_int, default=5)
     p.add_argument("--stale-days", type=_positive_int, default=14, dest="stale_days")
+    p.set_defaults(func=cmd_pm_focus)
 
     # --- standup ---
     p = sub.add_parser("standup")
     p.add_argument("--days", type=_positive_int, default=2)
     p.add_argument("--project")
     p.add_argument("--owner")
+    p.set_defaults(func=cmd_standup)
 
     # --- comment ---
     p = sub.add_parser("comment")
@@ -346,16 +362,19 @@ def build_parser():
     mode.add_argument("--thread")
     mode.add_argument("--close")
     mode.add_argument("--reopen")
+    p.set_defaults(func=cmd_comment)
 
     # --- conversations ---
     p = sub.add_parser("conversations")
     p.add_argument("card_id")
+    p.set_defaults(func=cmd_conversations)
 
     # --- gdd ---
     p = sub.add_parser("gdd")
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--file")
     p.add_argument("--save-cache", action="store_true", dest="save_cache")
+    p.set_defaults(func=cmd_gdd)
 
     # --- gdd-sync ---
     p = sub.add_parser("gdd-sync")
@@ -366,22 +385,25 @@ def build_parser():
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--file")
     p.add_argument("--save-cache", action="store_true", dest="save_cache")
+    p.set_defaults(func=cmd_gdd_sync)
 
     # --- gdd-auth / gdd-revoke ---
-    sub.add_parser("gdd-auth")
-    sub.add_parser("gdd-revoke")
+    sub.add_parser("gdd-auth").set_defaults(func=cmd_gdd_auth)
+    sub.add_parser("gdd-revoke").set_defaults(func=cmd_gdd_revoke)
 
     # --- generate-token ---
     p = sub.add_parser("generate-token")
     p.add_argument("--label", default="claude-code")
+    p.set_defaults(func=cmd_generate_token)
 
     # --- dispatch ---
     p = sub.add_parser("dispatch")
     p.add_argument("path")
     p.add_argument("json_data")
+    p.set_defaults(func=cmd_dispatch)
 
     # --- version (bare word) ---
-    sub.add_parser("version")
+    sub.add_parser("version").set_defaults(func=None)
 
     return parser
 
@@ -391,38 +413,6 @@ def build_parser():
 # ---------------------------------------------------------------------------
 
 NO_TOKEN_COMMANDS = {"setup", "gdd-auth", "gdd-revoke", "generate-token", "version"}
-
-DISPATCH = {
-    "query": cmd_query,
-    "account": cmd_account,
-    "decks": cmd_decks,
-    "projects": cmd_projects,
-    "milestones": cmd_milestones,
-    "cards": cmd_cards,
-    "card": cmd_card,
-    "create": cmd_create,
-    "update": cmd_update,
-    "feature": cmd_feature,
-    "archive": cmd_archive,
-    "remove": cmd_archive,
-    "unarchive": cmd_unarchive,
-    "delete": cmd_delete,
-    "done": cmd_done,
-    "start": cmd_start,
-    "hand": cmd_hand,
-    "unhand": cmd_unhand,
-    "activity": cmd_activity,
-    "pm-focus": cmd_pm_focus,
-    "standup": cmd_standup,
-    "comment": cmd_comment,
-    "conversations": cmd_conversations,
-    "gdd": cmd_gdd,
-    "gdd-sync": cmd_gdd_sync,
-    "gdd-auth": cmd_gdd_auth,
-    "gdd-revoke": cmd_gdd_revoke,
-    "generate-token": cmd_generate_token,
-    "dispatch": cmd_dispatch,
-}
 
 
 def _error_type_from_message(message):
@@ -495,7 +485,7 @@ def main():
         if cmd not in NO_TOKEN_COMMANDS:
             _check_token()
 
-        handler = DISPATCH.get(cmd)
+        handler = getattr(ns, "func", None)
         if handler:
             handler(ns)
         else:

@@ -3,11 +3,10 @@ Interactive setup wizard for codecks-cli.
 Guides users through configuration of tokens, projects, and milestones.
 """
 
-
 from codecks_cli import config
+from codecks_cli._utils import _get_field
 from codecks_cli.api import _mask_token, _try_call, generate_report_token, query
 from codecks_cli.cards import (
-    _get_field,
     get_account,
     list_cards,
     list_decks,
@@ -29,7 +28,7 @@ def _setup_discover_projects():
         return
 
     project_decks = {}
-    for key, deck in decks_result.get("deck", {}).items():
+    for _key, deck in decks_result.get("deck", {}).items():
         pid = _get_field(deck, "project_id", "projectId")
         if pid:
             if pid not in project_decks:
@@ -77,7 +76,7 @@ def _setup_discover_milestones():
 
     # Group cards by milestone
     milestone_cards = {}
-    for key, card in cards_result.get("card", {}).items():
+    for _key, card in cards_result.get("card", {}).items():
         mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
             if mid not in milestone_cards:

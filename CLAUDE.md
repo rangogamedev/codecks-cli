@@ -6,9 +6,9 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (433 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (446 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
@@ -17,20 +17,23 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 | Module | Purpose |
 |--------|---------|
 | `codecks_api.py` | Backward-compat wrapper → `cli:main()` (project root) |
-| `__init__.py` | Exports `CodecksClient`, `CliError`, `SetupError`, `VERSION` |
-| `config.py` | Env, tokens, constants, `CliError`/`SetupError` exceptions |
+| `__init__.py` | Exports `CodecksClient`, `CliError`, `SetupError`, `VERSION`, TypedDict types |
+| `exceptions.py` | All custom exceptions: `CliError`, `SetupError`, `HTTPError` |
+| `config.py` | Env, tokens, constants (re-exports exceptions for backward compat) |
+| `_utils.py` | Pure utility helpers: `_get_field()`, `get_card_tags()`, date/multi-value parsers |
+| `types.py` | TypedDict response definitions (`CardRow`, `CardDetail`, `MutationResult`, etc.) |
 | `api.py` | HTTP layer: `query()`, `dispatch()`, token validation |
-| `cards.py` | Card CRUD, hand, conversations, enrichment, `_get_field()` |
+| `cards.py` | Card CRUD, hand, conversations, enrichment (re-exports `_utils` helpers) |
 | `client.py` | **`CodecksClient` class** — public API (27 keyword-only methods returning flat dicts) |
 | `commands.py` | Thin CLI `cmd_*()` wrappers: argparse → `CodecksClient` → formatters |
-| `formatters.py` | JSON/table/CSV output dispatch |
+| `formatters/` | JSON/table/CSV output dispatch (7 sub-modules, re-exports via `__init__`) |
 | `mcp_server.py` | MCP server: wraps `CodecksClient` as 25 MCP tools (stdio) |
 | `models.py` | `ObjectPayload`, `FeatureSpec` dataclasses |
 | `gdd.py` | Google OAuth2, GDD fetch/parse/sync |
 | `setup_wizard.py` | Interactive `.env` bootstrap |
-| `cli.py` | Entry point: argparse, `build_parser()`, `main()` dispatch |
+| `cli.py` | Entry point: argparse, `build_parser()`, `main()` dispatch via `set_defaults(func=...)` |
 
-All imports are absolute (`from codecks_cli.config import ...`). No circular deps.
+All imports are absolute (`from codecks_cli.exceptions import ...`). No circular deps.
 
 ## Programmatic API
 ```python
@@ -64,7 +67,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- Test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`
+- Test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)

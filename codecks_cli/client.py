@@ -5,11 +5,18 @@ Single entry point for programmatic use and future MCP server integration.
 All methods return flat dicts suitable for JSON serialization.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
+# TypedDict return types live in codecks_cli.types for documentation.
+# Method signatures use plain dict[str, Any] for mypy compatibility.
+from typing import Any
+
 from codecks_cli import config
+from codecks_cli._utils import _get_field, _parse_iso_timestamp
 from codecks_cli.api import (
     _check_token,
     _safe_json_parse,
@@ -17,8 +24,6 @@ from codecks_cli.api import (
     query,
 )
 from codecks_cli.cards import (
-    _get_field,
-    _parse_iso_timestamp,
     add_to_hand,
     archive_card,
     bulk_status,
@@ -49,7 +54,7 @@ from codecks_cli.cards import (
     unarchive_card,
     update_card,
 )
-from codecks_cli.config import CliError, SetupError
+from codecks_cli.exceptions import CliError, SetupError
 from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard
 
 # ---------------------------------------------------------------------------
@@ -248,35 +253,35 @@ class CodecksClient:
     # Read commands
     # -------------------------------------------------------------------
 
-    def get_account(self):
+    def get_account(self) -> dict[str, Any]:
         """Get current account info for the authenticated user.
 
         Returns:
             dict with keys: name, id, email, organizationId, role.
         """
-        return get_account()
+        return get_account()  # type: ignore[no-any-return]
 
     def list_cards(
         self,
         *,
-        deck=None,
-        status=None,
-        project=None,
-        search=None,
-        milestone=None,
-        tag=None,
-        owner=None,
-        priority=None,
-        sort=None,
-        card_type=None,
-        hero=None,
-        hand_only=False,
-        stale_days=None,
-        updated_after=None,
-        updated_before=None,
-        archived=False,
-        include_stats=False,
-    ):
+        deck: str | None = None,
+        status: str | None = None,
+        project: str | None = None,
+        search: str | None = None,
+        milestone: str | None = None,
+        tag: str | None = None,
+        owner: str | None = None,
+        priority: str | None = None,
+        sort: str | None = None,
+        card_type: str | None = None,
+        hero: str | None = None,
+        hand_only: bool = False,
+        stale_days: int | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        archived: bool = False,
+        include_stats: bool = False,
+    ) -> dict[str, Any]:
         """List cards with optional filters.
 
         Args:
@@ -380,7 +385,7 @@ class CodecksClient:
 
         return {"cards": _flatten_cards(result.get("card", {})), "stats": None}
 
-    def get_card(self, card_id):
+    def get_card(self, card_id: str) -> dict[str, Any]:
         """Get full details for a single card.
 
         Args:
@@ -476,7 +481,7 @@ class CodecksClient:
 
         return detail
 
-    def list_decks(self):
+    def list_decks(self) -> list[dict[str, Any]]:
         """List all decks with card counts.
 
         Returns:
@@ -484,7 +489,7 @@ class CodecksClient:
         """
         decks_result = list_decks()
         cards_result = list_cards()
-        deck_counts = {}
+        deck_counts: dict[str, int] = {}
         for card in cards_result.get("card", {}).values():
             did = _get_field(card, "deck_id", "deckId")
             if did:
@@ -505,7 +510,7 @@ class CodecksClient:
             )
         return result
 
-    def list_projects(self):
+    def list_projects(self) -> list[dict[str, Any]]:
         """List all projects.
 
         Returns:
@@ -524,7 +529,7 @@ class CodecksClient:
             )
         return result
 
-    def list_milestones(self):
+    def list_milestones(self) -> list[dict[str, Any]]:
         """List all milestones.
 
         Returns:
@@ -542,7 +547,7 @@ class CodecksClient:
             )
         return result
 
-    def list_activity(self, *, limit=20):
+    def list_activity(self, *, limit: int = 20) -> dict[str, Any]:
         """Show recent activity feed for the account.
 
         Args:
@@ -555,9 +560,16 @@ class CodecksClient:
         """
         if limit <= 0:
             raise CliError("[ERROR] --limit must be a positive integer.")
-        return list_activity(limit)
+        return list_activity(limit)  # type: ignore[no-any-return]
 
-    def pm_focus(self, *, project=None, owner=None, limit=5, stale_days=14):
+    def pm_focus(
+        self,
+        *,
+        project: str | None = None,
+        owner: str | None = None,
+        limit: int = 5,
+        stale_days: int = 14,
+    ) -> dict[str, Any]:
         """Generate PM focus dashboard data.
 
         Args:
@@ -633,7 +645,9 @@ class CodecksClient:
             },
         }
 
-    def standup(self, *, days=2, project=None, owner=None):
+    def standup(
+        self, *, days: int = 2, project: str | None = None, owner: str | None = None
+    ) -> dict[str, Any]:
         """Generate daily standup summary.
 
         Args:
@@ -685,7 +699,7 @@ class CodecksClient:
     # Hand commands
     # -------------------------------------------------------------------
 
-    def list_hand(self):
+    def list_hand(self) -> list[dict[str, Any]]:
         """List cards in the user's hand.
 
         Returns:
@@ -707,9 +721,9 @@ class CodecksClient:
             if cid:
                 sort_map[cid] = entry.get("sortIndex", 0) or 0
         sorted_cards = dict(sorted(enriched.items(), key=lambda item: sort_map.get(item[0], 0)))
-        return _flatten_cards(sorted_cards)
+        return _flatten_cards(sorted_cards)  # type: ignore[no-any-return]
 
-    def add_to_hand(self, card_ids):
+    def add_to_hand(self, card_ids: list[str]) -> dict[str, Any]:
         """Add cards to the user's hand (personal work queue).
 
         Args:
@@ -721,7 +735,7 @@ class CodecksClient:
         result = add_to_hand(card_ids)
         return {"ok": True, "added": len(card_ids), "data": result}
 
-    def remove_from_hand(self, card_ids):
+    def remove_from_hand(self, card_ids: list[str]) -> dict[str, Any]:
         """Remove cards from the user's hand (personal work queue).
 
         Args:
@@ -739,15 +753,15 @@ class CodecksClient:
 
     def create_card(
         self,
-        title,
+        title: str,
         *,
-        content=None,
-        deck=None,
-        project=None,
-        severity=None,
-        doc=False,
-        allow_duplicate=False,
-    ):
+        content: str | None = None,
+        deck: str | None = None,
+        project: str | None = None,
+        severity: str | None = None,
+        doc: bool = False,
+        allow_duplicate: bool = False,
+    ) -> dict[str, Any]:
         """Create a new card.
 
         Args:
@@ -805,20 +819,20 @@ class CodecksClient:
 
     def update_cards(
         self,
-        card_ids,
+        card_ids: list[str],
         *,
-        status=None,
-        priority=None,
-        effort=None,
-        deck=None,
-        title=None,
-        content=None,
-        milestone=None,
-        hero=None,
-        owner=None,
-        tags=None,
-        doc=None,
-    ):
+        status: str | None = None,
+        priority: str | None = None,
+        effort: str | int | None = None,
+        deck: str | None = None,
+        title: str | None = None,
+        content: str | None = None,
+        milestone: str | None = None,
+        hero: str | None = None,
+        owner: str | None = None,
+        tags: str | None = None,
+        doc: str | None = None,
+    ) -> dict[str, Any]:
         """Update one or more cards.
 
         Args:
@@ -838,7 +852,7 @@ class CodecksClient:
         Returns:
             dict with ok=True, updated count, and fields changed.
         """
-        update_kwargs = {}
+        update_kwargs: dict[str, Any] = {}
 
         if status is not None:
             update_kwargs["status"] = status
@@ -930,7 +944,7 @@ class CodecksClient:
             "data": last_result,
         }
 
-    def mark_done(self, card_ids):
+    def mark_done(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as done.
 
         Args:
@@ -942,7 +956,7 @@ class CodecksClient:
         result = bulk_status(card_ids, "done")
         return {"ok": True, "count": len(card_ids), "data": result}
 
-    def mark_started(self, card_ids):
+    def mark_started(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as started.
 
         Args:
@@ -954,7 +968,7 @@ class CodecksClient:
         result = bulk_status(card_ids, "started")
         return {"ok": True, "count": len(card_ids), "data": result}
 
-    def archive_card(self, card_id):
+    def archive_card(self, card_id: str) -> dict[str, Any]:
         """Archive a card (reversible).
 
         Args:
@@ -966,7 +980,7 @@ class CodecksClient:
         result = archive_card(card_id)
         return {"ok": True, "card_id": card_id, "data": result}
 
-    def unarchive_card(self, card_id):
+    def unarchive_card(self, card_id: str) -> dict[str, Any]:
         """Restore an archived card.
 
         Args:
@@ -978,7 +992,7 @@ class CodecksClient:
         result = unarchive_card(card_id)
         return {"ok": True, "card_id": card_id, "data": result}
 
-    def delete_card(self, card_id):
+    def delete_card(self, card_id: str) -> dict[str, Any]:
         """Permanently delete a card.
 
         Args:
@@ -992,19 +1006,19 @@ class CodecksClient:
 
     def scaffold_feature(
         self,
-        title,
+        title: str,
         *,
-        hero_deck,
-        code_deck,
-        design_deck,
-        art_deck=None,
-        skip_art=False,
-        description=None,
-        owner=None,
-        priority=None,
-        effort=None,
-        allow_duplicate=False,
-    ):
+        hero_deck: str,
+        code_deck: str,
+        design_deck: str,
+        art_deck: str | None = None,
+        skip_art: bool = False,
+        description: str | None = None,
+        owner: str | None = None,
+        priority: str | None = None,
+        effort: int | None = None,
+        allow_duplicate: bool = False,
+    ) -> dict[str, Any]:
         """Scaffold a Hero feature with lane sub-cards.
 
         Creates a Hero card plus Code, Design, and optionally Art sub-cards.
@@ -1069,8 +1083,8 @@ class CodecksClient:
             "- [] Integration verified\n\n"
             "Tags: #hero #feature"
         )
-        created = []
-        created_ids = []
+        created: list[FeatureSubcard] = []
+        created_ids: list[str] = []
 
         def _rollback_created_ids():
             rolled_back = []
@@ -1183,13 +1197,13 @@ class CodecksClient:
             art_deck=None if spec.skip_art else spec.art_deck,
             notes=notes or None,
         )
-        return report.to_dict()
+        return report.to_dict()  # type: ignore[no-any-return]
 
     # -------------------------------------------------------------------
     # Comment commands
     # -------------------------------------------------------------------
 
-    def create_comment(self, card_id, message):
+    def create_comment(self, card_id: str, message: str) -> dict[str, Any]:
         """Start a new comment thread on a card.
 
         Args:
@@ -1204,7 +1218,7 @@ class CodecksClient:
         result = create_comment(card_id, message)
         return {"ok": True, "card_id": card_id, "data": result}
 
-    def reply_comment(self, thread_id, message):
+    def reply_comment(self, thread_id: str, message: str) -> dict[str, Any]:
         """Reply to an existing comment thread.
 
         Args:
@@ -1219,7 +1233,7 @@ class CodecksClient:
         result = reply_comment(thread_id, message)
         return {"ok": True, "thread_id": thread_id, "data": result}
 
-    def close_comment(self, thread_id, card_id):
+    def close_comment(self, thread_id: str, card_id: str) -> dict[str, Any]:
         """Close a comment thread.
 
         Args:
@@ -1232,7 +1246,7 @@ class CodecksClient:
         result = close_comment(thread_id, card_id)
         return {"ok": True, "thread_id": thread_id, "data": result}
 
-    def reopen_comment(self, thread_id, card_id):
+    def reopen_comment(self, thread_id: str, card_id: str) -> dict[str, Any]:
         """Reopen a closed comment thread.
 
         Args:
@@ -1245,7 +1259,7 @@ class CodecksClient:
         result = reopen_comment(thread_id, card_id)
         return {"ok": True, "thread_id": thread_id, "data": result}
 
-    def list_conversations(self, card_id):
+    def list_conversations(self, card_id: str) -> dict[str, Any]:
         """List all comment threads on a card.
 
         Args:
@@ -1256,13 +1270,13 @@ class CodecksClient:
             entries), 'resolvableEntry' (messages with author, content,
             createdAt), and 'user' (referenced users).
         """
-        return get_conversations(card_id)
+        return get_conversations(card_id)  # type: ignore[no-any-return]
 
     # -------------------------------------------------------------------
     # Raw API commands
     # -------------------------------------------------------------------
 
-    def raw_query(self, query_json):
+    def raw_query(self, query_json: dict | str) -> dict[str, Any]:
         """Execute a raw query against the Codecks API.
 
         Args:
@@ -1283,9 +1297,9 @@ class CodecksClient:
                 raise CliError(
                     "[ERROR] Strict mode: query payload must include non-empty '_root' array."
                 )
-        return query(q)
+        return query(q)  # type: ignore[no-any-return]
 
-    def raw_dispatch(self, path, data):
+    def raw_dispatch(self, path: str, data: dict | str) -> dict[str, Any]:
         """Execute a raw dispatch call against the Codecks API.
 
         Args:
@@ -1312,4 +1326,4 @@ class CodecksClient:
                 )
             if not payload:
                 raise CliError("[ERROR] Strict mode: dispatch payload cannot be empty.")
-        return dispatch(normalized, payload)
+        return dispatch(normalized, payload)  # type: ignore[no-any-return]

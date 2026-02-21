@@ -5,6 +5,9 @@
 .gdd_tokens.json
 __pycache__/
 *.pyc
+build/
+dist/
+*.egg-info/
 .claude/
 .pytest_cache/
 .tmp/

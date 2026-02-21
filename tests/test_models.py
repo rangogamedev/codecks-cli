@@ -4,7 +4,7 @@ import argparse
 
 import pytest
 
-from codecks_cli.config import CliError
+from codecks_cli.exceptions import CliError
 from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard, ObjectPayload
 
 

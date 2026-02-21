@@ -72,9 +72,7 @@ def list_cards(
     tag: str | None = None,
     owner: str | None = None,
     priority: str | None = None,
-    sort: Literal[
-        "status", "priority", "effort", "deck", "title", "owner", "updated", "created"
-    ]
+    sort: Literal["status", "priority", "effort", "deck", "title", "owner", "updated", "created"]
     | None = None,
     card_type: Literal["hero", "doc"] | None = None,
     hero: str | None = None,
