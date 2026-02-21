@@ -167,7 +167,6 @@ class TestUpdateTitleBug:
             "ok": True,
             "updated": 1,
             "fields": {"content": "New Title\nBody"},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -204,7 +203,6 @@ class TestUpdateClearValues:
             "ok": True,
             "updated": 1,
             "fields": {"priority": None},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -231,7 +229,6 @@ class TestUpdateClearValues:
             "ok": True,
             "updated": 1,
             "fields": {"milestoneId": None},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -258,7 +255,6 @@ class TestUpdateClearValues:
             "ok": True,
             "updated": 1,
             "fields": {"assigneeId": None},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -285,7 +281,6 @@ class TestUpdateClearValues:
             "ok": True,
             "updated": 1,
             "fields": {"masterTags": []},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -312,7 +307,6 @@ class TestUpdateClearValues:
             "ok": True,
             "updated": 1,
             "fields": {"effort": None},
-            "data": {},
         }
         ns = argparse.Namespace(
             card_ids=["c1"],

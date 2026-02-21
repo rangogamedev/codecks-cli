@@ -15,11 +15,25 @@ from codecks_cli import CliError, CodecksClient, SetupError
 mcp = FastMCP(
     "codecks",
     instructions=(
-        "Codecks project management tools. "
-        "Use list_cards with filters to find cards, get_card for full details. "
-        "All card IDs must be full 36-character UUIDs. "
-        "Doc cards cannot have status, priority, or effort. "
-        "Rate limit: 40 requests per 5 seconds."
+        "Codecks project management tools.\n"
+        "Use list_cards with filters to find cards, get_card for full details.\n"
+        "All card IDs must be full 36-character UUIDs.\n"
+        "Doc cards cannot have status, priority, or effort.\n"
+        "Rate limit: 40 requests per 5 seconds.\n"
+        "\n"
+        "Token efficiency tips:\n"
+        "- Use list_cards filters (status, deck, owner, tag) to narrow results "
+        "instead of fetching all cards.\n"
+        "- Use get_card with include_content=False when you only need metadata "
+        "(status, priority, owner).\n"
+        "- Use get_card with include_conversations=False when you don't need "
+        "comment threads.\n"
+        "- Use list_decks with include_card_counts=False when you only need "
+        "deck names.\n"
+        "- Pagination: list_cards returns 50 cards by default. Use limit/offset "
+        "to page through large sets.\n"
+        "- Prefer pm_focus or standup for dashboards instead of assembling them "
+        "from raw card lists."
     ),
 )
 
@@ -43,6 +57,25 @@ def _call(method_name: str, **kwargs):
         return {"ok": False, "error": str(e), "type": "setup"}
     except CliError as e:
         return {"ok": False, "error": str(e), "type": "error"}
+
+
+_SLIM_DROP = {
+    "deckId",
+    "deck_id",
+    "milestoneId",
+    "milestone_id",
+    "assignee",
+    "projectId",
+    "project_id",
+    "childCardInfo",
+    "child_card_info",
+    "masterTags",
+}
+
+
+def _slim_card(card: dict) -> dict:
+    """Strip redundant raw IDs from a card dict for token efficiency."""
+    return {k: v for k, v in card.items() if k not in _SLIM_DROP}
 
 
 # -------------------------------------------------------------------
@@ -144,7 +177,7 @@ def list_cards(
         total = len(all_cards)
         page = all_cards[offset : offset + limit]
         return {
-            "cards": page,
+            "cards": [_slim_card(c) for c in page],
             "stats": result.get("stats"),
             "total_count": total,
             "has_more": offset + limit < total,
@@ -155,7 +188,11 @@ def list_cards(
 
 
 @mcp.tool()
-def get_card(card_id: str) -> dict:
+def get_card(
+    card_id: str,
+    include_content: bool = True,
+    include_conversations: bool = True,
+) -> dict:
     """Get full details for a single card.
 
     Use this when you need a card's content, checklist, sub-cards,
@@ -163,26 +200,40 @@ def get_card(card_id: str) -> dict:
 
     Args:
         card_id: The card's 36-character UUID or unique short ID prefix.
+        include_content: If False, strip content field (keeps title). Use for
+            metadata-only checks (status, priority, owner).
+        include_conversations: If False, skip comment thread resolution. Use
+            when you don't need comment data.
 
     Returns:
         dict with card details including title, content, status, priority,
         effort, owner, tags, milestone, deck, checklist, sub_cards,
         conversations, and in_hand.
     """
-    return _call("get_card", card_id=card_id)
+    return _call(
+        "get_card",
+        card_id=card_id,
+        include_content=include_content,
+        include_conversations=include_conversations,
+    )
 
 
 @mcp.tool()
-def list_decks() -> dict:
-    """List all decks with card counts.
+def list_decks(include_card_counts: bool = False) -> dict:
+    """List all decks with optional card counts.
 
     Use this to discover available decks before filtering cards or
     moving cards to a deck.
 
+    Args:
+        include_card_counts: If True, fetch all cards to count per deck
+            (extra API call). Default False to save tokens.
+
     Returns:
-        list of dicts with id, title, project_name, card_count.
+        list of dicts with id, title, project_name, card_count
+        (null when include_card_counts=False).
     """
-    return _call("list_decks")
+    return _call("list_decks", include_card_counts=include_card_counts)
 
 
 @mcp.tool()
@@ -280,7 +331,10 @@ def list_hand() -> dict:
     Returns:
         list of card dicts sorted by hand order.
     """
-    return _call("list_hand")
+    result = _call("list_hand")
+    if isinstance(result, list):
+        return [_slim_card(c) for c in result]
+    return result
 
 
 @mcp.tool()

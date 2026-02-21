@@ -82,6 +82,22 @@ class TestReadTools:
         assert result[0]["title"] == "Features"
 
     @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_list_decks_passes_include_card_counts(self, MockClient):
+        client = _mock_client(list_decks=[{"id": "d1", "title": "Features", "card_count": None}])
+        MockClient.return_value = client
+        mcp_mod.list_decks(include_card_counts=False)
+        client.list_decks.assert_called_once_with(include_card_counts=False)
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_get_card_passes_field_control(self, MockClient):
+        client = _mock_client(get_card={"id": "c1", "title": "Test"})
+        MockClient.return_value = client
+        mcp_mod.get_card("c1", include_content=False, include_conversations=False)
+        client.get_card.assert_called_once_with(
+            card_id="c1", include_content=False, include_conversations=False
+        )
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
     def test_list_projects(self, MockClient):
         MockClient.return_value = _mock_client(list_projects=[{"id": "p1", "name": "Tea"}])
         result = mcp_mod.list_projects()
@@ -371,3 +387,72 @@ class TestErrorHandling:
         # Must not raise
         serialized = json.dumps(result)
         assert "Not found" in serialized
+
+
+# ---------------------------------------------------------------------------
+# Slim card helper
+# ---------------------------------------------------------------------------
+
+
+class TestSlimCard:
+    def test_strips_redundant_ids(self):
+        card = {
+            "id": "c1",
+            "title": "Test",
+            "status": "started",
+            "deck_name": "Features",
+            "deckId": "d1",
+            "deck_id": "d1",
+            "milestoneId": "m1",
+            "milestone_id": "m1",
+            "assignee": "u1",
+            "owner_name": "Alice",
+            "projectId": "p1",
+            "project_id": "p1",
+            "childCardInfo": {"count": 2},
+            "child_card_info": {"count": 2},
+            "masterTags": ["bug"],
+            "tags": ["bug"],
+            "sub_card_count": 2,
+        }
+        slim = mcp_mod._slim_card(card)
+        assert slim["id"] == "c1"
+        assert slim["title"] == "Test"
+        assert slim["deck_name"] == "Features"
+        assert slim["owner_name"] == "Alice"
+        assert slim["tags"] == ["bug"]
+        assert slim["sub_card_count"] == 2
+        for dropped in (
+            "deckId",
+            "deck_id",
+            "milestoneId",
+            "milestone_id",
+            "assignee",
+            "projectId",
+            "project_id",
+            "childCardInfo",
+            "child_card_info",
+            "masterTags",
+        ):
+            assert dropped not in slim
+
+    def test_preserves_all_when_no_redundant_keys(self):
+        card = {"id": "c1", "title": "Clean", "status": "done"}
+        slim = mcp_mod._slim_card(card)
+        assert slim == card
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_list_cards_returns_slimmed_cards(self, MockClient):
+        cards = [{"id": "c1", "title": "A", "deckId": "d1", "deck_name": "Features"}]
+        MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
+        result = mcp_mod.list_cards()
+        assert "deckId" not in result["cards"][0]
+        assert result["cards"][0]["deck_name"] == "Features"
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_list_hand_returns_slimmed_cards(self, MockClient):
+        hand = [{"id": "c1", "title": "A", "assignee": "u1", "owner_name": "Alice"}]
+        MockClient.return_value = _mock_client(list_hand=hand)
+        result = mcp_mod.list_hand()
+        assert "assignee" not in result[0]
+        assert result[0]["owner_name"] == "Alice"

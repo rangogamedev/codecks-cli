@@ -250,6 +250,18 @@ class CodecksClient:
             _check_token()
 
     # -------------------------------------------------------------------
+    # Internal helpers
+    # -------------------------------------------------------------------
+
+    def _get_hand_card_ids(self) -> set[str]:
+        """Return cached set of card IDs in hand."""
+        if "hand" not in config._cache:
+            hand_result = list_hand()
+            config._cache["hand"] = set(extract_hand_card_ids(hand_result))
+        result: set[str] = config._cache["hand"]  # type: ignore[assignment]
+        return result
+
+    # -------------------------------------------------------------------
     # Read commands
     # -------------------------------------------------------------------
 
@@ -385,11 +397,19 @@ class CodecksClient:
 
         return {"cards": _flatten_cards(result.get("card", {})), "stats": None}
 
-    def get_card(self, card_id: str) -> dict[str, Any]:
+    def get_card(
+        self,
+        card_id: str,
+        *,
+        include_content: bool = True,
+        include_conversations: bool = True,
+    ) -> dict[str, Any]:
         """Get full details for a single card.
 
         Args:
             card_id: The card's UUID or short ID.
+            include_content: If False, strip the content field (keep title).
+            include_conversations: If False, skip conversation resolution.
 
         Returns:
             dict with card details including checklist, sub-cards,
@@ -398,9 +418,8 @@ class CodecksClient:
         result = get_card(card_id)
         result["card"] = enrich_cards(result.get("card", {}), result.get("user"))
 
-        # Check if this card is in hand
-        hand_result = list_hand()
-        hand_card_ids = extract_hand_card_ids(hand_result)
+        # Check if this card is in hand (cached)
+        hand_card_ids = self._get_hand_card_ids()
         for card_key, card in result.get("card", {}).items():
             card["in_hand"] = card_key in hand_card_ids
 
@@ -443,7 +462,7 @@ class CodecksClient:
 
         # Resolve conversations
         resolvables = card_data.get("resolvables") or []
-        if resolvables:
+        if include_conversations and resolvables:
             resolvable_data = result.get("resolvable", {})
             entry_data = result.get("resolvableEntry", {})
             user_data = result.get("user", {})
@@ -479,21 +498,30 @@ class CodecksClient:
                 )
             detail["conversations"] = conversations
 
+        if not include_content:
+            detail.pop("content", None)
+
         return detail
 
-    def list_decks(self) -> list[dict[str, Any]]:
-        """List all decks with card counts.
+    def list_decks(self, *, include_card_counts: bool = True) -> list[dict[str, Any]]:
+        """List all decks with optional card counts.
+
+        Args:
+            include_card_counts: If True, fetch all cards to count per deck
+                (extra API call). If False, card_count is None.
 
         Returns:
             list of deck dicts with id, title, project_name, card_count.
         """
         decks_result = list_decks()
-        cards_result = list_cards()
-        deck_counts: dict[str, int] = {}
-        for card in cards_result.get("card", {}).values():
-            did = _get_field(card, "deck_id", "deckId")
-            if did:
-                deck_counts[did] = deck_counts.get(did, 0) + 1
+        deck_counts: dict[str, int] | None = None
+        if include_card_counts:
+            cards_result = list_cards()
+            deck_counts = {}
+            for card in cards_result.get("card", {}).values():
+                did = _get_field(card, "deck_id", "deckId")
+                if did:
+                    deck_counts[did] = deck_counts.get(did, 0) + 1
 
         project_names = load_project_names()
         result = []
@@ -505,7 +533,7 @@ class CodecksClient:
                     "id": did,
                     "title": deck.get("title", ""),
                     "project_name": project_names.get(pid, pid),
-                    "card_count": deck_counts.get(did, 0),
+                    "card_count": deck_counts.get(did, 0) if deck_counts is not None else None,
                 }
             )
         return result
@@ -732,8 +760,9 @@ class CodecksClient:
         Returns:
             dict with ok=True and count of added cards.
         """
-        result = add_to_hand(card_ids)
-        return {"ok": True, "added": len(card_ids), "data": result}
+        add_to_hand(card_ids)
+        config._cache.pop("hand", None)
+        return {"ok": True, "added": len(card_ids)}
 
     def remove_from_hand(self, card_ids: list[str]) -> dict[str, Any]:
         """Remove cards from the user's hand (personal work queue).
@@ -744,8 +773,9 @@ class CodecksClient:
         Returns:
             dict with ok=True and count of removed cards.
         """
-        result = remove_from_hand(card_ids)
-        return {"ok": True, "removed": len(card_ids), "data": result}
+        remove_from_hand(card_ids)
+        config._cache.pop("hand", None)
+        return {"ok": True, "removed": len(card_ids)}
 
     # -------------------------------------------------------------------
     # Mutation commands
@@ -933,15 +963,13 @@ class CodecksClient:
                 "--priority, --effort, --owner, --tag, --doc, etc."
             )
 
-        last_result = None
         for cid in card_ids:
-            last_result = update_card(cid, **update_kwargs)
+            update_card(cid, **update_kwargs)
 
         return {
             "ok": True,
             "updated": len(card_ids),
             "fields": update_kwargs,
-            "data": last_result,
         }
 
     def mark_done(self, card_ids: list[str]) -> dict[str, Any]:
@@ -953,8 +981,8 @@ class CodecksClient:
         Returns:
             dict with ok=True and count.
         """
-        result = bulk_status(card_ids, "done")
-        return {"ok": True, "count": len(card_ids), "data": result}
+        bulk_status(card_ids, "done")
+        return {"ok": True, "count": len(card_ids)}
 
     def mark_started(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as started.
@@ -965,8 +993,8 @@ class CodecksClient:
         Returns:
             dict with ok=True and count.
         """
-        result = bulk_status(card_ids, "started")
-        return {"ok": True, "count": len(card_ids), "data": result}
+        bulk_status(card_ids, "started")
+        return {"ok": True, "count": len(card_ids)}
 
     def archive_card(self, card_id: str) -> dict[str, Any]:
         """Archive a card (reversible).
@@ -977,8 +1005,8 @@ class CodecksClient:
         Returns:
             dict with ok=True and card_id.
         """
-        result = archive_card(card_id)
-        return {"ok": True, "card_id": card_id, "data": result}
+        archive_card(card_id)
+        return {"ok": True, "card_id": card_id}
 
     def unarchive_card(self, card_id: str) -> dict[str, Any]:
         """Restore an archived card.
@@ -989,8 +1017,8 @@ class CodecksClient:
         Returns:
             dict with ok=True and card_id.
         """
-        result = unarchive_card(card_id)
-        return {"ok": True, "card_id": card_id, "data": result}
+        unarchive_card(card_id)
+        return {"ok": True, "card_id": card_id}
 
     def delete_card(self, card_id: str) -> dict[str, Any]:
         """Permanently delete a card.
@@ -1001,8 +1029,8 @@ class CodecksClient:
         Returns:
             dict with ok=True and card_id.
         """
-        result = delete_card(card_id)
-        return {"ok": True, "card_id": card_id, "data": result}
+        delete_card(card_id)
+        return {"ok": True, "card_id": card_id}
 
     def scaffold_feature(
         self,
@@ -1215,8 +1243,8 @@ class CodecksClient:
         """
         if not message:
             raise CliError("[ERROR] Comment message is required.")
-        result = create_comment(card_id, message)
-        return {"ok": True, "card_id": card_id, "data": result}
+        create_comment(card_id, message)
+        return {"ok": True, "card_id": card_id}
 
     def reply_comment(self, thread_id: str, message: str) -> dict[str, Any]:
         """Reply to an existing comment thread.
@@ -1230,8 +1258,8 @@ class CodecksClient:
         """
         if not message:
             raise CliError("[ERROR] Reply message is required.")
-        result = reply_comment(thread_id, message)
-        return {"ok": True, "thread_id": thread_id, "data": result}
+        reply_comment(thread_id, message)
+        return {"ok": True, "thread_id": thread_id}
 
     def close_comment(self, thread_id: str, card_id: str) -> dict[str, Any]:
         """Close a comment thread.
@@ -1243,8 +1271,8 @@ class CodecksClient:
         Returns:
             dict with ok=True.
         """
-        result = close_comment(thread_id, card_id)
-        return {"ok": True, "thread_id": thread_id, "data": result}
+        close_comment(thread_id, card_id)
+        return {"ok": True, "thread_id": thread_id}
 
     def reopen_comment(self, thread_id: str, card_id: str) -> dict[str, Any]:
         """Reopen a closed comment thread.
@@ -1256,8 +1284,8 @@ class CodecksClient:
         Returns:
             dict with ok=True.
         """
-        result = reopen_comment(thread_id, card_id)
-        return {"ok": True, "thread_id": thread_id, "data": result}
+        reopen_comment(thread_id, card_id)
+        return {"ok": True, "thread_id": thread_id}
 
     def list_conversations(self, card_id: str) -> dict[str, Any]:
         """List all comment threads on a card.

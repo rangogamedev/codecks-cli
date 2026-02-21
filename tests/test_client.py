@@ -901,3 +901,193 @@ class TestListDecksProjectsMilestones:
         client = _client()
         with pytest.raises(CliError):
             client.list_activity(limit=0)
+
+    @patch("codecks_cli.client.load_project_names")
+    @patch("codecks_cli.client.list_decks")
+    def test_list_decks_no_card_counts(self, mock_decks, mock_proj_names):
+        mock_decks.return_value = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Features", "projectId": "p1"},
+            }
+        }
+        mock_proj_names.return_value = {"p1": "Tea Shop"}
+        client = _client()
+        result = client.list_decks(include_card_counts=False)
+        assert len(result) == 1
+        assert result[0]["title"] == "Features"
+        assert result[0]["card_count"] is None
+
+
+# ---------------------------------------------------------------------------
+# get_card field control
+# ---------------------------------------------------------------------------
+
+
+class TestGetCardFieldControl:
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_include_content_false_strips_content(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        mock_get.return_value = {
+            "card": {
+                "uuid-123": {
+                    "title": "Test Card",
+                    "status": "started",
+                    "content": "Test Card\nLong body text here",
+                },
+            },
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        detail = client.get_card("uuid-123", include_content=False)
+        assert detail["id"] == "uuid-123"
+        assert detail["title"] == "Test Card"
+        assert "content" not in detail
+
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_include_conversations_false_skips_conversations(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        mock_get.return_value = {
+            "card": {
+                "c1": {
+                    "title": "Card With Comments",
+                    "status": "started",
+                    "resolvables": ["r1"],
+                },
+            },
+            "resolvable": {
+                "r1": {
+                    "isClosed": False,
+                    "creator": "u1",
+                    "createdAt": "2026-01-01",
+                    "entries": ["e1"],
+                },
+            },
+            "resolvableEntry": {
+                "e1": {
+                    "content": "Hello",
+                    "createdAt": "2026-01-01",
+                    "author": "u1",
+                },
+            },
+            "user": {"u1": {"name": "Alice"}},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        detail = client.get_card("c1", include_conversations=False)
+        assert "conversations" not in detail
+
+
+# ---------------------------------------------------------------------------
+# Hand cache
+# ---------------------------------------------------------------------------
+
+
+class TestHandCache:
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_second_get_card_reuses_cached_hand(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        mock_get.return_value = {
+            "card": {"c1": {"title": "Card", "status": "started"}},
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        client.get_card("c1")
+        client.get_card("c1")
+        # list_hand should only be called once (cached on second call)
+        mock_hand.assert_called_once()
+
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.add_to_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_add_to_hand_invalidates_cache(
+        self, mock_get, mock_enrich, mock_add, mock_hand, mock_extract
+    ):
+        mock_get.return_value = {
+            "card": {"c1": {"title": "Card", "status": "started"}},
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        mock_add.return_value = {}
+        client = _client()
+        client.get_card("c1")
+        assert mock_hand.call_count == 1
+        client.add_to_hand(["c1"])
+        client.get_card("c1")
+        # After add_to_hand invalidates cache, list_hand called again
+        assert mock_hand.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Mutation returns no "data" key
+# ---------------------------------------------------------------------------
+
+
+class TestMutationReturnsNoData:
+    @patch("codecks_cli.client.add_to_hand")
+    def test_add_to_hand_no_data(self, mock_add):
+        mock_add.return_value = {}
+        client = _client()
+        result = client.add_to_hand(["c1"])
+        assert "data" not in result
+
+    @patch("codecks_cli.client.remove_from_hand")
+    def test_remove_from_hand_no_data(self, mock_remove):
+        mock_remove.return_value = {}
+        client = _client()
+        result = client.remove_from_hand(["c1"])
+        assert "data" not in result
+
+    @patch("codecks_cli.client.update_card")
+    def test_update_cards_no_data(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], status="done")
+        assert "data" not in result
+
+    @patch("codecks_cli.client.bulk_status")
+    def test_mark_done_no_data(self, mock_bulk):
+        mock_bulk.return_value = {}
+        client = _client()
+        result = client.mark_done(["c1"])
+        assert "data" not in result
+
+    @patch("codecks_cli.client.archive_card")
+    def test_archive_no_data(self, mock_archive):
+        mock_archive.return_value = {}
+        client = _client()
+        result = client.archive_card("c1")
+        assert "data" not in result
+
+    @patch("codecks_cli.client.delete_card")
+    def test_delete_no_data(self, mock_delete):
+        mock_delete.return_value = {}
+        client = _client()
+        result = client.delete_card("c1")
+        assert "data" not in result
+
+    @patch("codecks_cli.client.create_comment")
+    def test_create_comment_no_data(self, mock_create):
+        mock_create.return_value = {}
+        client = _client()
+        result = client.create_comment("c1", "Hello")
+        assert "data" not in result

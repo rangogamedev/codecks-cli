@@ -216,53 +216,47 @@ def cmd_update(ns):
         mutation_response(
             "Updated",
             details=f"{len(ns.card_ids)} card(s), " + ", ".join(detail_parts),
-            data=result.get("data"),
             fmt=fmt,
         )
     else:
-        mutation_response(
-            "Updated", ns.card_ids[0], ", ".join(detail_parts), result.get("data"), fmt
-        )
+        mutation_response("Updated", ns.card_ids[0], ", ".join(detail_parts), fmt=fmt)
 
 
 def cmd_archive(ns):
     if _dry_run_guard("archive card", ns.card_id):
         return
-    result = _get_client().archive_card(ns.card_id)
-    mutation_response("Archived", ns.card_id, data=result.get("data"), fmt=ns.format)
+    _get_client().archive_card(ns.card_id)
+    mutation_response("Archived", ns.card_id, fmt=ns.format)
 
 
 def cmd_unarchive(ns):
     if _dry_run_guard("unarchive card", ns.card_id):
         return
-    result = _get_client().unarchive_card(ns.card_id)
-    mutation_response("Unarchived", ns.card_id, data=result.get("data"), fmt=ns.format)
+    _get_client().unarchive_card(ns.card_id)
+    mutation_response("Unarchived", ns.card_id, fmt=ns.format)
 
 
 def cmd_delete(ns):
     if _dry_run_guard("delete card", ns.card_id):
         return
-    result = _get_client().delete_card(ns.card_id)
-    mutation_response("Deleted", ns.card_id, data=result.get("data"), fmt=ns.format)
+    _get_client().delete_card(ns.card_id)
+    mutation_response("Deleted", ns.card_id, fmt=ns.format)
 
 
 def cmd_done(ns):
     if _dry_run_guard("mark done", f"{len(ns.card_ids)} card(s)"):
         return
-    result = _get_client().mark_done(ns.card_ids)
-    mutation_response(
-        "Marked done", details=f"{len(ns.card_ids)} card(s)", data=result.get("data"), fmt=ns.format
-    )
+    _get_client().mark_done(ns.card_ids)
+    mutation_response("Marked done", details=f"{len(ns.card_ids)} card(s)", fmt=ns.format)
 
 
 def cmd_start(ns):
     if _dry_run_guard("mark started", f"{len(ns.card_ids)} card(s)"):
         return
-    result = _get_client().mark_started(ns.card_ids)
+    _get_client().mark_started(ns.card_ids)
     mutation_response(
         "Marked started",
         details=f"{len(ns.card_ids)} card(s)",
-        data=result.get("data"),
         fmt=ns.format,
     )
 
@@ -288,20 +282,17 @@ def cmd_hand(ns):
     else:
         if _dry_run_guard("add to hand", f"{len(ns.card_ids)} card(s)"):
             return
-        result = _get_client().add_to_hand(ns.card_ids)
-        mutation_response(
-            "Added to hand", details=f"{len(ns.card_ids)} card(s)", data=result.get("data"), fmt=fmt
-        )
+        _get_client().add_to_hand(ns.card_ids)
+        mutation_response("Added to hand", details=f"{len(ns.card_ids)} card(s)", fmt=fmt)
 
 
 def cmd_unhand(ns):
     if _dry_run_guard("remove from hand", f"{len(ns.card_ids)} card(s)"):
         return
-    result = _get_client().remove_from_hand(ns.card_ids)
+    _get_client().remove_from_hand(ns.card_ids)
     mutation_response(
         "Removed from hand",
         details=f"{len(ns.card_ids)} card(s)",
-        data=result.get("data"),
         fmt=ns.format,
     )
 
@@ -348,23 +339,23 @@ def cmd_comment(ns):
     if ns.close:
         if ns.message:
             raise CliError("[ERROR] Do not provide a message with --close.")
-        result = client.close_comment(ns.close, card_id)
-        mutation_response("Closed thread", ns.close, "", result.get("data"), fmt)
+        client.close_comment(ns.close, card_id)
+        mutation_response("Closed thread", ns.close, "", fmt=fmt)
     elif ns.reopen:
         if ns.message:
             raise CliError("[ERROR] Do not provide a message with --reopen.")
-        result = client.reopen_comment(ns.reopen, card_id)
-        mutation_response("Reopened thread", ns.reopen, "", result.get("data"), fmt)
+        client.reopen_comment(ns.reopen, card_id)
+        mutation_response("Reopened thread", ns.reopen, "", fmt=fmt)
     elif ns.thread:
         if not ns.message:
             raise CliError("[ERROR] Reply message is required.")
-        result = client.reply_comment(ns.thread, ns.message)
-        mutation_response("Replied to thread", ns.thread, "", result.get("data"), fmt)
+        client.reply_comment(ns.thread, ns.message)
+        mutation_response("Replied to thread", ns.thread, "", fmt=fmt)
     else:
         if not ns.message:
             raise CliError("[ERROR] Comment message is required.")
-        result = client.create_comment(card_id, ns.message)
-        mutation_response("Created thread on", card_id, "", result.get("data"), fmt)
+        client.create_comment(card_id, ns.message)
+        mutation_response("Created thread on", card_id, "", fmt=fmt)
 
 
 def cmd_conversations(ns):
