@@ -20,6 +20,9 @@ def _isolate_config(monkeypatch):
     monkeypatch.setattr(config, "USER_ID", "fake-user-id")
     monkeypatch.setattr(config, "_cache", {})
     monkeypatch.setattr(config, "RUNTIME_STRICT", False)
+    monkeypatch.setattr(config, "RUNTIME_DRY_RUN", False)
+    monkeypatch.setattr(config, "RUNTIME_QUIET", False)
+    monkeypatch.setattr(config, "RUNTIME_VERBOSE", False)
 
     # Reset the client singleton so tests don't share state
     from codecks_cli import commands

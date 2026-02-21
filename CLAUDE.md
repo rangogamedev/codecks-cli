@@ -6,34 +6,55 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (446 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (464 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
 
-## Modules (`codecks_cli/`)
-| Module | Purpose |
-|--------|---------|
-| `codecks_api.py` | Backward-compat wrapper → `cli:main()` (project root) |
-| `__init__.py` | Exports `CodecksClient`, `CliError`, `SetupError`, `VERSION`, TypedDict types |
-| `exceptions.py` | All custom exceptions: `CliError`, `SetupError`, `HTTPError` |
-| `config.py` | Env, tokens, constants (re-exports exceptions for backward compat) |
-| `_utils.py` | Pure utility helpers: `_get_field()`, `get_card_tags()`, date/multi-value parsers |
-| `types.py` | TypedDict response definitions (`CardRow`, `CardDetail`, `MutationResult`, etc.) |
-| `api.py` | HTTP layer: `query()`, `dispatch()`, token validation |
-| `cards.py` | Card CRUD, hand, conversations, enrichment (re-exports `_utils` helpers) |
-| `client.py` | **`CodecksClient` class** — public API (27 keyword-only methods returning flat dicts) |
-| `commands.py` | Thin CLI `cmd_*()` wrappers: argparse → `CodecksClient` → formatters |
-| `formatters/` | JSON/table/CSV output dispatch (7 sub-modules, re-exports via `__init__`) |
-| `mcp_server.py` | MCP server: wraps `CodecksClient` as 25 MCP tools (stdio) |
-| `models.py` | `ObjectPayload`, `FeatureSpec` dataclasses |
-| `gdd.py` | Google OAuth2, GDD fetch/parse/sync |
-| `setup_wizard.py` | Interactive `.env` bootstrap |
-| `cli.py` | Entry point: argparse, `build_parser()`, `main()` dispatch via `set_defaults(func=...)` |
+## Architecture
 
-All imports are absolute (`from codecks_cli.exceptions import ...`). No circular deps.
+```
+codecks_api.py          ← CLI entry point (backward-compat wrapper)
+codecks_cli/
+  cli.py                ← argparse, build_parser(), main() dispatch
+  commands.py           ← cmd_*() wrappers: argparse → CodecksClient → formatters
+  client.py             ← CodecksClient: 27 public methods (the API surface)
+  cards.py              ← Card CRUD, hand, conversations, enrichment
+  api.py                ← HTTP layer: query(), dispatch(), retries, token check
+  config.py             ← Env, tokens, constants, runtime state
+  exceptions.py         ← CliError, SetupError, HTTPError
+  _utils.py             ← _get_field(), get_card_tags(), date/multi-value parsers
+  types.py              ← TypedDict response shapes (CardRow, CardDetail, etc.)
+  models.py             ← ObjectPayload, FeatureSpec dataclasses
+  formatters/           ← JSON/table/CSV output (7 sub-modules)
+    __init__.py          re-exports all 24 names
+    _table.py            _table(), _trunc(), _sanitize_str()
+    _core.py             output(), mutation_response(), pretty_print()
+    _cards.py            format_cards_table, format_card_detail, format_cards_csv
+    _entities.py         format_decks_table, format_projects_table, format_milestones_table
+    _activity.py         format_activity_table, format_activity_diff
+    _dashboards.py       format_pm_focus_table, format_standup_table
+    _gdd.py              format_gdd_table, format_sync_report
+  gdd.py                ← Google OAuth2, GDD fetch/parse/sync
+  setup_wizard.py       ← Interactive .env bootstrap
+  mcp_server.py         ← MCP server: 25 tools wrapping CodecksClient (stdio)
+```
+
+### Import graph (no circular deps)
+```
+exceptions.py  ←  config.py  ←  _utils.py  ←  api.py  ←  cards.py  ←  client.py
+                                                                          ↑
+types.py (standalone)    formatters/ ← commands.py ← cli.py          models.py
+```
+
+### Key design patterns
+- **Exceptions**: All in `exceptions.py`. `config.py` and `api.py` re-export for backward compat.
+- **Utilities**: Pure helpers in `_utils.py`. `cards.py` re-exports them (`# noqa: F401`).
+- **Formatters**: Package with `__init__.py` re-exporting all names. Import as `from codecks_cli.formatters import format_cards_table`.
+- **CLI dispatch**: `build_parser()` uses `set_defaults(func=cmd_xxx)` per subparser. `main()` calls `ns.func(ns)`.
+- **Type annotations**: `client.py` uses `from __future__ import annotations` and `dict[str, Any]` returns. TypedDicts in `types.py` are documentation for consumers.
 
 ## Programmatic API
 ```python
@@ -41,7 +62,7 @@ from codecks_cli import CodecksClient
 client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```
-Methods use keyword-only args, return flat dicts (AI-agent-friendly). Map 1:1 to future MCP tools.
+Methods use keyword-only args, return flat dicts (AI-agent-friendly). Map 1:1 to MCP tools.
 
 ## Tokens (`.env`, never committed)
 - `CODECKS_TOKEN` — session cookie (`at`), **expires**. Empty 200 response = expired (not 401).
@@ -51,7 +72,7 @@ Methods use keyword-only args, return flat dicts (AI-agent-friendly). Map 1:1 to
 - No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `generate-token`, `--version`
 
 ## API Pitfalls (will cause bugs if ignored)
-- Response: snake_case. Query: camelCase. Use `_get_field(d, snake, camel)` for safe lookups.
+- Response: snake_case. Query: camelCase. Use `_get_field(d, snake, camel)` (in `_utils.py`) for safe lookups.
 - Query cards: `cards({"cardId":"...", "visibility":"default"})` — never `card({"id":...})` (500).
 - 500-error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`. Use `assignee` relation instead of `assigneeId` field.
 - Card title = first line of `content` field.
@@ -67,7 +88,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- Test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`
+- 12 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`, `test_mcp_server.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)
@@ -86,10 +107,18 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.
 
 ## Skills (`.claude/commands/`)
-`/pm` (PM session), `/test-all` (regression), `/release` (version bump), `/api-ref` (command ref), `/security-audit` (secrets scan), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest)
+`/pm` (PM session), `/test-all` (regression), `/release` (version bump), `/api-ref` (command ref), `/security-audit` (secrets scan), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues)
 
 ## Git
 - Commit style: short present tense ("Add X", "Fix Y")
 - Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
 - `.claude/` is gitignored
 - Run `/security-audit` before pushing (public repo)
+
+## Maintenance
+When adding new modules, commands, tests, or fixing bugs:
+- Update the Architecture section and test count in this file
+- Update the mypy command if new modules need type checking
+- Keep `.claude/commands/quality.md`, `release.md`, `security-audit.md` in sync
+- Add new bug patterns to "Known Bugs Fixed" so they aren't reintroduced
+- Update MEMORY.md with stable patterns learned across sessions

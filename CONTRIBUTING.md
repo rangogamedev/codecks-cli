@@ -42,7 +42,7 @@ Open an issue describing:
 4. Run quality checks:
    - `py -m ruff check .`
    - `py -m ruff format --check .`
-   - `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters.py codecks_cli/models.py`
+   - `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
    - `pwsh -File scripts/run-tests.ps1`
 5. Test your changes with real Codecks API calls if they touch the API layer
 6. Update `README.md` if you add new commands or flags
@@ -54,10 +54,19 @@ Open an issue describing:
 - Be concise but descriptive
 - Reference issue numbers if applicable: "Fix #42"
 
+### Changelog entries
+
+When your change is user-visible (new feature, bug fix, breaking change), add an entry to `CHANGELOG.md` under the `[Unreleased]` heading. We follow [Keep a Changelog](https://keepachangelog.com/) format:
+
+- **Added** for new features
+- **Changed** for changes in existing functionality
+- **Fixed** for bug fixes
+- **Removed** for removed features
+
 ## Code style
 
 - Standard Python conventions (PEP 8 mostly)
-- Code is split across 9 modules: `codecks_api.py` (entry point), `config.py` (env/constants), `api.py` (HTTP), `cards.py` (business logic), `commands.py` (CLI handlers), `formatters.py` (output), `models.py` (typed contracts), `gdd.py` (Google Docs), `setup_wizard.py` (setup)
+- Code is split across 22 source modules: `codecks_api.py` (entry point), `cli.py` (argparse/dispatch), `commands.py` (CLI handlers), `client.py` (CodecksClient API), `cards.py` (card CRUD), `api.py` (HTTP layer), `config.py` (env/constants), `exceptions.py` (error types), `_utils.py` (helpers), `types.py` (TypedDicts), `models.py` (dataclasses), `formatters/` (7 sub-modules), `gdd.py` (Google Docs), `setup_wizard.py` (setup), `mcp_server.py` (MCP)
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
 - All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
 
@@ -68,7 +77,7 @@ Open an issue describing:
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
-- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 389 tests. All must pass before submitting.
+- **Tests:** `pwsh -File scripts/run-tests.ps1` — currently 464 tests. All must pass before submitting.
 
 See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
 

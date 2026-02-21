@@ -154,6 +154,9 @@ GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 
 _cache: dict[str, object] = {}
 RUNTIME_STRICT = False
+RUNTIME_DRY_RUN = False
+RUNTIME_QUIET = False
+RUNTIME_VERBOSE = False
 
 # ---------------------------------------------------------------------------
 # Re-export exceptions for backward compatibility

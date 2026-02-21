@@ -436,6 +436,8 @@ def dispatch(path, data):
 def warn_if_empty(result, relation):
     """Warn if a query returned no results — likely means the token expired.
     Codecks silently returns empty data instead of 401 when unauthenticated."""
+    if config.RUNTIME_QUIET:
+        return
     if relation not in result or not result[relation]:
         print(
             f"[TOKEN_EXPIRED] The Codecks session token may have expired "

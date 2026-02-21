@@ -829,6 +829,29 @@ class TestTokenValidation:
 # ---------------------------------------------------------------------------
 
 
+class TestGetAccount:
+    @patch("codecks_cli.client.get_account")
+    def test_get_account(self, mock_get):
+        mock_get.return_value = {"account": {"a1": {"name": "My Account"}}}
+        client = _client()
+        result = client.get_account()
+        assert result["account"]["a1"]["name"] == "My Account"
+
+
+class TestListConversations:
+    @patch("codecks_cli.client.get_conversations")
+    def test_list_conversations(self, mock_get):
+        mock_get.return_value = {
+            "card": {"c1": {"title": "Card A", "resolvables": ["r1"]}},
+            "resolvable": {"r1": {"creator": "u1", "isClosed": False, "entries": []}},
+            "user": {"u1": {"name": "Alice"}},
+        }
+        client = _client()
+        result = client.list_conversations("c1")
+        assert "card" in result
+        mock_get.assert_called_once_with("c1")
+
+
 class TestListDecksProjectsMilestones:
     @patch("codecks_cli.client.load_project_names")
     @patch("codecks_cli.client.list_cards")

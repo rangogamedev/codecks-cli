@@ -13,10 +13,13 @@ from codecks_cli.commands import (
     cmd_activity,
     cmd_cards,
     cmd_comment,
+    cmd_completion,
     cmd_create,
     cmd_decks,
+    cmd_delete,
     cmd_dispatch,
     cmd_feature,
+    cmd_gdd_sync,
     cmd_hand,
     cmd_pm_focus,
     cmd_standup,
@@ -1119,3 +1122,86 @@ class TestDeckCardCounts:
         assert len(out) == 2
         counts = {d["id"]: d["card_count"] for d in out}
         assert counts == {"d1": 2, "d2": 1}
+
+
+# ---------------------------------------------------------------------------
+# Dry-run mode
+# ---------------------------------------------------------------------------
+
+
+class TestDryRunMode:
+    def test_create_skipped_in_dry_run(self, monkeypatch, capsys):
+        monkeypatch.setattr(config, "RUNTIME_DRY_RUN", True)
+        ns = argparse.Namespace(
+            title="Test Card",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="json",
+            allow_duplicate=False,
+        )
+        cmd_create(ns)
+        err = capsys.readouterr().err
+        assert "[DRY-RUN]" in err
+        assert "create card" in err
+
+    def test_delete_skipped_in_dry_run(self, monkeypatch, capsys):
+        monkeypatch.setattr(config, "RUNTIME_DRY_RUN", True)
+        ns = argparse.Namespace(card_id="c1", confirm=True, format="json")
+        cmd_delete(ns)
+        err = capsys.readouterr().err
+        assert "[DRY-RUN]" in err
+        assert "delete card" in err
+
+
+# ---------------------------------------------------------------------------
+# Quiet mode — gdd-sync uses config.RUNTIME_QUIET
+# ---------------------------------------------------------------------------
+
+
+class TestGddSyncQuiet:
+    @patch("codecks_cli.commands.sync_gdd")
+    @patch("codecks_cli.commands.parse_gdd")
+    @patch("codecks_cli.commands.fetch_gdd")
+    def test_uses_config_quiet(self, mock_fetch, mock_parse, mock_sync, monkeypatch, capsys):
+        monkeypatch.setattr(config, "RUNTIME_QUIET", True)
+        mock_fetch.return_value = "# doc"
+        mock_parse.return_value = [{"section": "A", "tasks": []}]
+        mock_sync.return_value = {"applied": False, "quiet": True, "sections": []}
+        ns = argparse.Namespace(
+            project="Tea Shop",
+            section=None,
+            apply=False,
+            refresh=False,
+            file=None,
+            save_cache=False,
+            format="json",
+        )
+        cmd_gdd_sync(ns)
+        _, kwargs = mock_sync.call_args
+        assert kwargs["quiet"] is True
+
+
+# ---------------------------------------------------------------------------
+# Shell completion
+# ---------------------------------------------------------------------------
+
+
+class TestCompletion:
+    def test_bash_output_contains_subcommands(self, capsys):
+        ns = argparse.Namespace(shell="bash", format="json")
+        cmd_completion(ns)
+        out = capsys.readouterr().out
+        assert "cards" in out
+        assert "create" in out
+        assert "codecks-cli" in out
+
+    def test_zsh_output_contains_subcommands(self, capsys):
+        ns = argparse.Namespace(shell="zsh", format="json")
+        cmd_completion(ns)
+        out = capsys.readouterr().out
+        assert "cards" in out
+        assert "create" in out
+        assert "#compdef" in out

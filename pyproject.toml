@@ -22,6 +22,9 @@ mcp = [
   "mcp[cli]>=1.6.0",
 ]
 
+[tool.setuptools.package-data]
+codecks_cli = ["py.typed"]
+
 [tool.setuptools.packages.find]
 include = ["codecks_cli", "codecks_cli.*"]
 

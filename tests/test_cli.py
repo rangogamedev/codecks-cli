@@ -19,25 +19,32 @@ from codecks_cli.exceptions import CliError
 
 class TestExtractGlobalFlags:
     def test_no_flags(self):
-        fmt, strict, remaining = _extract_global_flags(["cards"])
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards"])
         assert fmt == "json"
         assert strict is False
+        assert dry_run is False
+        assert quiet is False
+        assert verbose is False
         assert remaining == ["cards"]
 
     def test_format_before_command(self):
-        fmt, strict, remaining = _extract_global_flags(["--format", "table", "cards"])
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["--format", "table", "cards"]
+        )
         assert fmt == "table"
         assert strict is False
         assert remaining == ["cards"]
 
     def test_format_after_command(self):
-        fmt, strict, remaining = _extract_global_flags(["cards", "--format", "table"])
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["cards", "--format", "table"]
+        )
         assert fmt == "table"
         assert strict is False
         assert remaining == ["cards"]
 
     def test_format_between_args(self):
-        fmt, strict, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
             ["cards", "--status", "done", "--format", "csv"]
         )
         assert fmt == "csv"
@@ -45,7 +52,9 @@ class TestExtractGlobalFlags:
         assert remaining == ["cards", "--status", "done"]
 
     def test_strict_flag_anywhere(self):
-        fmt, strict, remaining = _extract_global_flags(["cards", "--strict", "--status", "done"])
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["cards", "--strict", "--status", "done"]
+        )
         assert fmt == "json"
         assert strict is True
         assert remaining == ["cards", "--status", "done"]
@@ -62,18 +71,67 @@ class TestExtractGlobalFlags:
 
     def test_format_without_value(self):
         """--format at end of argv with no value should be kept as-is."""
-        fmt, strict, remaining = _extract_global_flags(["cards", "--format"])
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["cards", "--format"]
+        )
         assert fmt == "json"
         assert strict is False
         assert remaining == ["cards", "--format"]
 
     def test_preserves_other_args(self):
-        fmt, strict, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
             ["update", "abc", "--status", "done", "--format", "table"]
         )
         assert fmt == "table"
         assert strict is False
         assert remaining == ["update", "abc", "--status", "done"]
+
+    def test_dry_run_extracted(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["create", "Card", "--dry-run"]
+        )
+        assert dry_run is True
+        assert remaining == ["create", "Card"]
+
+    def test_dry_run_anywhere(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["--dry-run", "cards", "--status", "done"]
+        )
+        assert dry_run is True
+        assert remaining == ["cards", "--status", "done"]
+
+    def test_dry_run_default_false(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards"])
+        assert dry_run is False
+
+    def test_quiet_flag(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["cards", "--quiet"]
+        )
+        assert quiet is True
+        assert remaining == ["cards"]
+
+    def test_quiet_short_flag(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards", "-q"])
+        assert quiet is True
+        assert remaining == ["cards"]
+
+    def test_verbose_flag(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+            ["cards", "--verbose"]
+        )
+        assert verbose is True
+        assert remaining == ["cards"]
+
+    def test_verbose_short_flag(self):
+        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards", "-v"])
+        assert verbose is True
+        assert remaining == ["cards"]
+
+    def test_quiet_verbose_mutually_exclusive(self):
+        with pytest.raises(CliError) as exc_info:
+            _extract_global_flags(["cards", "--quiet", "--verbose"])
+        assert "mutually exclusive" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
@@ -279,11 +337,15 @@ class TestBuildParser:
         assert ns.confirm is True
 
     def test_gdd_sync_command(self):
-        ns = self.parser.parse_args(["gdd-sync", "--project", "Tea Shop", "--apply", "--quiet"])
+        ns = self.parser.parse_args(["gdd-sync", "--project", "Tea Shop", "--apply"])
         assert ns.command == "gdd-sync"
         assert ns.project == "Tea Shop"
         assert ns.apply is True
-        assert ns.quiet is True
+
+    def test_completion_command(self):
+        ns = self.parser.parse_args(["completion", "--shell", "bash"])
+        assert ns.command == "completion"
+        assert ns.shell == "bash"
 
     def test_dispatch_command(self):
         ns = self.parser.parse_args(["dispatch", "cards/update", '{"id":"c1"}'])

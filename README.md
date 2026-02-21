@@ -568,7 +568,7 @@ Run checks:
 ```powershell
 py -m ruff check .
 py -m ruff format --check .
-py -m mypy api.py cards.py commands.py formatters.py models.py
+py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py
 pwsh -File scripts/run-tests.ps1
 ```
 

@@ -584,6 +584,18 @@ class TestMutationResponse:
         assert payload["mutation"]["card_id"] == "c1"
         assert payload["data"]["ok"] is True
 
+    def test_quiet_suppresses_table_output(self, capsys, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_QUIET", True)
+        mutation_response("Updated", "c1", "status=done", fmt="table")
+        out = capsys.readouterr().out
+        assert out == ""
+
+    def test_quiet_allows_json_output(self, capsys, monkeypatch):
+        monkeypatch.setattr(config, "RUNTIME_QUIET", True)
+        mutation_response("Updated", "c1", "status=done", fmt="json")
+        out = capsys.readouterr().out
+        assert "OK:" in out
+
 
 # ---------------------------------------------------------------------------
 # output dispatcher

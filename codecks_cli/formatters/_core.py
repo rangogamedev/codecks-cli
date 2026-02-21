@@ -21,6 +21,8 @@ def output(data, formatter=None, fmt="json", csv_formatter=None):
 
 def mutation_response(action, card_id=None, details=None, data=None, fmt="json"):
     """Print a mutation confirmation."""
+    if config.RUNTIME_QUIET and fmt != "json":
+        return
     if fmt == "json" and config.RUNTIME_STRICT:
         payload = {
             "ok": True,

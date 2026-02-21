@@ -15,6 +15,7 @@ from codecks_cli.commands import (
     cmd_card,
     cmd_cards,
     cmd_comment,
+    cmd_completion,
     cmd_conversations,
     cmd_create,
     cmd_decks,
@@ -48,6 +49,9 @@ Global flags:
   --format table          Output as readable text instead of JSON (default: json)
   --format csv            Output cards as CSV (cards command only)
   --strict                Enable strict agent mode (fail fast on ambiguous raw API responses)
+  --dry-run               Preview mutations without executing them
+  --quiet, -q             Suppress confirmations and warnings
+  --verbose, -v           Enable HTTP request logging
   --version               Show version number
 
 Commands:
@@ -160,9 +164,15 @@ Commands:
 
 def _extract_global_flags(argv):
     """Extract global flags from argv regardless of position.
-    Returns (format_str, strict_bool, remaining_argv). Handles --version directly."""
+
+    Returns (format_str, strict, dry_run, quiet, verbose, remaining_argv).
+    Handles --version directly.
+    """
     fmt = "json"
     strict = False
+    dry_run = False
+    quiet = False
+    verbose = False
     remaining = []
     i = 0
     while i < len(argv):
@@ -171,6 +181,18 @@ def _extract_global_flags(argv):
             sys.exit(0)
         elif argv[i] == "--strict":
             strict = True
+            i += 1
+            continue
+        elif argv[i] == "--dry-run":
+            dry_run = True
+            i += 1
+            continue
+        elif argv[i] in ("--quiet", "-q"):
+            quiet = True
+            i += 1
+            continue
+        elif argv[i] in ("--verbose", "-v"):
+            verbose = True
             i += 1
             continue
         elif argv[i] == "--format" and i + 1 < len(argv):
@@ -182,7 +204,9 @@ def _extract_global_flags(argv):
         else:
             remaining.append(argv[i])
         i += 1
-    return fmt, strict, remaining
+    if quiet and verbose:
+        raise CliError("[ERROR] --quiet and --verbose are mutually exclusive.")
+    return fmt, strict, dry_run, quiet, verbose, remaining
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +405,6 @@ def build_parser():
     p.add_argument("--project")
     p.add_argument("--section")
     p.add_argument("--apply", action="store_true")
-    p.add_argument("--quiet", action="store_true")
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--file")
     p.add_argument("--save-cache", action="store_true", dest="save_cache")
@@ -402,6 +425,11 @@ def build_parser():
     p.add_argument("json_data")
     p.set_defaults(func=cmd_dispatch)
 
+    # --- completion ---
+    p = sub.add_parser("completion")
+    p.add_argument("--shell", choices=["bash", "zsh", "fish"], required=True)
+    p.set_defaults(func=cmd_completion)
+
     # --- version (bare word) ---
     sub.add_parser("version").set_defaults(func=None)
 
@@ -412,7 +440,7 @@ def build_parser():
 # Command dispatch
 # ---------------------------------------------------------------------------
 
-NO_TOKEN_COMMANDS = {"setup", "gdd-auth", "gdd-revoke", "generate-token", "version"}
+NO_TOKEN_COMMANDS = {"setup", "gdd-auth", "gdd-revoke", "generate-token", "version", "completion"}
 
 
 def _error_type_from_message(message):
@@ -448,9 +476,14 @@ def main():
         print(HELP_TEXT)
         sys.exit(0)
 
-    # Extract --format and --version from anywhere in argv
-    fmt, strict, remaining_argv = _extract_global_flags(sys.argv[1:])
+    # Extract global flags from anywhere in argv
+    fmt, strict, dry_run, quiet, verbose, remaining_argv = _extract_global_flags(sys.argv[1:])
     config.RUNTIME_STRICT = strict
+    config.RUNTIME_DRY_RUN = dry_run
+    config.RUNTIME_QUIET = quiet
+    config.RUNTIME_VERBOSE = verbose
+    if verbose:
+        config.HTTP_LOG_ENABLED = True
 
     if not remaining_argv:
         print(HELP_TEXT)

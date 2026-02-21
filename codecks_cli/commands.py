@@ -40,6 +40,20 @@ from codecks_cli.gdd import (
 from codecks_cli.models import FeatureSpec, ObjectPayload
 
 # ---------------------------------------------------------------------------
+# Dry-run helper
+# ---------------------------------------------------------------------------
+
+
+def _dry_run_guard(action, details=""):
+    """If dry-run mode is active, print what *would* happen and return True."""
+    if not config.RUNTIME_DRY_RUN:
+        return False
+    msg = f"[DRY-RUN] {action}: {details}" if details else f"[DRY-RUN] {action}"
+    print(msg, file=sys.stderr)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Client factory
 # ---------------------------------------------------------------------------
 
@@ -122,6 +136,8 @@ def cmd_card(ns):
 
 
 def cmd_create(ns):
+    if _dry_run_guard("create card", f"title='{ns.title}'"):
+        return
     fmt = ns.format
     result = _get_client().create_card(
         ns.title,
@@ -144,6 +160,8 @@ def cmd_create(ns):
 
 def cmd_feature(ns):
     """Scaffold one Hero feature plus Code/Design/(optional Art) sub-cards."""
+    if _dry_run_guard("scaffold feature", f"title='{ns.title}'"):
+        return
     spec = FeatureSpec.from_namespace(ns)
     fmt = spec.format
     result = _get_client().scaffold_feature(
@@ -175,6 +193,8 @@ def cmd_feature(ns):
 
 
 def cmd_update(ns):
+    if _dry_run_guard("update card(s)", f"ids={ns.card_ids}"):
+        return
     fmt = ns.format
     result = _get_client().update_cards(
         ns.card_ids,
@@ -206,21 +226,29 @@ def cmd_update(ns):
 
 
 def cmd_archive(ns):
+    if _dry_run_guard("archive card", ns.card_id):
+        return
     result = _get_client().archive_card(ns.card_id)
     mutation_response("Archived", ns.card_id, data=result.get("data"), fmt=ns.format)
 
 
 def cmd_unarchive(ns):
+    if _dry_run_guard("unarchive card", ns.card_id):
+        return
     result = _get_client().unarchive_card(ns.card_id)
     mutation_response("Unarchived", ns.card_id, data=result.get("data"), fmt=ns.format)
 
 
 def cmd_delete(ns):
+    if _dry_run_guard("delete card", ns.card_id):
+        return
     result = _get_client().delete_card(ns.card_id)
     mutation_response("Deleted", ns.card_id, data=result.get("data"), fmt=ns.format)
 
 
 def cmd_done(ns):
+    if _dry_run_guard("mark done", f"{len(ns.card_ids)} card(s)"):
+        return
     result = _get_client().mark_done(ns.card_ids)
     mutation_response(
         "Marked done", details=f"{len(ns.card_ids)} card(s)", data=result.get("data"), fmt=ns.format
@@ -228,6 +256,8 @@ def cmd_done(ns):
 
 
 def cmd_start(ns):
+    if _dry_run_guard("mark started", f"{len(ns.card_ids)} card(s)"):
+        return
     result = _get_client().mark_started(ns.card_ids)
     mutation_response(
         "Marked started",
@@ -256,6 +286,8 @@ def cmd_hand(ns):
             csv_formatter=format_cards_csv,
         )
     else:
+        if _dry_run_guard("add to hand", f"{len(ns.card_ids)} card(s)"):
+            return
         result = _get_client().add_to_hand(ns.card_ids)
         mutation_response(
             "Added to hand", details=f"{len(ns.card_ids)} card(s)", data=result.get("data"), fmt=fmt
@@ -263,6 +295,8 @@ def cmd_hand(ns):
 
 
 def cmd_unhand(ns):
+    if _dry_run_guard("remove from hand", f"{len(ns.card_ids)} card(s)"):
+        return
     result = _get_client().remove_from_hand(ns.card_ids)
     mutation_response(
         "Removed from hand",
@@ -303,6 +337,8 @@ def cmd_standup(ns):
 
 
 def cmd_comment(ns):
+    if _dry_run_guard("comment on card", ns.card_id):
+        return
     fmt = ns.format
     card_id = ns.card_id
     selected = [bool(ns.thread), bool(ns.close), bool(ns.reopen)]
@@ -351,6 +387,8 @@ def cmd_gdd(ns):
 
 
 def cmd_gdd_sync(ns):
+    if ns.apply and _dry_run_guard("gdd-sync --apply", f"project='{ns.project}'"):
+        return
     fmt = ns.format
     if not ns.project:
         from codecks_cli.cards import load_project_names
@@ -369,7 +407,7 @@ def cmd_gdd_sync(ns):
         ns.project,
         target_section=ns.section,
         apply=ns.apply,
-        quiet=ns.quiet,
+        quiet=config.RUNTIME_QUIET,
     )
     output(report, format_sync_report, fmt)
 
@@ -391,6 +429,90 @@ def cmd_generate_token(ns):
     result = generate_report_token(ns.label)
     print(f"Report Token created: {_mask_token(result['token'])}")
     print("Full token saved to .env as CODECKS_REPORT_TOKEN")
+
+
+def cmd_completion(ns):
+    """Generate shell completion script for bash, zsh, or fish."""
+    from codecks_cli.cli import build_parser
+
+    shell = ns.shell
+    parser = build_parser()
+
+    # Extract subcommand names and their options from parser internals
+    subcommands = []
+    sub_options: dict[str, list[str]] = {}
+    for action in parser._subparsers._actions:
+        if hasattr(action, "_name_parser_map"):
+            for name, subparser in sorted(action._name_parser_map.items()):
+                subcommands.append(name)
+                opts: list[str] = []
+                for act in subparser._actions:
+                    opts.extend(s for s in act.option_strings if s.startswith("--"))
+                sub_options[name] = opts
+            break
+
+    cmds_str = " ".join(subcommands)
+    global_opts = "--format --strict --dry-run --quiet --verbose --version --help"
+
+    if shell == "bash":
+        cases = []
+        for name in subcommands:
+            if sub_options[name]:
+                cases.append(f'        {name}) opts="{" ".join(sub_options[name])}" ;;')
+        cases_block = "\n".join(cases)
+        print(
+            f"_codecks_cli_complete() {{\n"
+            f'    local cur="${{COMP_WORDS[COMP_CWORD]}}"\n'
+            f'    local prev="${{COMP_WORDS[COMP_CWORD-1]}}"\n'
+            f'    local commands="{cmds_str}"\n'
+            f'    local global_opts="{global_opts}"\n'
+            f'    if [ "$COMP_CWORD" -eq 1 ]; then\n'
+            f'        COMPREPLY=($(compgen -W "$commands $global_opts" -- "$cur"))\n'
+            f"        return\n"
+            f"    fi\n"
+            f'    local cmd="${{COMP_WORDS[1]}}"\n'
+            f'    local opts=""\n'
+            f'    case "$cmd" in\n'
+            f"{cases_block}\n"
+            f"    esac\n"
+            f'    COMPREPLY=($(compgen -W "$opts $global_opts" -- "$cur"))\n'
+            f"}}\n"
+            f"complete -F _codecks_cli_complete codecks-cli\n"
+            f"complete -F _codecks_cli_complete codecks_api.py"
+        )
+    elif shell == "zsh":
+        desc_lines = []
+        for name in subcommands:
+            desc_lines.append(f"        '{name}:{name} command'")
+        descs = "\n".join(desc_lines)
+        print(
+            f"#compdef codecks-cli codecks_api.py\n"
+            f"\n"
+            f"_codecks_cli() {{\n"
+            f"    local -a commands\n"
+            f"    commands=(\n"
+            f"{descs}\n"
+            f"    )\n"
+            f'    _describe "command" commands\n'
+            f"}}\n"
+            f"\n"
+            f'_codecks_cli "$@"'
+        )
+    elif shell == "fish":
+        lines = [
+            "# Fish completions for codecks-cli",
+            f"set -l commands {cmds_str}",
+            f'complete -c codecks-cli -n "not __fish_seen_subcommand_from $commands" '
+            f'-a "{cmds_str}"',
+        ]
+        for name in subcommands:
+            if sub_options[name]:
+                for opt in sub_options[name]:
+                    flag = opt.lstrip("-")
+                    lines.append(
+                        f'complete -c codecks-cli -n "__fish_seen_subcommand_from {name}" -l {flag}'
+                    )
+        print("\n".join(lines))
 
 
 def cmd_dispatch(ns):
