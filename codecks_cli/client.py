@@ -42,6 +42,7 @@ from codecks_cli.cards import (
     list_hand,
     list_milestones,
     list_projects,
+    list_tags,
     load_project_names,
     load_users,
     remove_from_hand,
@@ -578,7 +579,15 @@ class CodecksClient:
             dict with card details including checklist, sub-cards,
             conversations, and hand status.
         """
-        result = get_card(card_id, archived=archived)
+        try:
+            result = get_card(card_id, archived=archived)
+        except CliError as e:
+            # get_card may 500 on sub-cards due to fields like checkboxStats.
+            # Retry with a minimal field set for graceful degradation.
+            if "HTTP 500" in str(e):
+                result = get_card(card_id, archived=archived, minimal=True)
+            else:
+                raise
         result["card"] = enrich_cards(result.get("card", {}), result.get("user"))
 
         # Check if this card is in hand (cached)
@@ -638,16 +647,16 @@ class CodecksClient:
                 entries = r.get("entries") or []
                 messages = []
                 for eid in entries:
-                    e = entry_data.get(eid, {})
-                    author_id = e.get("author")
+                    entry = entry_data.get(eid, {})
+                    author_id = entry.get("author")
                     author_name = (
                         user_data.get(author_id, {}).get("name", "?") if author_id else "?"
                     )
                     messages.append(
                         {
                             "author": author_name,
-                            "content": e.get("content", ""),
-                            "created_at": _get_field(e, "created_at", "createdAt") or "",
+                            "content": entry.get("content", ""),
+                            "created_at": _get_field(entry, "created_at", "createdAt") or "",
                         }
                     )
                 conversations.append(
@@ -736,6 +745,28 @@ class CodecksClient:
                     "card_count": len(info.get("cards", [])),
                 }
             )
+        return result
+
+    def list_tags(self) -> list[dict[str, Any]]:
+        """List all project-level tags (masterTags).
+
+        Returns:
+            list of tag dicts with id, title, and optional color/emoji.
+        """
+        raw = list_tags()
+        result = []
+        for tid, info in raw.get("masterTag", {}).items():
+            tag = {
+                "id": tid,
+                "title": info.get("title", tid),
+            }
+            color = info.get("color")
+            if color:
+                tag["color"] = color
+            emoji = info.get("emoji")
+            if emoji:
+                tag["emoji"] = emoji
+            result.append(tag)
         return result
 
     def list_activity(self, *, limit: int = 20) -> dict[str, Any]:
@@ -1310,8 +1341,7 @@ class CodecksClient:
             (spec.description.strip() + "\n\n" if spec.description else "") + "Success criteria:\n"
             "- [] Lane coverage agreed (Code/Design/Art/Audio)\n"
             "- [] Acceptance criteria validated\n"
-            "- [] Integration verified\n\n"
-            "Tags: #hero #feature"
+            "- [] Integration verified"
         )
         created: list[FeatureSubcard] = []
         created_ids: list[str] = []
@@ -1331,10 +1361,7 @@ class CodecksClient:
                 sub_body = (
                     "Scope:\n"
                     f"- {lane} lane execution for feature goal\n\n"
-                    "Checklist:\n"
-                    + "\n".join(f"- [] {line}" for line in checklist_lines)
-                    + "\n\nTags: "
-                    + " ".join(f"#{t}" for t in lane_tags)
+                    "Checklist:\n" + "\n".join(f"- [] {line}" for line in checklist_lines)
                 )
                 res = create_card(sub_title, sub_body)
                 sub_id = res.get("cardId")
@@ -1556,10 +1583,7 @@ class CodecksClient:
                     sub_body = (
                         "Scope:\n"
                         f"- {lane_name.capitalize()} lane execution for feature goal\n\n"
-                        "Checklist:\n"
-                        + "\n".join(f"- [] {item}" for item in checklist)
-                        + "\n\nTags: "
-                        + " ".join(f"#{t}" for t in lane_tags)
+                        "Checklist:\n" + "\n".join(f"- [] {item}" for item in checklist)
                     )
                     res = create_card(sub_title, sub_body)
                     sub_id = res.get("cardId")

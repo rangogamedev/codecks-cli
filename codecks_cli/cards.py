@@ -286,45 +286,61 @@ def _build_project_map(decks_result):
     return project_decks
 
 
-def get_card(card_id, *, archived=False):
+def get_card(card_id, *, archived=False, minimal=False):
     visibility = "archived" if archived else "default"
     card_filter = json.dumps({"cardId": card_id, "visibility": visibility})
-    q = {
-        "_root": [
-            {
-                "account": [
-                    {
-                        f"cards({card_filter})": [
-                            "title",
-                            "status",
-                            "priority",
-                            "content",
-                            "deckId",
-                            "effort",
-                            "createdAt",
-                            "milestoneId",
-                            "masterTags",
-                            "lastUpdatedAt",
-                            "isDoc",
-                            "checkboxStats",
-                            "parentCardId",
-                            {"assignee": ["name", "id"]},
-                            {"childCards": ["title", "status"]},
-                            {
-                                "resolvables": [
-                                    "context",
-                                    "isClosed",
-                                    "createdAt",
-                                    {"creator": ["name"]},
-                                    {"entries": ["content", "createdAt", {"author": ["name"]}]},
-                                ]
-                            },
-                        ]
-                    }
-                ]
-            }
+    if minimal:
+        # Reduced field set for sub-cards that may 500 with full fields.
+        # Drops checkboxStats and parentCard which can trigger API errors.
+        card_fields = [
+            "title",
+            "status",
+            "priority",
+            "content",
+            "deckId",
+            "effort",
+            "createdAt",
+            "milestoneId",
+            "masterTags",
+            "lastUpdatedAt",
+            "isDoc",
+            {"assignee": ["name", "id"]},
+            {"childCards": ["title", "status"]},
         ]
-    }
+    else:
+        card_fields = [
+            "title",
+            "status",
+            "priority",
+            "content",
+            "deckId",
+            "effort",
+            "createdAt",
+            "milestoneId",
+            "masterTags",
+            "lastUpdatedAt",
+            "isDoc",
+            "checkboxStats",
+            {"assignee": ["name", "id"]},
+            {"parentCard": ["title"]},
+            {"childCards": ["title", "status"]},
+            {
+                "resolvables": [
+                    "context",
+                    "isClosed",
+                    "createdAt",
+                    {"creator": ["name"]},
+                    {"entries": ["content", "createdAt", {"author": ["name"]}]},
+                ]
+            },
+        ]
+    q = {"_root": [{"account": [{f"cards({card_filter})": card_fields}]}]}
+    return query(q)
+
+
+def list_tags():
+    """Query project-level tags (masterTags) from the account."""
+    q = {"_root": [{"account": [{"masterTags": ["title", "id", "color", "emoji"]}]}]}
     return query(q)
 
 

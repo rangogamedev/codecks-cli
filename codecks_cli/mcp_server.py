@@ -126,6 +126,7 @@ _ALLOWED_METHODS = {
     "list_decks",
     "list_projects",
     "list_milestones",
+    "list_tags",
     "list_activity",
     "pm_focus",
     "standup",
@@ -357,6 +358,8 @@ _INPUT_LIMITS = {
     "message": 10_000,
     "observation": 500,
     "description": 50_000,
+    "feedback_message": 1000,
+    "feedback_context": 500,
 }
 
 
@@ -510,6 +513,12 @@ def list_projects() -> dict:
 def list_milestones() -> dict:
     """List all milestones with card counts."""
     return _finalize_tool_result(_call("list_milestones"))
+
+
+@mcp.tool()
+def list_tags() -> dict:
+    """List project-level tags (sanctioned taxonomy). Use these tag names with update_cards --tags."""
+    return _finalize_tool_result(_call("list_tags"))
 
 
 @mcp.tool()
@@ -878,6 +887,8 @@ def list_conversations(card_id: str) -> dict:
 
 _PLAYBOOK_PATH = os.path.join(os.path.dirname(__file__), "pm_playbook.md")
 _PREFS_PATH = os.path.join(_PROJECT_ROOT, ".pm_preferences.json")
+_FEEDBACK_PATH = os.path.join(_PROJECT_ROOT, ".cli_feedback.json")
+_FEEDBACK_MAX_ITEMS = 200
 
 
 @mcp.tool()
@@ -932,6 +943,114 @@ def save_workflow_preferences(observations: list[str]) -> dict:
         return _finalize_tool_result({"saved": len(observations)})
     except OSError as e:
         return _finalize_tool_result(_contract_error(f"Cannot save preferences: {e}", "error"))
+
+
+# -------------------------------------------------------------------
+# Feedback tools (local, no CodecksClient needed)
+# -------------------------------------------------------------------
+
+_FEEDBACK_CATEGORIES = {"missing_feature", "bug", "error", "improvement", "usability"}
+
+
+@mcp.tool()
+def save_cli_feedback(
+    category: Literal["missing_feature", "bug", "error", "improvement", "usability"],
+    message: str,
+    tool_name: str | None = None,
+    context: str | None = None,
+) -> dict:
+    """Save a CLI feedback item for the codecks-cli development team.
+
+    Use when you notice missing features, encounter errors, or identify
+    improvements during a PM session. Appends to .cli_feedback.json.
+    No auth needed.
+
+    Args:
+        category: Type of feedback.
+        message: The feedback itself (max 1000 chars).
+        tool_name: Which MCP tool or CLI command this relates to.
+        context: Brief session context (max 500 chars).
+    """
+    # Validate inputs
+    try:
+        message = _validate_input(message, "feedback_message")
+        if context is not None:
+            context = _validate_input(context, "feedback_context")
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    if category not in _FEEDBACK_CATEGORIES:
+        return _finalize_tool_result(
+            _contract_error(
+                f"Invalid category: {category!r}. "
+                f"Must be one of: {', '.join(sorted(_FEEDBACK_CATEGORIES))}",
+                "error",
+            )
+        )
+
+    # Build the feedback item
+    item: dict = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "category": category,
+        "message": message,
+    }
+    if tool_name is not None:
+        item["tool_name"] = tool_name
+    if context is not None:
+        item["context"] = context
+
+    # Load existing feedback (or start fresh)
+    items: list[dict] = []
+    try:
+        with open(_FEEDBACK_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            items = data["items"]
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass  # Start with empty list
+
+    # Append and cap at max items (remove oldest if over limit)
+    items.append(item)
+    if len(items) > _FEEDBACK_MAX_ITEMS:
+        items = items[-_FEEDBACK_MAX_ITEMS:]
+
+    # Atomic write
+    out_data = {
+        "items": items,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_FEEDBACK_PATH), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(out_data, f, indent=2)
+            os.replace(tmp_path, _FEEDBACK_PATH)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
+        return _finalize_tool_result({"saved": True, "total_items": len(items)})
+    except OSError as e:
+        return _finalize_tool_result(_contract_error(f"Cannot save feedback: {e}", "error"))
+
+
+@mcp.tool()
+def get_cli_feedback(
+    category: Literal["missing_feature", "bug", "error", "improvement", "usability"] | None = None,
+) -> dict:
+    """Read saved CLI feedback items. Optionally filter by category. No auth needed."""
+    try:
+        with open(_FEEDBACK_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+            return _finalize_tool_result({"found": False, "items": [], "count": 0})
+        items = data["items"]
+        if category is not None:
+            items = [i for i in items if i.get("category") == category]
+        return _finalize_tool_result({"found": bool(items), "items": items, "count": len(items)})
+    except FileNotFoundError:
+        return _finalize_tool_result({"found": False, "items": [], "count": 0})
+    except (json.JSONDecodeError, OSError) as e:
+        return _finalize_tool_result(_contract_error(f"Cannot read feedback: {e}", "error"))
 
 
 # -------------------------------------------------------------------

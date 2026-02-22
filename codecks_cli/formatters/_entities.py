@@ -57,6 +57,27 @@ def format_milestones_table(milestones):
     return "\n".join(lines)
 
 
+def format_tags_table(tags):
+    """Format project tags as a readable table.
+
+    Accepts list of flat dicts from CodecksClient.list_tags().
+    """
+    if not tags:
+        return "No project tags found."
+    cols = [("Tag", 25), ("Color", 10), ("Emoji", 6), ("ID", 0)]
+    rows = []
+    for tag in tags:
+        rows.append(
+            (
+                _trunc(tag.get("title", ""), 25),
+                tag.get("color", ""),
+                tag.get("emoji", ""),
+                tag.get("id", ""),
+            )
+        )
+    return _table(cols, rows, f"Total: {len(tags)} project tags")
+
+
 def format_stats_table(stats):
     """Format card stats as readable text."""
     lines = [f"Total cards: {stats['total']}"]

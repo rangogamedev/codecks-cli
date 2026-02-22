@@ -36,6 +36,7 @@ from codecks_cli.commands import (
     cmd_split_features,
     cmd_standup,
     cmd_start,
+    cmd_tags,
     cmd_unarchive,
     cmd_unhand,
     cmd_update,
@@ -86,6 +87,7 @@ Commands:
   decks                   - List all decks
   projects                - List all projects (derived from decks)
   milestones              - List all milestones
+  tags                    - List project-level tags (sanctioned taxonomy)
   activity                - Show recent activity feed
     --limit <n>             Number of events to show (default: 20)
   pm-focus                - Focus dashboard for PM triage
@@ -275,11 +277,12 @@ def build_parser():
     p.add_argument("json_query")
     p.set_defaults(func=cmd_query)
 
-    # --- account / decks / projects / milestones ---
+    # --- account / decks / projects / milestones / tags ---
     sub.add_parser("account").set_defaults(func=cmd_account)
     sub.add_parser("decks").set_defaults(func=cmd_decks)
     sub.add_parser("projects").set_defaults(func=cmd_projects)
     sub.add_parser("milestones").set_defaults(func=cmd_milestones)
+    sub.add_parser("tags").set_defaults(func=cmd_tags)
 
     # --- cards ---
     p = sub.add_parser("cards")

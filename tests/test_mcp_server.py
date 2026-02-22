@@ -117,6 +117,14 @@ class TestReadTools:
         assert result[0]["name"] == "MVP"
 
     @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_list_tags(self, MockClient):
+        MockClient.return_value = _mock_client(
+            list_tags=[{"id": "t1", "title": "Feature", "color": "#ff0000"}]
+        )
+        result = mcp_mod.list_tags()
+        assert result[0]["title"] == "Feature"
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
     def test_list_activity(self, MockClient):
         client = _mock_client(list_activity={"activity": {}})
         MockClient.return_value = client

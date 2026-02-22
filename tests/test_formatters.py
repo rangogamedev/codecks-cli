@@ -350,6 +350,31 @@ class TestFormatMilestonesTable:
 
 
 # ---------------------------------------------------------------------------
+# format_tags_table
+# ---------------------------------------------------------------------------
+
+
+class TestFormatTagsTable:
+    def test_formats_tags(self):
+        from codecks_cli.formatters import format_tags_table
+
+        tags = [
+            {"id": "t1", "title": "Feature", "color": "#ff0000", "emoji": "🚀"},
+            {"id": "t2", "title": "Bug"},
+        ]
+        result = format_tags_table(tags)
+        assert "Feature" in result
+        assert "Bug" in result
+        assert "#ff0000" in result
+        assert "Total: 2 project tags" in result
+
+    def test_no_tags(self):
+        from codecks_cli.formatters import format_tags_table
+
+        assert "No project tags" in format_tags_table([])
+
+
+# ---------------------------------------------------------------------------
 # format_gdd_table
 # ---------------------------------------------------------------------------
 
