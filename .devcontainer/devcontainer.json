@@ -3,6 +3,8 @@
   "dockerComposeFile": "../docker-compose.yml",
   "service": "shell",
   "workspaceFolder": "/app",
+  "containerUser": "codecks",
+  "remoteUser": "codecks",
   "customizations": {
     "vscode": {
       "extensions": [
