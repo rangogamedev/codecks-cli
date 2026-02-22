@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (613 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (623 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -45,7 +45,7 @@ codecks_cli/
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server.py         <- MCP server: 33 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server.py         <- MCP server: 36 tools wrapping CodecksClient (stdio, legacy/envelope modes)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 ```
 
@@ -114,10 +114,30 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 33 tools exposed (26 CodecksClient wrappers + 3 PM session tools + 4 planning tools)
+- 36 tools exposed (27 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 2 feedback tools)
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`
+
+## CLI Feedback (from the PM Agent)
+
+The PM agent ("Decks") at `C:\Users\USER\GitHubDirectory\AIAgentCodecks` uses this CLI daily and saves feedback about missing features, bugs, errors, and improvement ideas to **`.cli_feedback.json`** in this project root.
+
+**At the start of every dev session, read this file** to see what the PM agent has reported:
+```python
+import json
+with open(".cli_feedback.json") as f:
+    feedback = json.load(f)
+for item in feedback["items"]:
+    print(f"[{item['category']}] {item['message']}")
+```
+
+Or via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")`
+
+Feedback categories: `missing_feature`, `bug`, `error`, `improvement`, `usability`.
+Each item has: `timestamp`, `category`, `message`, optional `tool_name` and `context`.
+
+When you fix an issue reported in feedback, consider clearing those items or noting the fix. The file caps at 200 items (oldest removed automatically).
 
 ## Commands
 Use `py codecks_api.py <cmd> --help` for flags.

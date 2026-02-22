@@ -31,6 +31,7 @@ from codecks_cli.formatters._entities import (
     format_milestones_table,
     format_projects_table,
     format_stats_table,
+    format_tags_table,
 )
 from codecks_cli.formatters._gdd import (
     format_gdd_table,
@@ -64,6 +65,7 @@ __all__ = [
     "format_standup_table",
     "format_stats_table",
     "format_sync_report",
+    "format_tags_table",
     "mutation_response",
     "output",
     "pretty_print",

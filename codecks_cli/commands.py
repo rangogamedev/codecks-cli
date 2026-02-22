@@ -27,6 +27,7 @@ from codecks_cli.formatters import (
     format_standup_table,
     format_stats_table,
     format_sync_report,
+    format_tags_table,
     mutation_response,
     output,
 )
@@ -97,6 +98,10 @@ def cmd_projects(ns):
 
 def cmd_milestones(ns):
     output(_get_client().list_milestones(), format_milestones_table, ns.format)
+
+
+def cmd_tags(ns):
+    output(_get_client().list_tags(), format_tags_table, ns.format)
 
 
 def cmd_cards(ns):

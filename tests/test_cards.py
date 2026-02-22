@@ -568,3 +568,64 @@ class TestResolvers:
         with pytest.raises(CliError) as exc_info:
             resolve_milestone_id("Nonexistent")
         assert exc_info.value.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# list_tags
+# ---------------------------------------------------------------------------
+
+
+class TestListTags:
+    @patch("codecks_cli.cards.query")
+    def test_queries_master_tags(self, mock_query):
+        from codecks_cli.cards import list_tags
+
+        mock_query.return_value = {
+            "masterTag": {
+                "t1": {"title": "Feature", "color": "#ff0000"},
+            }
+        }
+        result = list_tags()
+        assert "masterTag" in result
+        mock_query.assert_called_once()
+        q_arg = mock_query.call_args[0][0]
+        # Verify query structure targets masterTags
+        assert "masterTags" in str(q_arg)
+
+
+# ---------------------------------------------------------------------------
+# get_card minimal fallback
+# ---------------------------------------------------------------------------
+
+
+class TestGetCardMinimal:
+    @patch("codecks_cli.cards.query")
+    def test_minimal_uses_reduced_fields(self, mock_query):
+        from codecks_cli.cards import get_card
+
+        mock_query.return_value = {
+            "card": {
+                "sub-1": {"title": "Sub Card", "status": "started"},
+            }
+        }
+        get_card("sub-1", minimal=True)
+        q_arg = mock_query.call_args[0][0]
+        q_str = str(q_arg)
+        # Minimal should NOT include checkboxStats or parentCard
+        assert "checkboxStats" not in q_str
+        assert "parentCard" not in q_str
+
+    @patch("codecks_cli.cards.query")
+    def test_normal_includes_full_fields(self, mock_query):
+        from codecks_cli.cards import get_card
+
+        mock_query.return_value = {
+            "card": {
+                "c1": {"title": "Card", "status": "started"},
+            }
+        }
+        get_card("c1", minimal=False)
+        q_arg = mock_query.call_args[0][0]
+        q_str = str(q_arg)
+        # Normal should include checkboxStats
+        assert "checkboxStats" in q_str

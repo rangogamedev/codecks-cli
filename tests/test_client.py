@@ -314,6 +314,54 @@ class TestGetCard:
         assert detail["conversations"][0]["status"] == "open"
         assert detail["conversations"][0]["messages"][0]["author"] == "Alice"
 
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_get_card_500_fallback_retries_minimal(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        """When get_card raises HTTP 500, retry with minimal=True."""
+        mock_get.side_effect = [
+            CliError("HTTP 500 Internal Server Error"),
+            {
+                "card": {
+                    "sub-card-1": {
+                        "title": "Sub Card",
+                        "status": "started",
+                        "content": "Sub Card\nBody",
+                    }
+                },
+                "user": {},
+            },
+        ]
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        detail = client.get_card("sub-card-1")
+        assert detail["title"] == "Sub Card"
+        assert mock_get.call_count == 2
+        # First call: normal, second call: minimal=True
+        _, kwargs2 = mock_get.call_args_list[1]
+        assert kwargs2.get("minimal") is True
+
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_get_card_non_500_error_propagates(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        """Non-500 errors from get_card should propagate, not retry."""
+        mock_get.side_effect = CliError("HTTP 404 Not Found")
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        with pytest.raises(CliError) as exc_info:
+            client.get_card("missing-card")
+        assert "HTTP 404" in str(exc_info.value)
+        assert mock_get.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # create_card
@@ -941,6 +989,33 @@ class TestListDecksProjectsMilestones:
         assert len(result) == 1
         assert result[0]["name"] == "MVP"
         assert result[0]["card_count"] == 2
+
+    @patch("codecks_cli.client.list_tags")
+    def test_list_tags(self, mock_tags):
+        mock_tags.return_value = {
+            "masterTag": {
+                "t1": {"title": "Feature", "color": "#ff0000", "emoji": "🚀"},
+                "t2": {"title": "Bug"},
+            }
+        }
+        client = _client()
+        result = client.list_tags()
+        assert len(result) == 2
+        titles = {t["title"] for t in result}
+        assert titles == {"Feature", "Bug"}
+        feature = next(t for t in result if t["title"] == "Feature")
+        assert feature["color"] == "#ff0000"
+        assert feature["emoji"] == "🚀"
+        bug = next(t for t in result if t["title"] == "Bug")
+        assert "color" not in bug
+        assert "emoji" not in bug
+
+    @patch("codecks_cli.client.list_tags")
+    def test_list_tags_empty(self, mock_tags):
+        mock_tags.return_value = {"masterTag": {}}
+        client = _client()
+        result = client.list_tags()
+        assert result == []
 
     @patch("codecks_cli.client.list_activity")
     def test_list_activity(self, mock_activity):
