@@ -106,7 +106,6 @@ def list_cards(
         "priority",
         "deckId",
         "effort",
-        "severity",
         "createdAt",
         "milestoneId",
         "masterTags",
@@ -287,8 +286,9 @@ def _build_project_map(decks_result):
     return project_decks
 
 
-def get_card(card_id):
-    card_filter = json.dumps({"cardId": card_id, "visibility": "default"})
+def get_card(card_id, *, archived=False):
+    visibility = "archived" if archived else "default"
+    card_filter = json.dumps({"cardId": card_id, "visibility": visibility})
     q = {
         "_root": [
             {
@@ -301,7 +301,6 @@ def get_card(card_id):
                             "content",
                             "deckId",
                             "effort",
-                            "severity",
                             "createdAt",
                             "milestoneId",
                             "masterTags",
@@ -504,7 +503,7 @@ def archive_card(card_id):
         "/dispatch/cards/update",
         {
             "id": card_id,
-            "isArchived": True,
+            "visibility": "archived",
         },
     )
 
@@ -515,7 +514,7 @@ def unarchive_card(card_id):
         "/dispatch/cards/update",
         {
             "id": card_id,
-            "isArchived": False,
+            "visibility": "default",
         },
     )
 
@@ -557,18 +556,25 @@ def bulk_status(card_ids, status):
 
 
 def _get_user_id():
-    """Return the current user's ID. Reads from .env, falls back to API."""
+    """Return the current user's ID. Reads from .env, falls back to API (cached)."""
     if config.USER_ID:
         return config.USER_ID
+    cached = config._cache.get("user_id")
+    if cached:
+        return cached
     # Auto-discover: query account roles, pick the first owner
     result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
     for entry in (result.get("accountRole") or {}).values():
         if entry.get("role") == "owner":
-            return _get_field(entry, "user_id", "userId")
+            uid = _get_field(entry, "user_id", "userId")
+            if uid:
+                config._cache["user_id"] = uid
+                return uid
     # Fallback: first role found
     for entry in (result.get("accountRole") or {}).values():
         uid = _get_field(entry, "user_id", "userId")
         if uid:
+            config._cache["user_id"] = uid
             return uid
     raise CliError("[ERROR] Could not determine your user ID. Run: py codecks_api.py setup")
 

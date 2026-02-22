@@ -112,8 +112,52 @@ def _finalize_tool_result(result):
     return result
 
 
+_ALLOWED_METHODS = {
+    "get_account",
+    "list_cards",
+    "get_card",
+    "list_decks",
+    "list_projects",
+    "list_milestones",
+    "list_activity",
+    "pm_focus",
+    "standup",
+    "list_hand",
+    "add_to_hand",
+    "remove_from_hand",
+    "create_card",
+    "update_cards",
+    "mark_done",
+    "mark_started",
+    "archive_card",
+    "unarchive_card",
+    "delete_card",
+    "scaffold_feature",
+    "split_features",
+    "create_comment",
+    "reply_comment",
+    "close_comment",
+    "list_conversations",
+    "reopen_comment",
+}
+
+
+def _validate_uuid(value: str, field: str = "card_id") -> str:
+    """Validate that a string is a 36-char UUID. Raises CliError if not."""
+    if not isinstance(value, str) or len(value) != 36 or value.count("-") != 4:
+        raise CliError(f"[ERROR] {field} must be a full 36-char UUID, got: {value!r}")
+    return value
+
+
+def _validate_uuid_list(values: list[str], field: str = "card_ids") -> list[str]:
+    """Validate a list of UUID strings."""
+    return [_validate_uuid(v, field) for v in values]
+
+
 def _call(method_name: str, **kwargs):
     """Call a CodecksClient method, converting exceptions to error dicts."""
+    if method_name not in _ALLOWED_METHODS:
+        return _contract_error(f"Unknown method: {method_name}", "error")
     try:
         client = _get_client()
         return getattr(client, method_name)(**kwargs)
@@ -121,6 +165,8 @@ def _call(method_name: str, **kwargs):
         return _contract_error(str(e), "setup")
     except CliError as e:
         return _contract_error(str(e), "error")
+    except Exception as e:
+        return _contract_error(f"Unexpected error: {e}", "error")
 
 
 _SLIM_DROP = {
@@ -416,18 +462,25 @@ def get_card(
     card_id: str,
     include_content: bool = True,
     include_conversations: bool = True,
+    archived: bool = False,
 ) -> dict:
     """Get full card details (content, checklist, sub-cards, conversations, hand status).
 
     Args:
         include_content: False to strip body (keeps title) for metadata-only checks.
         include_conversations: False to skip comment thread resolution.
+        archived: True to look up archived cards.
     """
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     result = _call(
         "get_card",
         card_id=card_id,
         include_content=include_content,
         include_conversations=include_conversations,
+        archived=archived,
     )
     if isinstance(result, dict) and result.get("ok") is not False:
         return _finalize_tool_result(_sanitize_card(result))
@@ -511,12 +564,20 @@ def list_hand() -> dict:
 @mcp.tool()
 def add_to_hand(card_ids: list[str]) -> dict:
     """Add cards to the user's hand."""
+    try:
+        _validate_uuid_list(card_ids)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("add_to_hand", card_ids=card_ids))
 
 
 @mcp.tool()
 def remove_from_hand(card_ids: list[str]) -> dict:
     """Remove cards from the user's hand."""
+    try:
+        _validate_uuid_list(card_ids)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("remove_from_hand", card_ids=card_ids))
 
 
@@ -570,6 +631,7 @@ def update_cards(
     owner: str | None = None,
     tags: str | None = None,
     doc: Literal["true", "false"] | None = None,
+    continue_on_error: bool = False,
 ) -> dict:
     """Update card properties. Doc cards: only owner/tags/milestone/deck/title/content/hero.
 
@@ -581,8 +643,10 @@ def update_cards(
         hero: Parent card UUID, or 'none' to detach.
         owner: Name, or 'none' to unassign.
         tags: Comma-separated, or 'none' to clear all.
+        continue_on_error: If True, continue updating remaining cards after a failure.
     """
     try:
+        _validate_uuid_list(card_ids)
         if title is not None:
             title = _validate_input(title, "title")
         if content is not None:
@@ -604,6 +668,7 @@ def update_cards(
             owner=owner,
             tags=tags,
             doc=doc,
+            continue_on_error=continue_on_error,
         )
     )
 
@@ -611,30 +676,50 @@ def update_cards(
 @mcp.tool()
 def mark_done(card_ids: list[str]) -> dict:
     """Mark cards as done."""
+    try:
+        _validate_uuid_list(card_ids)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("mark_done", card_ids=card_ids))
 
 
 @mcp.tool()
 def mark_started(card_ids: list[str]) -> dict:
     """Mark cards as started."""
+    try:
+        _validate_uuid_list(card_ids)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("mark_started", card_ids=card_ids))
 
 
 @mcp.tool()
 def archive_card(card_id: str) -> dict:
     """Archive a card (reversible)."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("archive_card", card_id=card_id))
 
 
 @mcp.tool()
 def unarchive_card(card_id: str) -> dict:
     """Restore an archived card."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("unarchive_card", card_id=card_id))
 
 
 @mcp.tool()
 def delete_card(card_id: str) -> dict:
     """Permanently delete a card. Cannot be undone — use archive_card if reversibility needed."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("delete_card", card_id=card_id))
 
 
@@ -715,6 +800,7 @@ def split_features(
 def create_comment(card_id: str, message: str) -> dict:
     """Start a new comment thread on a card."""
     try:
+        _validate_uuid(card_id)
         message = _validate_input(message, "message")
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
@@ -738,18 +824,30 @@ def reply_comment(thread_id: str, message: str) -> dict:
 @mcp.tool()
 def close_comment(thread_id: str, card_id: str) -> dict:
     """Close (resolve) a comment thread."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("close_comment", thread_id=thread_id, card_id=card_id))
 
 
 @mcp.tool()
 def reopen_comment(thread_id: str, card_id: str) -> dict:
     """Reopen a closed comment thread."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(_call("reopen_comment", thread_id=thread_id, card_id=card_id))
 
 
 @mcp.tool()
 def list_conversations(card_id: str) -> dict:
     """List all comment threads on a card with messages and thread IDs."""
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     result = _call("list_conversations", card_id=card_id)
     if isinstance(result, dict) and result.get("ok") is not False:
         return _finalize_tool_result(_sanitize_conversations(result))

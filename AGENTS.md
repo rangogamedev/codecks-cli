@@ -14,6 +14,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
+- **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
 
@@ -82,7 +83,8 @@ Methods use keyword-only args, return flat dicts (AI-agent-friendly). Map 1:1 to
 ## API Pitfalls (will cause bugs if ignored)
 - Response: snake_case. Query: camelCase. Use `_get_field(d, snake, camel)` (in `_utils.py`) for safe lookups.
 - Query cards: `cards({"cardId":"...", "visibility":"default"})` — never `card({"id":...})` (500).
-- 500-error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`. Use `assignee` relation instead of `assigneeId` field.
+- 500-error fields: `id`/`updatedAt`/`assigneeId`/`parentCardId`/`dueAt`/`creatorId`/`severity`/`isArchived`. Use `assignee` relation instead of `assigneeId` field.
+- Archive/unarchive: use `visibility` field (`"archived"`/`"default"`) in dispatch update, NOT `isArchived` (silently ignored).
 - Card title = first line of `content` field.
 - Rate limit: 40 req / 5 sec. HTTP 429 = specific error message.
 - Hand: `queueEntries` (not `handCards`). Add via `handQueue/setCardOrders`, remove via `handQueue/removeCards`.
@@ -105,6 +107,8 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 3. `update_card()` must pass None values through (clear ops: `--priority null` etc.)
 4. `_get_field()` uses key-presence check, not truthiness (`False`/`0` preserved)
 5. `get_card()` finds requested card by ID match, not first dict iteration result
+6. `severity` field causes API 500 — removed from card queries (`list_cards`, `get_card`)
+7. Archive uses `visibility: "archived"` not `isArchived: True` (silently ignored by API)
 
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
@@ -117,6 +121,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## Commands
 Use `py codecks_api.py <cmd> --help` for flags.
 - `cards` supports pagination flags: `--limit <n>` and `--offset <n>` (non-negative).
+- `split-features` batch-splits feature cards into Code/Design/Art sub-cards (use `--dry-run` first).
 
 ## Git
 - Commit style: short present tense ("Add X", "Fix Y")

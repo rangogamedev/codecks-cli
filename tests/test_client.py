@@ -13,7 +13,6 @@ from codecks_cli.client import (
     _flatten_cards,
     _guard_duplicate_title,
     _sort_cards,
-    _to_legacy_format,
 )
 from codecks_cli.exceptions import CliError, SetupError
 
@@ -47,14 +46,14 @@ class TestFlattenCards:
     def test_empty_dict_returns_empty_list(self):
         assert _flatten_cards({}) == []
 
-    def test_round_trip_with_to_legacy(self):
+    def test_preserves_original_values(self):
         cards_dict = {
             "c1": {"title": "X", "status": "done"},
             "c2": {"title": "Y", "status": "started"},
         }
         flat = _flatten_cards(cards_dict)
-        legacy = _to_legacy_format(flat)
-        assert legacy == cards_dict
+        assert flat[0]["title"] == "X"
+        assert flat[1]["title"] == "Y"
 
 
 # ---------------------------------------------------------------------------
@@ -788,52 +787,6 @@ class TestComments:
         client = _client()
         result = client.reopen_comment("t1", "c1")
         assert result["ok"] is True
-
-
-# ---------------------------------------------------------------------------
-# Raw API
-# ---------------------------------------------------------------------------
-
-
-class TestRawAPI:
-    @patch("codecks_cli.client.query")
-    def test_raw_query_with_dict(self, mock_query):
-        mock_query.return_value = {"account": {"a1": {"name": "Test"}}}
-        client = _client()
-        result = client.raw_query({"_root": [{"account": ["name"]}]})
-        assert result["account"]["a1"]["name"] == "Test"
-
-    @patch("codecks_cli.client.query")
-    def test_raw_query_with_string(self, mock_query):
-        mock_query.return_value = {"data": True}
-        client = _client()
-        result = client.raw_query('{"_root": [{"account": ["name"]}]}')
-        assert result["data"] is True
-
-    @patch("codecks_cli.client.dispatch")
-    def test_raw_dispatch(self, mock_dispatch):
-        mock_dispatch.return_value = {"ok": True}
-        client = _client()
-        result = client.raw_dispatch("cards/update", {"id": "c1", "status": "done"})
-        assert result["ok"] is True
-
-    def test_raw_query_strict_rejects_no_root(self, monkeypatch):
-        from codecks_cli import config
-
-        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
-        client = _client()
-        with pytest.raises(CliError) as exc_info:
-            client.raw_query({"foo": "bar"})
-        assert "non-empty '_root' array" in str(exc_info.value)
-
-    def test_raw_dispatch_strict_rejects_no_action(self, monkeypatch):
-        from codecks_cli import config
-
-        monkeypatch.setattr(config, "RUNTIME_STRICT", True)
-        client = _client()
-        with pytest.raises(CliError) as exc_info:
-            client.raw_dispatch("cards", {"id": "c1"})
-        assert "dispatch path should include action segment" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

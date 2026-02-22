@@ -9,6 +9,7 @@ Last updated: 2026-02-21 | Version: 0.4.0
 - CHANGELOG v0.4.0 backfilled with full architecture refactoring, MCP, CodecksClient, new flags
 - pyproject.toml metadata: authors, keywords, classifiers, package-data, URLs
 - CONTRIBUTING.md, PR template modernized
+- Added `PROJECT_INDEX.md` (fast navigation map) and aligned memory ownership to the Claude project memory file
 
 ### Architecture Refactoring (v0.4.0)
 - `exceptions.py` — all exception classes (`CliError`, `SetupError`, `HTTPError`)
@@ -34,12 +35,17 @@ Last updated: 2026-02-21 | Version: 0.4.0
 - `--version` flag, `completion` command (bash/zsh/fish)
 - `--format csv`, `--milestone` filter, input validation, priority labels
 
+### Multi-Agent Support
+- `AGENTS.md` — canonical agent-agnostic project instructions
+- `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules` — pointer files for other AI agents
+- Any AI coding agent (GPT Codex, Copilot, Cursor, Windsurf) can now pick up and work on this project
+
 ## Next Work
 1. **Open-LLM-VTuber fork** — register codecks MCP server in `mcp_servers.json`
 2. **PyPI publish** — `python -m build && twine upload dist/*`
 3. **GitHub Actions release** — auto-publish on tag push
 
 ## Stats
-- 491 tests, 12 test files, 22 source modules
+- 537 tests, 12 test files, 22 source modules
 - 28 MCP tools, 27 CodecksClient methods
 - Zero runtime dependencies

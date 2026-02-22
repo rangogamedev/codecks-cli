@@ -19,8 +19,6 @@ from codecks_cli import config
 from codecks_cli._utils import _get_field, _parse_iso_timestamp
 from codecks_cli.api import (
     _check_token,
-    _safe_json_parse,
-    dispatch,
     query,
 )
 from codecks_cli.cards import (
@@ -199,6 +197,19 @@ def _guard_duplicate_title(title, allow_duplicate=False, context="card"):
     return warnings
 
 
+def _rollback_created(created_ids: list[str]):
+    """Archive created cards in reverse order for rollback. Returns (rolled_back, failed)."""
+    rolled_back = []
+    rollback_failed = []
+    for cid in reversed(created_ids):
+        try:
+            archive_card(cid)
+            rolled_back.append(cid)
+        except Exception:
+            rollback_failed.append(cid)
+    return rolled_back, rollback_failed
+
+
 def _normalize_dispatch_path(path):
     """Normalize and validate a dispatch path segment."""
     normalized = (path or "").strip()
@@ -219,17 +230,6 @@ def _flatten_cards(cards_dict):
         flat = dict(card)
         flat["id"] = cid
         result.append(flat)
-    return result
-
-
-def _to_legacy_format(cards_list):
-    """Convert flat card list back to {uuid: card_data} dict for formatters."""
-    result = {}
-    for card in cards_list:
-        card_copy = dict(card)
-        cid = card_copy.pop("id", None)
-        if cid:
-            result[cid] = card_copy
     return result
 
 
@@ -541,6 +541,7 @@ class CodecksClient:
         *,
         include_content: bool = True,
         include_conversations: bool = True,
+        archived: bool = False,
     ) -> dict[str, Any]:
         """Get full details for a single card.
 
@@ -548,12 +549,13 @@ class CodecksClient:
             card_id: The card's UUID or short ID.
             include_content: If False, strip the content field (keep title).
             include_conversations: If False, skip conversation resolution.
+            archived: If True, look up archived cards instead of active ones.
 
         Returns:
             dict with card details including checklist, sub-cards,
             conversations, and hand status.
         """
-        result = get_card(card_id)
+        result = get_card(card_id, archived=archived)
         result["card"] = enrich_cards(result.get("card", {}), result.get("user"))
 
         # Check if this card is in hand (cached)
@@ -1032,7 +1034,7 @@ class CodecksClient:
             update_kwargs["priority"] = None if priority == "null" else priority
 
         if effort is not None:
-            if effort == "null" or effort is None:
+            if effort == "null":
                 update_kwargs["effort"] = None
             else:
                 try:
@@ -1279,17 +1281,6 @@ class CodecksClient:
         created: list[FeatureSubcard] = []
         created_ids: list[str] = []
 
-        def _rollback_created_ids():
-            rolled_back = []
-            rollback_failed = []
-            for cid in reversed(created_ids):
-                try:
-                    archive_card(cid)
-                    rolled_back.append(cid)
-                except Exception:
-                    rollback_failed.append(cid)
-            return rolled_back, rollback_failed
-
         try:
             hero_result = create_card(hero_title, hero_body)
             hero_id = hero_result.get("cardId")
@@ -1356,7 +1347,7 @@ class CodecksClient:
                     ],
                 )
         except SetupError as err:
-            rolled_back, rollback_failed = _rollback_created_ids()
+            rolled_back, rollback_failed = _rollback_created(created_ids)
             detail = (
                 f"{err}\n[ERROR] Rollback archived "
                 f"{len(rolled_back)}/{len(created_ids)} created cards."
@@ -1365,7 +1356,7 @@ class CodecksClient:
                 detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
             raise SetupError(detail) from err
         except Exception as err:
-            rolled_back, rollback_failed = _rollback_created_ids()
+            rolled_back, rollback_failed = _rollback_created(created_ids)
             detail = (
                 f"[ERROR] Feature scaffold failed: {err}\n"
                 f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
@@ -1432,12 +1423,10 @@ class CodecksClient:
         )
 
         # Resolve deck IDs upfront (fail fast)
-        source_deck_id = resolve_deck_id(spec.deck)
+        resolve_deck_id(spec.deck)  # validate source deck exists
         code_deck_id = resolve_deck_id(spec.code_deck)
         design_deck_id = resolve_deck_id(spec.design_deck)
         art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
-        # Suppress unused variable warning — art_deck_id is used in the loop below
-        _ = source_deck_id
 
         # List cards in source deck (lightweight — no content fetched)
         result = self.list_cards(deck=spec.deck)
@@ -1447,17 +1436,6 @@ class CodecksClient:
         skipped: list[dict[str, Any]] = []
         notes: list[str] = []
         created_ids: list[str] = []
-
-        def _rollback():
-            rolled_back = []
-            rollback_failed = []
-            for cid in reversed(created_ids):
-                try:
-                    archive_card(cid)
-                    rolled_back.append(cid)
-                except Exception:
-                    rollback_failed.append(cid)
-            return rolled_back, rollback_failed
 
         for card in all_cards:
             cid = card.get("id", "")
@@ -1498,9 +1476,7 @@ class CodecksClient:
                     checklist = lanes.get(lane_name, [])
                     sub_title = f"[{lane_name.capitalize()}] {title}"
                     subs.append(FeatureSubcard(lane=lane_name, id="(dry-run)", title=sub_title))
-                    notes_items = [f"  {lane_name}: {len(checklist)} items"]
-                    if notes_items:
-                        notes.extend(notes_items)
+                    notes.append(f"  {lane_name}: {len(checklist)} items")
                 details.append(
                     SplitFeatureDetail(
                         feature_id=cid,
@@ -1551,7 +1527,7 @@ class CodecksClient:
                     )
                 )
             except SetupError as err:
-                rolled_back, rollback_failed = _rollback()
+                rolled_back, rollback_failed = _rollback_created(created_ids)
                 detail_msg = (
                     f"{err}\n[ERROR] Rollback archived "
                     f"{len(rolled_back)}/{len(created_ids)} created cards."
@@ -1560,7 +1536,7 @@ class CodecksClient:
                     detail_msg += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
                 raise SetupError(detail_msg) from err
             except Exception as err:
-                rolled_back, rollback_failed = _rollback()
+                rolled_back, rollback_failed = _rollback_created(created_ids)
                 detail_msg = (
                     f"[ERROR] Split-features failed: {err}\n"
                     f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
@@ -1656,59 +1632,3 @@ class CodecksClient:
             createdAt), and 'user' (referenced users).
         """
         return get_conversations(card_id)  # type: ignore[no-any-return]
-
-    # -------------------------------------------------------------------
-    # Raw API commands
-    # -------------------------------------------------------------------
-
-    def raw_query(self, query_json: dict | str) -> dict[str, Any]:
-        """Execute a raw query against the Codecks API.
-
-        Args:
-            query_json: Query as a dict or JSON string.
-
-        Returns:
-            Raw API response.
-        """
-        if isinstance(query_json, str):
-            from codecks_cli.models import ObjectPayload
-
-            q = ObjectPayload.from_value(_safe_json_parse(query_json, "query"), "query").data
-        else:
-            q = query_json
-        if config.RUNTIME_STRICT:
-            root = q.get("_root")
-            if not isinstance(root, list) or not root:
-                raise CliError(
-                    "[ERROR] Strict mode: query payload must include non-empty '_root' array."
-                )
-        return query(q)  # type: ignore[no-any-return]
-
-    def raw_dispatch(self, path: str, data: dict | str) -> dict[str, Any]:
-        """Execute a raw dispatch call against the Codecks API.
-
-        Args:
-            path: Dispatch path (e.g. 'cards/update').
-            data: Payload as a dict or JSON string.
-
-        Returns:
-            Raw API response.
-        """
-        normalized = _normalize_dispatch_path(path)
-        if isinstance(data, str):
-            from codecks_cli.models import ObjectPayload
-
-            payload = ObjectPayload.from_value(
-                _safe_json_parse(data, "dispatch data"), "dispatch data"
-            ).data
-        else:
-            payload = data
-        if config.RUNTIME_STRICT:
-            if "/" not in normalized:
-                raise CliError(
-                    "[ERROR] Strict mode: dispatch path should include action "
-                    "segment, e.g. cards/update."
-                )
-            if not payload:
-                raise CliError("[ERROR] Strict mode: dispatch payload cannot be empty.")
-        return dispatch(normalized, payload)  # type: ignore[no-any-return]

@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing! This is a small, focused project and contributions of all kinds are welcome.
 
-For architecture details, see `CLAUDE.md`. For current project state, see `HANDOFF.md`.
+For architecture details, see `AGENTS.md` (agent-agnostic) or `CLAUDE.md` (Claude Code). For current project state, see `HANDOFF.md`.
 
 ## Development setup
 
@@ -73,7 +73,7 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 
 ## Testing
 
-The test suite has **491 tests** across 12 test files. All must pass before submitting:
+The test suite has **537 tests** across 12 test files. All must pass before submitting:
 
 ```bash
 pwsh -File scripts/run-tests.ps1
