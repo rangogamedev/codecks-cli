@@ -182,6 +182,7 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill
 ## Hooks (`.claude/settings.json`)
 - **PreToolUse** `Edit|Write`: blocks edits to `.env` and `.gdd_tokens.json` (secret protection)
 - **PostToolUse** `Edit|Write`: auto-formats `.py` files with ruff after edits
+- **PostToolUse** `Edit|Write`: auto-runs matching test file after source edits (`codecks_cli/X.py` -> `tests/test_X.py`; formatters/* -> `test_formatters.py`)
 
 ## Scripts (`scripts/`)
 - `py scripts/project_meta.py` — project metadata JSON (version, test count, MCP tools, modules). `--save` writes `.project-meta.json`, `--field tests.count` for single values.
