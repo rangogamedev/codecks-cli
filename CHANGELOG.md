@@ -4,6 +4,13 @@ All notable changes to codecks-cli will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- `--parent <id>` flag on `create` command — nest new cards as sub-cards under a parent card
+  - Also exposed via MCP `create_card` tool (`parent` parameter)
+  - Uses the existing two-step create-then-update pattern internally
+
 ## [0.4.0] - 2026-02-19
 
 ### Added
