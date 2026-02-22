@@ -12,7 +12,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
 - **Test**: `pwsh -File scripts/run-tests.ps1` (627 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
@@ -43,7 +43,7 @@ codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                <- argparse, build_parser(), main() dispatch
   commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
-  client.py             <- CodecksClient: 28 public methods (the API surface, stable mutation contracts)
+  client.py             <- CodecksClient: 27 public methods (the API surface, stable mutation contracts)
   cards.py              <- Card CRUD, hand, conversations, enrichment
   api.py                <- HTTP layer: query(), dispatch(), retries, token check
   config.py             <- Env, tokens, constants, runtime state, contract settings
@@ -131,6 +131,8 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 5. `get_card()` finds requested card by ID match, not first dict iteration result
 6. `severity` field causes API 500 — removed from card queries (`list_cards`, `get_card`)
 7. Archive uses `visibility: "archived"` not `isArchived: True` (silently ignored by API)
+8. `parentCardId` in get_card query causes HTTP 500 for sub-cards — use `{"parentCard": ["title"]}` relation instead
+9. Tags in card body text (`#tag`) create deprecated user-style tags — use `masterTags` dispatch field for project tags
 
 ## MCP Server
 - Install: `py -m pip install .[mcp]`

@@ -27,7 +27,7 @@ def _setup_discover_projects():
         print("  Could not fetch decks. Skipping project discovery.")
         return
 
-    project_decks = {}
+    project_decks: dict[str, list[str]] = {}
     for _key, deck in decks_result.get("deck", {}).items():
         pid = _get_field(deck, "project_id", "projectId")
         if pid:
@@ -75,7 +75,7 @@ def _setup_discover_milestones():
         return
 
     # Group cards by milestone
-    milestone_cards = {}
+    milestone_cards: dict[str, list[str]] = {}
     for _key, card in cards_result.get("card", {}).items():
         mid = _get_field(card, "milestone_id", "milestoneId")
         if mid:
@@ -130,6 +130,8 @@ def _setup_discover_user():
     users = []
     for entry in roles.values():
         uid = entry.get("userId") or entry.get("user_id")
+        if not uid:
+            continue
         role = entry.get("role", "")
         udata = (result.get("user") or {}).get(uid, {})
         name = udata.get("name", "")
@@ -250,7 +252,8 @@ def cmd_setup():
         account_result = _try_call(get_account)
 
         if account_result and account_result.get("account"):
-            acc_name = next(iter(account_result["account"].values()), {}).get("name", "?")
+            acc_data = next(iter(account_result["account"].values()), None)
+            acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token is valid! Connected to: {acc_name}")
             print()
             choice = input(
@@ -342,7 +345,8 @@ def cmd_setup():
         print("  Validating...")
         account_result = _try_call(get_account)
         if account_result and account_result.get("account"):
-            acc_name = next(iter(account_result["account"].values()), {}).get("name", "?")
+            acc_data = next(iter(account_result["account"].values()), None)
+            acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token works! Connected to: {acc_name}")
             break
         else:

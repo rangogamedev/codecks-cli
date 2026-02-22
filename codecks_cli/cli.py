@@ -518,7 +518,8 @@ def _emit_cli_error(err, fmt):
 
 
 def main():
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     if len(sys.argv) < 2:
         print(HELP_TEXT)
