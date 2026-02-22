@@ -8,7 +8,7 @@ Fast index for agents and maintainers.
 - Tests: `pwsh -File scripts/run-tests.ps1`
 - Lint: `py -m ruff check .`
 - Format check: `py -m ruff format --check .`
-- Types: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
+- Types: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 
 ## Entry Points
 - CLI wrapper: `codecks_api.py`

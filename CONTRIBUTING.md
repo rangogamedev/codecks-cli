@@ -42,7 +42,7 @@ Open an issue describing:
 4. Run quality checks:
    - `py -m ruff check .`
    - `py -m ruff format --check .`
-   - `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
+   - `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
    - `pwsh -File scripts/run-tests.ps1`
 5. Test your changes with real Codecks API calls if they touch the API layer
 6. Update `README.md` if you add new commands or flags

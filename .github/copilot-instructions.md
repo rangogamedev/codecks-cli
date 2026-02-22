@@ -7,10 +7,10 @@ Use `PROJECT_INDEX.md` for a fast file-level map before editing.
 
 - **Python command**: Always use `py` (never `python` or `python3`). Requires 3.10+.
 - **Zero runtime dependencies**: stdlib only. Dev tools (`ruff`, `mypy`, `pytest-cov`) are optional extras.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (544 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (588 tests, no API calls)
 - **Lint**: `py -m ruff check .`
 - **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 - **Contracts**: CLI JSON errors include `schema_version` (`1.0`). MCP response mode is controlled by `CODECKS_MCP_RESPONSE_MODE` (`legacy` or `envelope`).
 - **Pagination**: `cards` supports `--limit` and `--offset` and returns `total_count`/`has_more` metadata in JSON.
 

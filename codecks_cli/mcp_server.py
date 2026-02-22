@@ -11,12 +11,19 @@ import os
 import re
 import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli import CliError, CodecksClient, SetupError
 from codecks_cli.config import _PROJECT_ROOT, CONTRACT_SCHEMA_VERSION, MCP_RESPONSE_MODE
+from codecks_cli.planning import (
+    get_planning_status,
+    init_planning,
+    measure_planning,
+    update_planning,
+)
 
 mcp = FastMCP(
     "codecks",
@@ -914,6 +921,105 @@ def save_workflow_preferences(observations: list[str]) -> dict:
         return _finalize_tool_result({"saved": len(observations)})
     except OSError as e:
         return _finalize_tool_result(_contract_error(f"Cannot save preferences: {e}", "error"))
+
+
+# -------------------------------------------------------------------
+# Planning tools (local, no CodecksClient needed)
+# -------------------------------------------------------------------
+
+_PLANNING_DIR = Path(_PROJECT_ROOT)
+
+
+@mcp.tool()
+def planning_init(force: bool = False) -> dict:
+    """Create lean planning files (task_plan.md, findings.md, progress.md) in project root.
+
+    Token-optimized templates for AI agent sessions. No auth needed.
+
+    Args:
+        force: Overwrite existing files (default False, skips existing).
+    """
+    return _finalize_tool_result(init_planning(_PLANNING_DIR, force=force))
+
+
+@mcp.tool()
+def planning_status() -> dict:
+    """Get compact planning status: goal, phases, decisions, errors, token count.
+
+    Cheaper than reading raw planning files. No auth needed.
+    """
+    return _finalize_tool_result(get_planning_status(_PLANNING_DIR))
+
+
+@mcp.tool()
+def planning_update(
+    operation: Literal[
+        "goal",
+        "advance",
+        "phase_status",
+        "error",
+        "decision",
+        "finding",
+        "issue",
+        "log",
+        "file_changed",
+        "test",
+    ],
+    text: str | None = None,
+    phase: int | None = None,
+    status: str | None = None,
+    rationale: str | None = None,
+    section: str | None = None,
+    resolution: str | None = None,
+    test_name: str | None = None,
+    expected: str | None = None,
+    actual: str | None = None,
+    result: str | None = None,
+) -> dict:
+    """Update planning files mechanically (saves tokens vs reading/writing).
+
+    No auth needed. Operations and required args:
+        goal:         text (the goal description)
+        advance:      phase (optional int, auto-advances if omitted)
+        phase_status: phase (int), status (pending/in_progress/complete)
+        error:        text (error message)
+        decision:     text (decision), rationale
+        finding:      section (e.g. Requirements, Research), text
+        issue:        text (issue description), resolution
+        log:          text (action taken)
+        file_changed: text (file path)
+        test:         test_name, expected, actual, result (pass/fail)
+    """
+    return _finalize_tool_result(
+        update_planning(
+            _PLANNING_DIR,
+            operation,
+            text=text,
+            phase=phase,
+            status=status,
+            rationale=rationale,
+            section=section,
+            resolution=resolution,
+            test_name=test_name,
+            expected=expected,
+            actual=actual,
+            result=result,
+        )
+    )
+
+
+@mcp.tool()
+def planning_measure(
+    operation: Literal["snapshot", "report", "compare_templates"],
+) -> dict:
+    """Track token usage of planning files over time.
+
+    No auth needed. Operations:
+        snapshot:          Measure current files, save to .plan_metrics.jsonl.
+        report:            Current state + historical peak/growth + savings.
+        compare_templates: Old (commented) vs new (lean) template comparison.
+    """
+    return _finalize_tool_result(measure_planning(_PLANNING_DIR, operation))
 
 
 # -------------------------------------------------------------------
