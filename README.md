@@ -45,6 +45,26 @@ You can also run directly without installing: `py codecks_api.py <command>`
 - A [Codecks](https://codecks.io) account (free tier works)
 - Zero runtime dependencies (stdlib only)
 
+### Docker (optional)
+
+Run everything in a sandboxed Linux container — no Python install needed on the host.
+
+```bash
+# Build the image (once, or after changing dependencies)
+./docker/build.sh
+
+# Run tests, quality checks, or any CLI command
+./docker/test.sh
+./docker/quality.sh
+./docker/cli.sh cards --format table
+
+# Start MCP server or drop into a shell
+./docker/mcp.sh
+./docker/shell.sh
+```
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/). Your source code is volume-mounted (edits reflect instantly) and `.env` secrets are passed as environment variables, never baked into the image.
+
 ### Dev tools (optional)
 
 ```bash

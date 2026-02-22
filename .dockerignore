@@ -1,0 +1,41 @@
+# Secrets — never bake into image
+.env
+.env.*
+!.env.example
+.gdd_tokens.json
+
+# Git
+.git
+.gitattributes
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.tmp/
+.tmp-codex/
+.sandbox_tmp/
+pip_temp_run/
+
+# IDE / editor
+.claude/
+.devcontainer/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Planning / runtime files
+task_plan.md
+findings.md
+progress.md
+.plan_metrics.jsonl
+.project-meta.json
+.pm_preferences.json
+.cli_feedback.json
+.gdd_cache.md
+nul

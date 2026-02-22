@@ -25,6 +25,27 @@ def load_env():
                 if line and not line.startswith("#") and "=" in line:
                     key, val = line.split("=", 1)
                     env[key.strip()] = val.strip()
+    # Fallback to os.environ for known keys (supports Docker env_file / env vars).
+    # .env file values take precedence when present.
+    for key in (
+        "CODECKS_TOKEN",
+        "CODECKS_ACCESS_KEY",
+        "CODECKS_REPORT_TOKEN",
+        "CODECKS_ACCOUNT",
+        "CODECKS_USER_ID",
+        "CODECKS_HTTP_TIMEOUT_SECONDS",
+        "CODECKS_HTTP_MAX_RETRIES",
+        "CODECKS_HTTP_RETRY_BASE_SECONDS",
+        "CODECKS_HTTP_MAX_RESPONSE_BYTES",
+        "CODECKS_HTTP_LOG",
+        "CODECKS_HTTP_LOG_SAMPLE_RATE",
+        "CODECKS_MCP_RESPONSE_MODE",
+        "GDD_GOOGLE_DOC_URL",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+    ):
+        if key not in env and key in os.environ:
+            env[key] = os.environ[key]
     return env
 
 

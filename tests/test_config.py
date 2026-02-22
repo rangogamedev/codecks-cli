@@ -2,10 +2,37 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from codecks_cli import config
+
+# Keys that load_env() checks in os.environ as fallback (Docker support).
+_KNOWN_ENV_KEYS = [
+    "CODECKS_TOKEN",
+    "CODECKS_ACCESS_KEY",
+    "CODECKS_REPORT_TOKEN",
+    "CODECKS_ACCOUNT",
+    "CODECKS_USER_ID",
+    "CODECKS_HTTP_TIMEOUT_SECONDS",
+    "CODECKS_HTTP_MAX_RETRIES",
+    "CODECKS_HTTP_RETRY_BASE_SECONDS",
+    "CODECKS_HTTP_MAX_RESPONSE_BYTES",
+    "CODECKS_HTTP_LOG",
+    "CODECKS_HTTP_LOG_SAMPLE_RATE",
+    "CODECKS_MCP_RESPONSE_MODE",
+    "GDD_GOOGLE_DOC_URL",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+]
 
 
 class TestLoadEnv:
+    @pytest.fixture(autouse=True)
+    def _clean_environ(self, monkeypatch):
+        """Remove known keys from os.environ so file-parsing tests are isolated."""
+        for key in _KNOWN_ENV_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
     def test_basic_key_value(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
         env_file.write_text("FOO=bar\nBAZ=qux\n")
@@ -53,6 +80,40 @@ class TestLoadEnv:
         monkeypatch.setattr(config, "ENV_PATH", str(env_file))
         result = config.load_env()
         assert result == {}
+
+
+class TestLoadEnvOsEnvironFallback:
+    """load_env() falls back to os.environ for known CODECKS_* keys (Docker support)."""
+
+    def test_os_environ_fallback_when_no_env_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / "nonexistent"))
+        monkeypatch.setenv("CODECKS_TOKEN", "from-environ")
+        result = config.load_env()
+        assert result["CODECKS_TOKEN"] == "from-environ"
+
+    def test_env_file_takes_precedence_over_os_environ(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        env_file.write_text("CODECKS_TOKEN=from-file\n")
+        monkeypatch.setattr(config, "ENV_PATH", str(env_file))
+        monkeypatch.setenv("CODECKS_TOKEN", "from-environ")
+        result = config.load_env()
+        assert result["CODECKS_TOKEN"] == "from-file"
+
+    def test_unknown_keys_not_pulled_from_environ(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / "nonexistent"))
+        monkeypatch.setenv("RANDOM_KEY", "should-not-appear")
+        result = config.load_env()
+        assert "RANDOM_KEY" not in result
+
+    def test_multiple_known_keys_from_environ(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / "nonexistent"))
+        monkeypatch.setenv("CODECKS_TOKEN", "tok")
+        monkeypatch.setenv("CODECKS_ACCOUNT", "acct")
+        monkeypatch.setenv("CODECKS_MCP_RESPONSE_MODE", "envelope")
+        result = config.load_env()
+        assert result["CODECKS_TOKEN"] == "tok"
+        assert result["CODECKS_ACCOUNT"] == "acct"
+        assert result["CODECKS_MCP_RESPONSE_MODE"] == "envelope"
 
 
 class TestSaveEnvValue:

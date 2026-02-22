@@ -7,13 +7,33 @@ Fast navigation map: `PROJECT_INDEX.md`.
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (623 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (627 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret (fine-grained PAT with Contents R/W on the backup repo).
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
+
+## Docker (optional)
+Runs the project in a sandboxed Linux container. Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+./docker/build.sh                        # Build image (once, or after dep changes)
+./docker/test.sh                         # Run pytest (627 tests)
+./docker/quality.sh                      # Ruff + mypy + pytest
+./docker/cli.sh cards --format table     # Any CLI command
+./docker/cli.sh --version                # Version check
+./docker/mcp.sh                          # MCP server (stdio)
+./docker/mcp-http.sh                     # MCP server (HTTP :8808)
+./docker/shell.sh                        # Interactive bash shell
+```
+
+- Source is volume-mounted — edits reflect instantly, no rebuild needed.
+- `.env` is mounted at runtime via `env_file:`, never baked into the image.
+- Container runs as non-root user (`codecks`) for AI agent safety.
+- `config.py` `load_env()` falls back to `os.environ` for known `CODECKS_*` keys (Docker passes `.env` as env vars, not as a file).
+- Files: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitattributes`, `docker/*.sh`, `.devcontainer/devcontainer.json`.
 
 ## Architecture
 
@@ -44,6 +64,9 @@ codecks_cli/
   setup_wizard.py       ← Interactive .env bootstrap
   mcp_server.py         ← MCP server: 36 tools wrapping CodecksClient (stdio, legacy/envelope modes)
   pm_playbook.md        ← Agent-agnostic PM methodology (read by MCP tool)
+docker/                 ← Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell)
+Dockerfile              ← Multi-stage build (Python 3.12-slim, dev+mcp deps)
+docker-compose.yml      ← Services: cli, test, quality, lint, typecheck, mcp, mcp-http, shell
 ```
 
 ### Import graph (no circular deps)
