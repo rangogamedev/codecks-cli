@@ -67,13 +67,13 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 ## Code style
 
 - Standard Python conventions (PEP 8 mostly)
-- Code is split across 22 source modules: `codecks_api.py` (entry point), `cli.py` (argparse/dispatch), `commands.py` (CLI handlers), `client.py` (CodecksClient API), `cards.py` (card CRUD), `api.py` (HTTP layer), `config.py` (env/constants), `exceptions.py` (error types), `_utils.py` (helpers), `types.py` (TypedDicts), `models.py` (dataclasses), `formatters/` (7 sub-modules), `gdd.py` (Google Docs), `setup_wizard.py` (setup), `mcp_server.py` (MCP)
+- Code is split across 24 source modules: `codecks_api.py` (entry point), `cli.py` (argparse/dispatch), `commands.py` (CLI handlers), `client.py` (CodecksClient API), `cards.py` (card CRUD), `api.py` (HTTP layer), `config.py` (env/constants), `exceptions.py` (error types), `_utils.py` (helpers), `types.py` (TypedDicts), `models.py` (dataclasses), `formatters/` (7 sub-modules), `gdd.py` (Google Docs), `setup_wizard.py` (setup), `mcp_server.py` (MCP)
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
 - All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
 
 ## Testing
 
-The test suite has **537 tests** across 12 test files. All must pass before submitting:
+The test suite has **588 tests** across 12 test files. All must pass before submitting:
 
 ```bash
 pwsh -File scripts/run-tests.ps1

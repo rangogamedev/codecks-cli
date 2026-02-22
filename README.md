@@ -426,7 +426,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes 28 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 33 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -454,15 +454,16 @@ Add to your MCP settings:
 }
 ```
 
-### 28 tools
+### 33 tools
 
 | Category | Tools |
 |----------|-------|
 | **Read** (9) | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_activity`, `pm_focus`, `standup` |
 | **Hand** (3) | `list_hand`, `add_to_hand`, `remove_from_hand` |
-| **Mutations** (7) | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature` |
-| **Comments** (6) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
+| **Mutations** (9) | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
+| **Comments** (5) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
+| **Planning** (4) | `planning_init`, `planning_status`, `planning_update`, `planning_measure` |
 
 ### Features
 
@@ -669,10 +670,10 @@ codecks-cli/
       _gdd.py                 format_gdd_table, format_sync_report
     gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
     setup_wizard.py           ← Interactive .env bootstrap
-    mcp_server.py             ← MCP server: 28 tools (stdio transport)
+    mcp_server.py             ← MCP server: 33 tools (stdio transport)
     pm_playbook.md            ← Agent-agnostic PM methodology
     py.typed                  ← PEP 561 type marker
-  tests/                      ← 491 pytest tests (no live API calls)
+  tests/                      ← 588 pytest tests (no live API calls)
   .env                        ← Your tokens and config (gitignored)
   .env.example                ← Template showing required env vars
 ```

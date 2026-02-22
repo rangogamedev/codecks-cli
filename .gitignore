@@ -8,6 +8,7 @@ task_plan.md
 findings.md
 progress.md
 .plan_metrics.jsonl
+.project-meta.json
 __pycache__/
 *.pyc
 build/

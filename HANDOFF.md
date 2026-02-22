@@ -19,13 +19,13 @@ Last updated: 2026-02-21 | Version: 0.4.0
 - `commands.py` thinned to delegate all business logic to `CodecksClient`
 - CLI dispatch uses `set_defaults(func=cmd_xxx)` per subparser
 
-### MCP Server (28 tools)
-- 25 tools mapping 1:1 to CodecksClient methods
+### MCP Server (33 tools)
+- 26 CodecksClient method wrappers + 3 PM session + 4 planning
 - 3 PM session tools: `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences`
 - PM playbook (`pm_playbook.md`) — agent-agnostic PM methodology readable via MCP
 - Literal types, pagination, cached client, agent-friendly docstrings
 
-### CodecksClient (27 methods)
+### CodecksClient (26 methods)
 - Full programmatic API: read, create, update, archive, hand, comments, raw queries
 - `py.typed` marker for PEP 561 editor support
 - Keyword-only args, flat `dict[str, Any]` returns
@@ -46,6 +46,6 @@ Last updated: 2026-02-21 | Version: 0.4.0
 3. **GitHub Actions release** — auto-publish on tag push
 
 ## Stats
-- 537 tests, 12 test files, 22 source modules
-- 28 MCP tools, 27 CodecksClient methods
+- 588 tests, 12 test files, 24 source modules
+- 33 MCP tools, 26 CodecksClient methods
 - Zero runtime dependencies

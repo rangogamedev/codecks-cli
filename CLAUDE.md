@@ -22,7 +22,7 @@ codecks_api.py          ← CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                ← argparse, build_parser(), main() dispatch
   commands.py           ← cmd_*() wrappers: argparse → CodecksClient → formatters (+ cards pagination metadata)
-  client.py             ← CodecksClient: 28 public methods (the API surface, stable mutation contracts)
+  client.py             ← CodecksClient: 26 public methods (the API surface, stable mutation contracts)
   cards.py              ← Card CRUD, hand, conversations, enrichment
   api.py                ← HTTP layer: query(), dispatch(), retries, token check
   config.py             ← Env, tokens, constants, runtime state, contract settings
@@ -122,7 +122,7 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill
 - `split-features` batch-splits feature cards into Code/Design/Art sub-cards (use `--dry-run` first).
 
 ## Skills (`.claude/commands/`)
-`/pm` (PM session), `/test-all` (regression), `/release` (version bump), `/api-ref` (command ref), `/security-audit` (secrets scan), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues), `/split-features` (batch decomposition), `/plan` (Manus-style file-based planning), `/plan-status` (planning progress check), `/doc-update` (audit docs for drift), `/changelog` (generate changelog from commits)
+`/pm` (PM session), `/release` (version bump), `/api-ref` (command ref), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues), `/split-features` (batch decomposition), `/doc-update` (audit docs for drift), `/changelog` (generate changelog from commits)
 
 ## Subagents (`.claude/agents/`)
 - `security-reviewer` — scans for credential exposure, injection vulns, unsafe patterns
@@ -135,6 +135,12 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill
 ## Hooks (`.claude/settings.json`)
 - **PreToolUse** `Edit|Write`: blocks edits to `.env` and `.gdd_tokens.json` (secret protection)
 - **PostToolUse** `Edit|Write`: auto-formats `.py` files with ruff after edits
+
+## Scripts (`scripts/`)
+- `py scripts/project_meta.py` — project metadata JSON (version, test count, MCP tools, modules). `--save` writes `.project-meta.json`, `--field tests.count` for single values.
+- `py scripts/quality_gate.py` — all quality checks in one command (ruff lint/format, mypy, pytest). `--skip-tests` for fast, `--fix` to auto-fix.
+- `py scripts/validate_docs.py` — checks doc files for stale counts/mismatches. `--fix-list` shows what needs fixing.
+- `py scripts/run_mcp_http.py` — MCP server in streamable-http mode (port 8808).
 
 ## Git
 - Commit style: short present tense ("Add X", "Fix Y")
