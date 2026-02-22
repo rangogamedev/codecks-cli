@@ -38,7 +38,7 @@ services:
       - |
         echo "=== Ruff lint ===" && ruff check . &&
         echo "=== Ruff format ===" && ruff format --check . &&
-        echo "=== Mypy ===" && mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py &&
+        echo "=== Mypy ===" && mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py codecks_cli/lanes.py &&
         echo "=== Pytest ===" && pytest tests/ -v --basetemp .tmp/pytest-docker &&
         echo "=== All checks passed ==="
 
@@ -63,6 +63,7 @@ services:
       - codecks_cli/types.py
       - codecks_cli/planning.py
       - codecks_cli/setup_wizard.py
+      - codecks_cli/lanes.py
 
   # MCP server (stdio): docker compose run --rm mcp
   mcp:

@@ -341,15 +341,30 @@ def build_parser():
     p.set_defaults(func=cmd_update)
 
     # --- feature ---
+    from codecks_cli.lanes import LANES
+
     p = sub.add_parser("feature")
     p.add_argument("title")
     p.add_argument("--hero-deck", required=True, dest="hero_deck")
-    p.add_argument("--code-deck", required=True, dest="code_deck")
-    p.add_argument("--design-deck", required=True, dest="design_deck")
-    p.add_argument("--art-deck", dest="art_deck")
-    p.add_argument("--skip-art", action="store_true", dest="skip_art")
-    p.add_argument("--audio-deck", dest="audio_deck")
-    p.add_argument("--skip-audio", action="store_true", dest="skip_audio")
+    for lane_def in LANES:
+        if lane_def.required:
+            p.add_argument(
+                f"--{lane_def.name}-deck",
+                required=True,
+                dest=f"{lane_def.name}_deck",
+                help=lane_def.cli_help,
+            )
+        else:
+            p.add_argument(
+                f"--{lane_def.name}-deck",
+                dest=f"{lane_def.name}_deck",
+                help=lane_def.cli_help,
+            )
+            p.add_argument(
+                f"--skip-{lane_def.name}",
+                action="store_true",
+                dest=f"skip_{lane_def.name}",
+            )
     p.add_argument("--description")
     p.add_argument("--owner")
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
@@ -360,12 +375,25 @@ def build_parser():
     # --- split-features ---
     p = sub.add_parser("split-features")
     p.add_argument("--deck", required=True)
-    p.add_argument("--code-deck", required=True, dest="code_deck")
-    p.add_argument("--design-deck", required=True, dest="design_deck")
-    p.add_argument("--art-deck", dest="art_deck")
-    p.add_argument("--skip-art", action="store_true", dest="skip_art")
-    p.add_argument("--audio-deck", dest="audio_deck")
-    p.add_argument("--skip-audio", action="store_true", dest="skip_audio")
+    for lane_def in LANES:
+        if lane_def.required:
+            p.add_argument(
+                f"--{lane_def.name}-deck",
+                required=True,
+                dest=f"{lane_def.name}_deck",
+                help=lane_def.cli_help,
+            )
+        else:
+            p.add_argument(
+                f"--{lane_def.name}-deck",
+                dest=f"{lane_def.name}_deck",
+                help=lane_def.cli_help,
+            )
+            p.add_argument(
+                f"--skip-{lane_def.name}",
+                action="store_true",
+                dest=f"skip_{lane_def.name}",
+            )
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--dry-run", action="store_true", dest="dry_run")
     p.set_defaults(func=cmd_split_features)

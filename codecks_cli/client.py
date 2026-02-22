@@ -54,6 +54,7 @@ from codecks_cli.cards import (
     update_card,
 )
 from codecks_cli.exceptions import CliError, SetupError
+from codecks_cli.lanes import LANES, defaults_map, keywords_map
 from codecks_cli.models import (
     FeatureScaffoldReport,
     FeatureSpec,
@@ -238,109 +239,42 @@ def _flatten_cards(cards_dict):
 # Content analysis helpers for split-features
 # ---------------------------------------------------------------------------
 
-_LANE_KEYWORDS: dict[str, list[str]] = {
-    "code": [
-        "implement",
-        "build",
-        "create bp_",
-        "struct",
-        "function",
-        "test:",
-        "logic",
-        "system",
-        "enum",
-        "component",
-        "manager",
-        "tracking",
-        "handle",
-        "wire",
-        "connect",
-        "refactor",
-        "fix",
-        "debug",
-        "integrate",
-        "script",
-        "blueprint",
-        "variable",
-        "class",
-        "method",
-    ],
-    "art": [
-        "sprite",
-        "animation",
-        "visual",
-        "portrait",
-        "ui layout",
-        "effect",
-        "icon",
-        "color",
-        "asset",
-        "texture",
-        "particle",
-        "vfx",
-    ],
-    "design": [
-        "balance",
-        "tune",
-        "playtest",
-        "define",
-        "pacing",
-        "feel",
-        "scaling",
-        "progression",
-        "economy",
-        "curve",
-        "difficulty",
-        "feedback",
-        "flow",
-        "reward",
-        "threshold",
-    ],
-    "audio": [
-        "sfx",
-        "sound",
-        "music",
-        "audio",
-        "voice",
-        "dialogue",
-        "ambient",
-        "foley",
-        "mix",
-        "volume",
-        "bgm",
-        "jingle",
-    ],
-}
-
 
 def _classify_checklist_item(text: str) -> str | None:
     """Score a checklist item against lane keywords, return highest lane or None."""
     lower = text.lower()
     scores: dict[str, int] = {}
-    for lane, keywords in _LANE_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in lower)
+    for lane_name, kw_list in keywords_map().items():
+        score = sum(1 for kw in kw_list if kw in lower)
         if score > 0:
-            scores[lane] = score
+            scores[lane_name] = score
     if not scores:
         return None
     return max(scores, key=lambda k: scores[k])
 
 
 def _analyze_feature_for_lanes(
-    content: str, *, include_art: bool = True, include_audio: bool = False
+    content: str, *, included_lanes: set[str] | None = None
 ) -> dict[str, list[str]]:
     """Parse checklist items from card content and classify into lanes.
 
     Handles both ``- []`` (Codecks interactive) and ``- [ ]`` (markdown) formats.
     Unclassified items go to the smallest lane. Empty lanes get generic defaults.
+
+    Args:
+        content: Card content text with checklist items.
+        included_lanes: Set of lane names to include. If None, includes all
+            required lanes plus no optional lanes (for backward compat with
+            old include_art=True default, art is included by default).
     """
     import re
 
-    lanes: dict[str, list[str]] = {"code": [], "design": []}
-    if include_art:
-        lanes["art"] = []
-    if include_audio:
-        lanes["audio"] = []
+    if included_lanes is None:
+        # Default: required lanes + art (backward compat)
+        included_lanes = {lane.name for lane in LANES if lane.required}
+        included_lanes.add("art")
+
+    lanes: dict[str, list[str]] = {name: [] for name in included_lanes}
 
     items: list[str] = []
     for line in content.splitlines():
@@ -362,28 +296,11 @@ def _analyze_feature_for_lanes(
         smallest = min(lanes, key=lambda k: len(lanes[k]))
         lanes[smallest].append(item)
 
-    # Fill empty lanes with generic defaults
-    defaults = {
-        "code": ["Implement core logic", "Handle edge cases", "Add tests/verification"],
-        "design": [
-            "Define target player feel",
-            "Tune balance/economy parameters",
-            "Run playtest and iterate",
-        ],
-        "art": [
-            "Create required assets/content",
-            "Integrate assets in game flow",
-            "Visual quality pass",
-        ],
-        "audio": [
-            "Create required audio assets",
-            "Integrate audio in game flow",
-            "Audio quality/mix pass",
-        ],
-    }
-    for lane in lanes:
-        if not lanes[lane]:
-            lanes[lane] = list(defaults.get(lane, [f"Complete {lane} tasks"]))
+    # Fill empty lanes with generic defaults from registry
+    all_defaults = defaults_map()
+    for lane_name in lanes:
+        if not lanes[lane_name]:
+            lanes[lane_name] = list(all_defaults.get(lane_name, [f"Complete {lane_name} tasks"]))
 
     return lanes
 
@@ -1322,10 +1239,12 @@ class CodecksClient:
         )
 
         hero_deck_id = resolve_deck_id(spec.hero_deck)
-        code_deck_id = resolve_deck_id(spec.code_deck)
-        design_deck_id = resolve_deck_id(spec.design_deck)
-        art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
-        audio_deck_id = resolve_deck_id(spec.audio_deck) if spec.audio_deck else None
+
+        # Resolve lane deck IDs from registry
+        lane_deck_ids: dict[str, str | None] = {}
+        for lane_def in LANES:
+            deck_val = spec.lane_decks.get(lane_def.name)
+            lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val) if deck_val else None
 
         owner_id = _resolve_owner_id(spec.owner) if spec.owner else None
         pri = None if spec.priority == "null" else spec.priority
@@ -1337,9 +1256,10 @@ class CodecksClient:
         if spec.effort is not None:
             common_update["effort"] = spec.effort
 
+        lane_coverage = "/".join(lane_def.display_name for lane_def in LANES)
         hero_body = (
             (spec.description.strip() + "\n\n" if spec.description else "") + "Success criteria:\n"
-            "- [] Lane coverage agreed (Code/Design/Art/Audio)\n"
+            f"- [] Lane coverage agreed ({lane_coverage})\n"
             "- [] Acceptance criteria validated\n"
             "- [] Integration verified"
         )
@@ -1356,69 +1276,37 @@ class CodecksClient:
                 hero_id, deckId=hero_deck_id, masterTags=["hero", "feature"], **common_update
             )
 
-            def _make_sub(lane, deck_id, lane_tags, checklist_lines):
-                sub_title = f"[{lane}] {spec.title}"
+            def _make_sub(lane_def_inner, deck_id):
+                sub_title = f"[{lane_def_inner.display_name}] {spec.title}"
+                checklist_lines = lane_def_inner.default_checklist
                 sub_body = (
                     "Scope:\n"
-                    f"- {lane} lane execution for feature goal\n\n"
+                    f"- {lane_def_inner.display_name} lane execution for feature goal\n\n"
                     "Checklist:\n" + "\n".join(f"- [] {line}" for line in checklist_lines)
                 )
                 res = create_card(sub_title, sub_body)
                 sub_id = res.get("cardId")
                 if not sub_id:
-                    raise CliError(f"[ERROR] {lane} sub-card creation failed: missing cardId.")
+                    raise CliError(
+                        f"[ERROR] {lane_def_inner.display_name} sub-card creation failed: "
+                        "missing cardId."
+                    )
                 created_ids.append(sub_id)
                 update_card(
                     sub_id,
                     parentCardId=hero_id,
                     deckId=deck_id,
-                    masterTags=lane_tags,
+                    masterTags=list(lane_def_inner.tags),
                     **common_update,
                 )
-                created.append(FeatureSubcard(lane=lane.lower(), id=sub_id))
+                created.append(FeatureSubcard(lane=lane_def_inner.name, id=sub_id))
 
-            _make_sub(
-                "Code",
-                code_deck_id,
-                ["code", "feature"],
-                [
-                    "Implement core logic",
-                    "Handle edge cases",
-                    "Add tests/verification",
-                ],
-            )
-            _make_sub(
-                "Design",
-                design_deck_id,
-                ["design", "feel", "economy", "feature"],
-                [
-                    "Define target player feel",
-                    "Tune balance/economy parameters",
-                    "Run playtest and iterate",
-                ],
-            )
-            if not spec.skip_art and art_deck_id:
-                _make_sub(
-                    "Art",
-                    art_deck_id,
-                    ["art", "feature"],
-                    [
-                        "Create required assets/content",
-                        "Integrate assets in game flow",
-                        "Visual quality pass",
-                    ],
-                )
-            if not spec.skip_audio and audio_deck_id:
-                _make_sub(
-                    "Audio",
-                    audio_deck_id,
-                    ["audio", "feature"],
-                    [
-                        "Create required audio assets",
-                        "Integrate audio in game flow",
-                        "Audio quality/mix pass",
-                    ],
-                )
+            for lane_def in LANES:
+                skip = spec.lane_skips.get(lane_def.name, False)
+                deck_id = lane_deck_ids[lane_def.name]
+                if not skip and deck_id:
+                    _make_sub(lane_def, deck_id)
+
         except SetupError as err:
             rolled_back, rollback_failed = _rollback_created(created_ids)
             detail = (
@@ -1440,21 +1328,26 @@ class CodecksClient:
             raise CliError(detail) from err
 
         notes = []
-        if spec.auto_skip_art:
-            notes.append("Art lane auto-skipped (no --art-deck provided).")
-        if spec.auto_skip_audio:
-            notes.append("Audio lane auto-skipped (no --audio-deck provided).")
+        for lane_def in LANES:
+            if spec.lane_auto_skips.get(lane_def.name, False):
+                notes.append(
+                    f"{lane_def.display_name} lane auto-skipped "
+                    f"(no --{lane_def.name}-deck provided)."
+                )
         if warnings:
             notes.extend(warnings)
+
+        report_lane_decks: dict[str, str | None] = {}
+        for lane_def in LANES:
+            skip = spec.lane_skips.get(lane_def.name, False)
+            report_lane_decks[lane_def.name] = None if skip else spec.lane_decks.get(lane_def.name)
+
         report = FeatureScaffoldReport(
             hero_id=hero_id,
             hero_title=hero_title,
             subcards=created,
             hero_deck=spec.hero_deck,
-            code_deck=spec.code_deck,
-            design_deck=spec.design_deck,
-            art_deck=None if spec.skip_art else spec.art_deck,
-            audio_deck=None if spec.skip_audio else spec.audio_deck,
+            lane_decks=report_lane_decks,
             notes=notes or None,
         )
         return report.to_dict()  # type: ignore[no-any-return]
@@ -1506,10 +1399,18 @@ class CodecksClient:
 
         # Resolve deck IDs upfront (fail fast)
         resolve_deck_id(spec.deck)  # validate source deck exists
-        code_deck_id = resolve_deck_id(spec.code_deck)
-        design_deck_id = resolve_deck_id(spec.design_deck)
-        art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
-        audio_deck_id = resolve_deck_id(spec.audio_deck) if spec.audio_deck else None
+        lane_deck_ids: dict[str, str | None] = {}
+        for lane_def in LANES:
+            deck_val = spec.lane_decks.get(lane_def.name)
+            lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val) if deck_val else None
+
+        # Build active lane config from registry
+        active_lanes = []
+        for lane_def in LANES:
+            skip = spec.lane_skips.get(lane_def.name, False)
+            deck_id = lane_deck_ids[lane_def.name]
+            if not skip and deck_id:
+                active_lanes.append((lane_def, deck_id))
 
         # List cards in source deck (lightweight — no content fetched)
         result = self.list_cards(deck=spec.deck)
@@ -1534,11 +1435,8 @@ class CodecksClient:
             detail = self.get_card(cid, include_conversations=False)
             content = detail.get("content") or ""
 
-            include_art = not spec.skip_art
-            include_audio = not spec.skip_audio
-            lanes = _analyze_feature_for_lanes(
-                content, include_art=include_art, include_audio=include_audio
-            )
+            included_lane_names = {ld.name for ld, _did in active_lanes}
+            lanes = _analyze_feature_for_lanes(content, included_lanes=included_lane_names)
 
             # Determine priority: override > parent's priority
             pri = None
@@ -1549,22 +1447,13 @@ class CodecksClient:
                 if parent_pri:
                     pri = parent_pri
 
-            lane_config = [
-                ("code", code_deck_id, ["code", "feature"]),
-                ("design", design_deck_id, ["design", "feel", "economy", "feature"]),
-            ]
-            if not spec.skip_art and art_deck_id:
-                lane_config.append(("art", art_deck_id, ["art", "feature"]))
-            if not spec.skip_audio and audio_deck_id:
-                lane_config.append(("audio", audio_deck_id, ["audio", "feature"]))
-
             if spec.dry_run:
                 subs = []
-                for lane_name, _deck_id, _tags in lane_config:
-                    checklist = lanes.get(lane_name, [])
-                    sub_title = f"[{lane_name.capitalize()}] {title}"
-                    subs.append(FeatureSubcard(lane=lane_name, id="(dry-run)", title=sub_title))
-                    notes.append(f"  {lane_name}: {len(checklist)} items")
+                for lane_def, _deck_id in active_lanes:
+                    checklist = lanes.get(lane_def.name, [])
+                    sub_title = f"[{lane_def.display_name}] {title}"
+                    subs.append(FeatureSubcard(lane=lane_def.name, id="(dry-run)", title=sub_title))
+                    notes.append(f"  {lane_def.name}: {len(checklist)} items")
                 details.append(
                     SplitFeatureDetail(
                         feature_id=cid,
@@ -1577,32 +1466,34 @@ class CodecksClient:
             # Live mode: create sub-cards
             try:
                 feature_subs: list[FeatureSubcard] = []
-                for lane_name, lane_deck_id, lane_tags in lane_config:
-                    checklist = lanes.get(lane_name, [])
-                    sub_title = f"[{lane_name.capitalize()}] {title}"
+                for lane_def, lane_deck_id in active_lanes:
+                    checklist = lanes.get(lane_def.name, [])
+                    sub_title = f"[{lane_def.display_name}] {title}"
                     sub_body = (
                         "Scope:\n"
-                        f"- {lane_name.capitalize()} lane execution for feature goal\n\n"
+                        f"- {lane_def.display_name} lane execution for feature goal\n\n"
                         "Checklist:\n" + "\n".join(f"- [] {item}" for item in checklist)
                     )
                     res = create_card(sub_title, sub_body)
                     sub_id = res.get("cardId")
                     if not sub_id:
                         raise CliError(
-                            f"[ERROR] {lane_name} sub-card creation failed: missing cardId."
+                            f"[ERROR] {lane_def.name} sub-card creation failed: missing cardId."
                         )
                     created_ids.append(sub_id)
 
                     update_kwargs: dict[str, Any] = {
                         "parentCardId": cid,
                         "deckId": lane_deck_id,
-                        "masterTags": lane_tags,
+                        "masterTags": list(lane_def.tags),
                     }
                     if pri is not None:
                         update_kwargs["priority"] = pri
                     update_card(sub_id, **update_kwargs)
 
-                    feature_subs.append(FeatureSubcard(lane=lane_name, id=sub_id, title=sub_title))
+                    feature_subs.append(
+                        FeatureSubcard(lane=lane_def.name, id=sub_id, title=sub_title)
+                    )
 
                 details.append(
                     SplitFeatureDetail(
@@ -1632,10 +1523,9 @@ class CodecksClient:
                 raise CliError(detail_msg) from err
 
         total_subs = sum(len(d.subcards) for d in details)
-        if spec.skip_art:
-            notes.append("Art lane skipped.")
-        if spec.skip_audio:
-            notes.append("Audio lane skipped.")
+        for lane_def in LANES:
+            if spec.lane_skips.get(lane_def.name, False):
+                notes.append(f"{lane_def.display_name} lane skipped.")
 
         report = SplitFeaturesReport(
             features_processed=len(details),

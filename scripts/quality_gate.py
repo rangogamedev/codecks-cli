@@ -31,6 +31,7 @@ MYPY_TARGETS = [
     "codecks_cli/types.py",
     "codecks_cli/planning.py",
     "codecks_cli/setup_wizard.py",
+    "codecks_cli/lanes.py",
 ]
 
 

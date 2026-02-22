@@ -10,9 +10,9 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (627 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (640 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py`
+- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py codecks_cli/lanes.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
@@ -23,7 +23,7 @@ Runs the project in a sandboxed Linux container. Requires [Docker Desktop](https
 
 ```bash
 ./docker/build.sh                        # Build image (once, or after dep changes)
-./docker/test.sh                         # Run pytest (627 tests)
+./docker/test.sh                         # Run pytest (640 tests)
 ./docker/quality.sh                      # Ruff + mypy + pytest
 ./docker/cli.sh cards --format table     # Any CLI command
 ./docker/mcp.sh                          # MCP server (stdio)
@@ -65,6 +65,7 @@ codecks_cli/
   _utils.py             <- _get_field(), get_card_tags(), date/multi-value parsers
   types.py              <- TypedDict response shapes (CardRow, CardDetail, etc.)
   models.py             <- ObjectPayload, FeatureSpec, SplitFeaturesSpec dataclasses
+  lanes.py              <- Lane registry: LaneDefinition, LANES, helpers (standalone, no project imports)
   formatters/           <- JSON/table/CSV output (7 sub-modules)
     __init__.py          re-exports all 24 names
     _table.py            _table(), _trunc(), _sanitize_str()
@@ -89,6 +90,7 @@ docker-compose.yml      <- Services: cli, test, quality, lint, typecheck, mcp, m
 exceptions.py  <-  config.py  <-  _utils.py  <-  api.py  <-  cards.py  <-  client.py
                                                                               |
 types.py (standalone)    formatters/ <- commands.py <- cli.py          models.py
+lanes.py (standalone)
 ```
 
 ### Key design patterns
@@ -134,7 +136,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- 12 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`, `test_mcp_server.py`
+- 13 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_lanes.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)

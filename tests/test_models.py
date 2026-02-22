@@ -115,9 +115,7 @@ class TestFeatureScaffoldReport:
             hero_title="Feature: Combat",
             subcards=[FeatureSubcard(lane="code", id="c1")],
             hero_deck="Features",
-            code_deck="Code",
-            design_deck="Design",
-            art_deck=None,
+            lane_decks={"code": "Code", "design": "Design", "art": None, "audio": None},
         )
         data = rep.to_dict()
         assert data["ok"] is True
@@ -131,9 +129,7 @@ class TestFeatureScaffoldReport:
             hero_title="Feature: Combat",
             subcards=[],
             hero_deck="Features",
-            code_deck="Code",
-            design_deck="Design",
-            art_deck=None,
+            lane_decks={"code": "Code", "design": "Design", "art": None, "audio": None},
             notes=["Art lane auto-skipped"],
         )
         data = rep.to_dict()
@@ -145,13 +141,23 @@ class TestFeatureScaffoldReport:
             hero_title="Feature: Combat",
             subcards=[FeatureSubcard(lane="audio", id="a1")],
             hero_deck="Features",
-            code_deck="Code",
-            design_deck="Design",
-            art_deck=None,
-            audio_deck="Audio",
+            lane_decks={"code": "Code", "design": "Design", "art": None, "audio": "Audio"},
         )
         data = rep.to_dict()
         assert data["decks"]["audio"] == "Audio"
+
+    def test_backward_compat_properties(self):
+        rep = FeatureScaffoldReport(
+            hero_id="h1",
+            hero_title="Feature: Combat",
+            subcards=[],
+            hero_deck="Features",
+            lane_decks={"code": "Code", "design": "Design", "art": "Art", "audio": None},
+        )
+        assert rep.code_deck == "Code"
+        assert rep.design_deck == "Design"
+        assert rep.art_deck == "Art"
+        assert rep.audio_deck is None
 
 
 class TestSplitFeaturesSpec:

@@ -1264,7 +1264,7 @@ class TestAnalyzeFeatureForLanes:
 
     def test_skip_art_excludes_art_lane(self):
         content = "- [] Implement logic\n- [] Create sprite\n"
-        lanes = _analyze_feature_for_lanes(content, include_art=False)
+        lanes = _analyze_feature_for_lanes(content, included_lanes={"code", "design"})
         assert "art" not in lanes
         assert "code" in lanes
         assert "design" in lanes
@@ -1284,7 +1284,7 @@ class TestAnalyzeFeatureForLanes:
             "- [] Handle edge cases\n"
             "- [] Do something generic\n"
         )
-        lanes = _analyze_feature_for_lanes(content, include_art=False)
+        lanes = _analyze_feature_for_lanes(content, included_lanes={"code", "design"})
         # code has 3 items, generic goes to design (smallest)
         assert len(lanes["code"]) == 3
         assert len(lanes["design"]) >= 1
@@ -1299,7 +1299,9 @@ class TestAnalyzeFeatureForLanes:
 
     def test_include_audio_adds_audio_lane(self):
         content = "- [] Add sound sfx\n- [] Implement logic\n"
-        lanes = _analyze_feature_for_lanes(content, include_audio=True)
+        lanes = _analyze_feature_for_lanes(
+            content, included_lanes={"code", "design", "art", "audio"}
+        )
         assert "audio" in lanes
         assert any("sound" in item for item in lanes["audio"])
 
@@ -1310,7 +1312,9 @@ class TestAnalyzeFeatureForLanes:
 
     def test_audio_defaults_when_empty(self):
         content = "No checklist"
-        lanes = _analyze_feature_for_lanes(content, include_audio=True)
+        lanes = _analyze_feature_for_lanes(
+            content, included_lanes={"code", "design", "art", "audio"}
+        )
         assert len(lanes["audio"]) > 0
         assert "Create required audio assets" in lanes["audio"]
 
