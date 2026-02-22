@@ -1,0 +1,57 @@
+name: Backup Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - ".claude/commands/*.md"
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Collect and push md files to private repo
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+          BACKUP_REPO: ${{ vars.BACKUP_REPO || 'rangogamedev/codecks-cli-docs-backup' }}
+        run: |
+          set -e
+
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone the private backup repo
+          git clone "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" backup-target
+
+          # Clear old files in backup (so deletions are mirrored)
+          cd backup-target
+          find . -name '*.md' -not -path './.git/*' -delete
+          cd ..
+
+          # Copy all md files preserving directory structure
+          find . -name '*.md' \
+            -not -path './.git/*' \
+            -not -path './backup-target/*' \
+            -not -path './.tmp/*' \
+            | while read -r f; do
+                dest="backup-target/${f#./}"
+                mkdir -p "$(dirname "$dest")"
+                cp "$f" "$dest"
+              done
+
+          # Commit and push if there are changes
+          cd backup-target
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to backup."
+          else
+            git commit -m "Backup docs from codecks-cli@${GITHUB_SHA::8}"
+            git push
+            echo "Backup pushed successfully."
+          fi
