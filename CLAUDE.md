@@ -184,7 +184,7 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill
 - `split-features` batch-splits feature cards into Code/Design/Art/Audio sub-cards (use `--dry-run` first).
 
 ## Skills (`.claude/commands/`)
-`/pm` (PM session), `/release` (version bump), `/api-ref` (command ref), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues), `/split-features` (batch decomposition), `/doc-update` (audit docs for drift), `/changelog` (generate changelog from commits)
+`/pm` (PM session), `/release` (version bump), `/api-ref` (command ref), `/codecks-docs <topic>` (Codecks manual), `/quality` (lint+format+mypy+pytest), `/mcp-validate` (MCP tool check), `/troubleshoot` (debug issues), `/split-features` (batch decomposition), `/doc-update` (audit docs for drift), `/changelog` (generate changelog from commits), `/docker` (Docker commands and troubleshooting)
 
 ## Subagents (`.claude/agents/`)
 - `security-reviewer` — scans for credential exposure, injection vulns, unsafe patterns

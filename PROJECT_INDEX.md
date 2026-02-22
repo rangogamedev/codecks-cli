@@ -10,6 +10,12 @@ Fast index for agents and maintainers.
 - Format check: `py -m ruff format --check .`
 - Types: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 - All quality checks: `py scripts/quality_gate.py`
+- Docker build: `./docker/build.sh`
+- Docker tests: `./docker/test.sh`
+- Docker quality: `./docker/quality.sh`
+- Docker CLI: `./docker/cli.sh <cmd>`
+- Docker Claude Code: `./docker/claude.sh`
+- Docker shell: `./docker/shell.sh`
 - Project metadata: `py scripts/project_meta.py`
 - Validate docs: `py scripts/validate_docs.py`
 
@@ -57,6 +63,22 @@ Fast index for agents and maintainers.
   - `codecks_cli/commands.py` (`cmd_cards` `limit`/`offset` + pagination metadata)
   - `codecks_cli/client.py` (mutation `per_card`/`failed`, `continue_on_error`)
   - `codecks_cli/mcp_server.py` (`legacy` vs `envelope` success output)
+
+## Docker
+- Build image: `docker/build.sh`
+- Run tests: `docker/test.sh`
+- Quality checks: `docker/quality.sh`
+- CLI commands: `docker/cli.sh`
+- MCP server (stdio): `docker/mcp.sh`
+- MCP server (HTTP): `docker/mcp-http.sh`
+- Interactive shell: `docker/shell.sh`
+- Dev setup (build+shell): `docker/dev.sh`
+- Tail logs: `docker/logs.sh`
+- Claude Code in container: `docker/claude.sh`
+- Compose config: `docker-compose.yml`
+- Image definition: `Dockerfile`
+- DevContainer: `.devcontainer/devcontainer.json`
+- Security: no-new-privileges, cap_drop ALL, pids_limit 256, tmpfs /tmp:64M, non-root user
 
 ## Non-Negotiables
 - Do not set `dueAt` (paid-only).

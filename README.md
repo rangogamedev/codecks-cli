@@ -2,7 +2,7 @@
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
-![Tests: 491](https://img.shields.io/badge/Tests-491-brightgreen)
+![Tests: 627](https://img.shields.io/badge/Tests-627-brightgreen)
 
 A command-line tool and Python library for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Zero runtime dependencies. Works from a terminal, as a Python API, or as an MCP server for AI agents.
 
@@ -61,9 +61,12 @@ Run everything in a sandboxed Linux container — no Python install needed on th
 # Start MCP server or drop into a shell
 ./docker/mcp.sh
 ./docker/shell.sh
+
+# Run Claude Code inside the container
+./docker/claude.sh
 ```
 
-Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/). Your source code is volume-mounted (edits reflect instantly) and `.env` secrets are passed as environment variables, never baked into the image.
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/). Your source code is volume-mounted (edits reflect instantly) and `.env` secrets are passed as environment variables, never baked into the image. The container runs as a non-root user with restricted permissions for safety.
 
 ### Dev tools (optional)
 
@@ -446,7 +449,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes 33 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 36 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -474,16 +477,17 @@ Add to your MCP settings:
 }
 ```
 
-### 33 tools
+### 36 tools
 
 | Category | Tools |
 |----------|-------|
-| **Read** (9) | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_activity`, `pm_focus`, `standup` |
+| **Read** (10) | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup` |
 | **Hand** (3) | `list_hand`, `add_to_hand`, `remove_from_hand` |
 | **Mutations** (9) | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** (5) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
 | **Planning** (4) | `planning_init`, `planning_status`, `planning_update`, `planning_measure` |
+| **Feedback** (2) | `get_cli_feedback`, `save_cli_feedback` |
 
 ### Features
 
@@ -690,10 +694,10 @@ codecks-cli/
       _gdd.py                 format_gdd_table, format_sync_report
     gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
     setup_wizard.py           ← Interactive .env bootstrap
-    mcp_server.py             ← MCP server: 33 tools (stdio transport)
+    mcp_server.py             ← MCP server: 36 tools (stdio transport)
     pm_playbook.md            ← Agent-agnostic PM methodology
     py.typed                  ← PEP 561 type marker
-  tests/                      ← 588 pytest tests (no live API calls)
+  tests/                      ← 627 pytest tests (no live API calls)
   .env                        ← Your tokens and config (gitignored)
   .env.example                ← Template showing required env vars
 ```
