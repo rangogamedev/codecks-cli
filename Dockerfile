@@ -1,8 +1,9 @@
 # codecks-cli Docker development environment
-# Build:  docker build -t codecks-cli .
-# Run:    docker run --rm -v .:/app --env-file .env codecks-cli pytest tests/ -v
+# Build:  docker compose build
+# Run:    docker compose run --rm test
 
-FROM python:3.12-slim AS builder
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 WORKDIR /build
 
@@ -10,8 +11,9 @@ WORKDIR /build
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install third-party dev and MCP deps directly (no project source needed)
-RUN pip install --no-cache-dir \
+# All third-party deps (dev + MCP) in one layer
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
     "mypy>=1.11" \
     "pytest>=8.3" \
     "pytest-cov>=5.0" \
@@ -19,7 +21,8 @@ RUN pip install --no-cache-dir \
     "mcp[cli]>=1.6.0"
 
 # --- Runtime stage ---
-FROM python:3.12-slim
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim
 
 # Non-root user for safety
 RUN groupadd -r codecks && useradd -r -g codecks -m codecks
@@ -33,8 +36,9 @@ WORKDIR /app
 # Copy project source
 COPY . .
 
-# Install in editable mode so entry points work with live code
-RUN pip install --no-cache-dir -e ".[dev,mcp]"
+# Entry points only — deps already in venv from builder
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-deps -e .
 
 # Switch to non-root user
 USER codecks

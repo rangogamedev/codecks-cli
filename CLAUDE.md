@@ -27,8 +27,14 @@ Runs the project in a sandboxed Linux container. Requires [Docker Desktop](https
 ./docker/mcp.sh                          # MCP server (stdio)
 ./docker/mcp-http.sh                     # MCP server (HTTP :8808)
 ./docker/shell.sh                        # Interactive bash shell
+./docker/dev.sh                          # One-command dev setup (build + shell)
+./docker/logs.sh -f                      # Tail MCP HTTP server logs
 ```
 
+- `docker compose build` is the canonical build command (auto-builds on first `run` too).
+- `PYTHON_VERSION=3.14 ./docker/build.sh` to build with a different Python version.
+- `MCP_HTTP_PORT=9000 ./docker/mcp-http.sh` to override the HTTP port.
+- `MCP_HTTP_HOST` / `MCP_HTTP_PORT` env vars configure `scripts/run_mcp_http.py`.
 - Source is volume-mounted — edits reflect instantly, no rebuild needed.
 - `.env` is mounted at runtime via `env_file:`, never baked into the image.
 - Container runs as non-root user (`codecks`) for AI agent safety.
@@ -64,7 +70,7 @@ codecks_cli/
   setup_wizard.py       ← Interactive .env bootstrap
   mcp_server.py         ← MCP server: 36 tools wrapping CodecksClient (stdio, legacy/envelope modes)
   pm_playbook.md        ← Agent-agnostic PM methodology (read by MCP tool)
-docker/                 ← Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell)
+docker/                 ← Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell, dev, logs)
 Dockerfile              ← Multi-stage build (Python 3.12-slim, dev+mcp deps)
 docker-compose.yml      ← Services: cli, test, quality, lint, typecheck, mcp, mcp-http, shell
 ```

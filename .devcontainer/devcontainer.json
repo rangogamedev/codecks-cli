@@ -17,5 +17,5 @@
       }
     }
   },
-  "postCreateCommand": "pip install -e '.[dev,mcp]'"
+  "postCreateCommand": "pip install --no-deps -e ."
 }

@@ -2,6 +2,7 @@
 # Usage: docker compose run --rm <service> [args...]
 
 x-common: &common
+  build: .
   image: codecks-cli
   volumes:
     - .:/app
@@ -62,12 +63,19 @@ services:
     command: ["python", "-m", "codecks_cli.mcp_server"]
     stdin_open: true
 
-  # MCP server (HTTP on port 8808): docker compose up mcp-http
+  # MCP server (HTTP): docker compose up mcp-http
   mcp-http:
     <<: *common
     command: ["python", "scripts/run_mcp_http.py"]
     ports:
-      - "8808:8808"
+      - "${MCP_HTTP_PORT:-8808}:8808"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import socket; s=socket.create_connection(('localhost',8808),timeout=3); s.close()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   # Interactive shell: docker compose run --rm shell
   shell:
