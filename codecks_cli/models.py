@@ -32,12 +32,15 @@ class FeatureSpec:
     design_deck: str
     art_deck: str | None
     skip_art: bool
+    audio_deck: str | None
+    skip_audio: bool
     description: str | None
     owner: str | None
     priority: str | None
     effort: int | None
     format: str
     auto_skip_art: bool
+    auto_skip_audio: bool
     allow_duplicate: bool
 
     @classmethod
@@ -49,6 +52,12 @@ class FeatureSpec:
             raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
         auto_skip_art = bool((not ns.skip_art) and (not ns.art_deck))
         skip_art = bool(ns.skip_art or auto_skip_art)
+        skip_audio_flag = getattr(ns, "skip_audio", False)
+        audio_deck_val = getattr(ns, "audio_deck", None)
+        if skip_audio_flag and audio_deck_val:
+            raise CliError("[ERROR] Use either --skip-audio or --audio-deck, not both.")
+        auto_skip_audio = bool((not skip_audio_flag) and (not audio_deck_val))
+        skip_audio = bool(skip_audio_flag or auto_skip_audio)
         return cls(
             title=title,
             hero_deck=ns.hero_deck,
@@ -56,12 +65,15 @@ class FeatureSpec:
             design_deck=ns.design_deck,
             art_deck=None if skip_art else ns.art_deck,
             skip_art=skip_art,
+            audio_deck=None if skip_audio else audio_deck_val,
+            skip_audio=skip_audio,
             description=ns.description,
             owner=ns.owner,
             priority=ns.priority,
             effort=ns.effort,
             format=ns.format,
             auto_skip_art=auto_skip_art,
+            auto_skip_audio=auto_skip_audio,
             allow_duplicate=bool(getattr(ns, "allow_duplicate", False)),
         )
 
@@ -75,6 +87,8 @@ class FeatureSpec:
         design_deck,
         art_deck=None,
         skip_art=False,
+        audio_deck=None,
+        skip_audio=False,
         description=None,
         owner=None,
         priority=None,
@@ -90,6 +104,10 @@ class FeatureSpec:
             raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
         auto_skip_art = bool((not skip_art) and (not art_deck))
         skip_art = bool(skip_art or auto_skip_art)
+        if skip_audio and audio_deck:
+            raise CliError("[ERROR] Use either --skip-audio or --audio-deck, not both.")
+        auto_skip_audio = bool((not skip_audio) and (not audio_deck))
+        skip_audio = bool(skip_audio or auto_skip_audio)
         return cls(
             title=title,
             hero_deck=hero_deck,
@@ -97,12 +115,15 @@ class FeatureSpec:
             design_deck=design_deck,
             art_deck=None if skip_art else art_deck,
             skip_art=skip_art,
+            audio_deck=None if skip_audio else audio_deck,
+            skip_audio=skip_audio,
             description=description,
             owner=owner,
             priority=priority,
             effort=effort,
             format=format,
             auto_skip_art=auto_skip_art,
+            auto_skip_audio=auto_skip_audio,
             allow_duplicate=allow_duplicate,
         )
 
@@ -129,6 +150,7 @@ class FeatureScaffoldReport:
     code_deck: str
     design_deck: str
     art_deck: str | None
+    audio_deck: str | None = None
     notes: list[str] | None = None
 
     def to_dict(self):
@@ -141,6 +163,7 @@ class FeatureScaffoldReport:
                 "code": self.code_deck,
                 "design": self.design_deck,
                 "art": self.art_deck,
+                "audio": self.audio_deck,
             },
         }
         if self.notes:
@@ -157,6 +180,8 @@ class SplitFeaturesSpec:
     design_deck: str
     art_deck: str | None
     skip_art: bool
+    audio_deck: str | None
+    skip_audio: bool
     priority: str | None
     dry_run: bool
 
@@ -165,12 +190,19 @@ class SplitFeaturesSpec:
         if ns.skip_art and ns.art_deck:
             raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
         skip_art = bool(ns.skip_art or (not ns.art_deck))
+        skip_audio_flag = getattr(ns, "skip_audio", False)
+        audio_deck_val = getattr(ns, "audio_deck", None)
+        if skip_audio_flag and audio_deck_val:
+            raise CliError("[ERROR] Use either --skip-audio or --audio-deck, not both.")
+        skip_audio = bool(skip_audio_flag or (not audio_deck_val))
         return cls(
             deck=ns.deck,
             code_deck=ns.code_deck,
             design_deck=ns.design_deck,
             art_deck=None if skip_art else ns.art_deck,
             skip_art=skip_art,
+            audio_deck=None if skip_audio else audio_deck_val,
+            skip_audio=skip_audio,
             priority=ns.priority,
             dry_run=bool(ns.dry_run),
         )
@@ -184,6 +216,8 @@ class SplitFeaturesSpec:
         design_deck,
         art_deck=None,
         skip_art=False,
+        audio_deck=None,
+        skip_audio=False,
         priority=None,
         dry_run=False,
     ):
@@ -191,12 +225,17 @@ class SplitFeaturesSpec:
         if skip_art and art_deck:
             raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
         skip_art = bool(skip_art or (not art_deck))
+        if skip_audio and audio_deck:
+            raise CliError("[ERROR] Use either --skip-audio or --audio-deck, not both.")
+        skip_audio = bool(skip_audio or (not audio_deck))
         return cls(
             deck=deck,
             code_deck=code_deck,
             design_deck=design_deck,
             art_deck=None if skip_art else art_deck,
             skip_art=skip_art,
+            audio_deck=None if skip_audio else audio_deck,
+            skip_audio=skip_audio,
             priority=priority,
             dry_run=bool(dry_run),
         )

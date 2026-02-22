@@ -111,6 +111,8 @@ Commands:
     --design-deck <name>    Design sub-card deck (required)
     --art-deck <name>       Art sub-card deck (required unless --skip-art)
     --skip-art              Skip art lane for non-visual features
+    --audio-deck <name>     Audio sub-card deck (optional)
+    --skip-audio            Skip audio lane
     --description <text>    Feature context/goal
     --owner <name>          Assign owner to hero and sub-cards
     --priority <level>      a, b, c, or null
@@ -122,6 +124,8 @@ Commands:
     --design-deck <name>    Design sub-card deck (required)
     --art-deck <name>       Art sub-card deck (optional)
     --skip-art              Skip art lane
+    --audio-deck <name>     Audio sub-card deck (optional)
+    --skip-audio            Skip audio lane
     --priority <level>      Override priority for sub-cards (a, b, c, null)
     --dry-run               Preview analysis without creating cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
@@ -341,6 +345,8 @@ def build_parser():
     p.add_argument("--design-deck", required=True, dest="design_deck")
     p.add_argument("--art-deck", dest="art_deck")
     p.add_argument("--skip-art", action="store_true", dest="skip_art")
+    p.add_argument("--audio-deck", dest="audio_deck")
+    p.add_argument("--skip-audio", action="store_true", dest="skip_audio")
     p.add_argument("--description")
     p.add_argument("--owner")
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
@@ -355,6 +361,8 @@ def build_parser():
     p.add_argument("--design-deck", required=True, dest="design_deck")
     p.add_argument("--art-deck", dest="art_deck")
     p.add_argument("--skip-art", action="store_true", dest="skip_art")
+    p.add_argument("--audio-deck", dest="audio_deck")
+    p.add_argument("--skip-audio", action="store_true", dest="skip_audio")
     p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--dry-run", action="store_true", dest="dry_run")
     p.set_defaults(func=cmd_split_features)

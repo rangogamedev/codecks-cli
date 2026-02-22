@@ -634,6 +634,34 @@ class TestScaffoldFeature:
         assert mock_archive.call_count == 2
 
     @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.create_card")
+    @patch("codecks_cli.client.resolve_deck_id")
+    def test_creates_with_audio_deck(self, mock_resolve, mock_create, mock_update, mock_list):
+        mock_list.return_value = {"card": {}}  # no duplicates
+        mock_resolve.side_effect = ["d-hero", "d-code", "d-design", "d-audio"]
+        mock_create.side_effect = [
+            {"cardId": "hero-1"},
+            {"cardId": "code-1"},
+            {"cardId": "design-1"},
+            {"cardId": "audio-1"},
+        ]
+        mock_update.return_value = {}
+        client = _client()
+        result = client.scaffold_feature(
+            "Inventory 2.0",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            audio_deck="Audio",
+        )
+        assert result["ok"] is True
+        assert result["hero"]["id"] == "hero-1"
+        assert len(result["subcards"]) == 3  # code + design + audio
+        assert any(s["lane"] == "audio" for s in result["subcards"])
+        assert mock_create.call_count == 4
+
+    @patch("codecks_cli.client.list_cards")
     @patch("codecks_cli.client.archive_card")
     @patch("codecks_cli.client.update_card")
     @patch("codecks_cli.client.create_card")
@@ -1135,6 +1163,9 @@ class TestClassifyChecklistItem:
     def test_no_match_returns_none(self):
         assert _classify_checklist_item("Do something generic") is None
 
+    def test_audio_keyword_matches(self):
+        assert _classify_checklist_item("Add sound sfx for button") == "audio"
+
     def test_highest_score_wins(self):
         # "implement logic and debug" has 3 code keywords vs 0 others
         assert _classify_checklist_item("implement logic and debug") == "code"
@@ -1190,6 +1221,23 @@ class TestAnalyzeFeatureForLanes:
         total = sum(len(v) for v in lanes.values())
         # Both items should be parsed (even [x] completed ones)
         assert total >= 2
+
+    def test_include_audio_adds_audio_lane(self):
+        content = "- [] Add sound sfx\n- [] Implement logic\n"
+        lanes = _analyze_feature_for_lanes(content, include_audio=True)
+        assert "audio" in lanes
+        assert any("sound" in item for item in lanes["audio"])
+
+    def test_audio_excluded_by_default(self):
+        content = "- [] Add sound sfx\n"
+        lanes = _analyze_feature_for_lanes(content)
+        assert "audio" not in lanes
+
+    def test_audio_defaults_when_empty(self):
+        content = "No checklist"
+        lanes = _analyze_feature_for_lanes(content, include_audio=True)
+        assert len(lanes["audio"]) > 0
+        assert "Create required audio assets" in lanes["audio"]
 
 
 # ---------------------------------------------------------------------------
@@ -1335,3 +1383,45 @@ class TestSplitFeatures:
         assert result["ok"] is True
         assert result["features_processed"] == 0
         assert result["features_skipped"] == 0
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.create_card")
+    @patch("codecks_cli.client.resolve_deck_id")
+    def test_with_audio_deck(self, mock_resolve, mock_create, mock_update):
+        mock_resolve.side_effect = ["d-src", "d-code", "d-design", "d-audio"]
+        mock_create.side_effect = [
+            {"cardId": "sub-code-1"},
+            {"cardId": "sub-design-1"},
+            {"cardId": "sub-audio-1"},
+        ]
+        mock_update.return_value = {}
+
+        client = _client()
+        with (
+            patch.object(client, "list_cards") as mock_list,
+            patch.object(client, "get_card") as mock_get,
+        ):
+            mock_list.return_value = {
+                "cards": [
+                    {"id": "feat-1", "title": "Sound Feature", "sub_card_count": 0},
+                ],
+                "stats": None,
+            }
+            mock_get.return_value = {
+                "id": "feat-1",
+                "title": "Sound Feature",
+                "content": "Sound Feature\n- [] Add sfx for actions\n- [] Tune balance\n",
+                "priority": "b",
+            }
+            result = client.split_features(
+                deck="Features",
+                code_deck="Coding",
+                design_deck="Design",
+                audio_deck="Audio",
+            )
+
+        assert result["ok"] is True
+        assert result["features_processed"] == 1
+        assert result["subcards_created"] == 3
+        assert len(result["details"][0]["subcards"]) == 3
+        assert any(s["lane"] == "audio" for s in result["details"][0]["subcards"])

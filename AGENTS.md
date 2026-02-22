@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (594 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (613 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -123,7 +123,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 Use `py codecks_api.py <cmd> --help` for flags.
 - `cards` supports pagination flags: `--limit <n>` and `--offset <n>` (non-negative).
 - `create` supports `--parent <id>` to nest as sub-card under a parent card.
-- `split-features` batch-splits feature cards into Code/Design/Art sub-cards (use `--dry-run` first).
+- `split-features` batch-splits feature cards into Code/Design/Art/Audio sub-cards (use `--dry-run` first).
 
 ## Git
 - Commit style: short present tense ("Add X", "Fix Y")

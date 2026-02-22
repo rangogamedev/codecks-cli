@@ -238,6 +238,34 @@ class TestMutationTools:
         )
         assert result["ok"] is True
 
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_scaffold_feature_with_audio(self, MockClient):
+        client = _mock_client(
+            scaffold_feature={
+                "ok": True,
+                "hero": {"id": "h1"},
+                "subcards": [
+                    {"lane": "code", "id": "c1"},
+                    {"lane": "design", "id": "d1"},
+                    {"lane": "audio", "id": "a1"},
+                ],
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.scaffold_feature(
+            "Sound System",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            audio_deck="Audio",
+        )
+        assert result["ok"] is True
+        assert len(result["subcards"]) == 3
+        client.scaffold_feature.assert_called_once()
+        call_kwargs = client.scaffold_feature.call_args[1]
+        assert call_kwargs["audio_deck"] == "Audio"
+        assert call_kwargs["skip_audio"] is False
+
 
 # ---------------------------------------------------------------------------
 # Comment tools
@@ -1044,6 +1072,8 @@ class TestSplitFeaturesTool:
             design_deck="Design",
             art_deck=None,
             skip_art=False,
+            audio_deck=None,
+            skip_audio=False,
             priority=None,
             dry_run=True,
         )
@@ -1089,7 +1119,42 @@ class TestSplitFeaturesTool:
             design_deck="Design",
             art_deck="Art",
             skip_art=False,
+            audio_deck=None,
+            skip_audio=False,
             priority="b",
+            dry_run=False,
+        )
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_with_audio_deck(self, MockClient):
+        client = _mock_client(
+            split_features={
+                "ok": True,
+                "features_processed": 1,
+                "features_skipped": 0,
+                "subcards_created": 3,
+                "details": [],
+                "skipped": [],
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.split_features(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            audio_deck="Audio",
+        )
+        assert result["ok"] is True
+        assert result["subcards_created"] == 3
+        client.split_features.assert_called_once_with(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=False,
+            audio_deck="Audio",
+            skip_audio=False,
+            priority=None,
             dry_run=False,
         )
 

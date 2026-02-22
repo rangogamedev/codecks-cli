@@ -5,7 +5,13 @@ import argparse
 import pytest
 
 from codecks_cli.exceptions import CliError
-from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard, ObjectPayload
+from codecks_cli.models import (
+    FeatureScaffoldReport,
+    FeatureSpec,
+    FeatureSubcard,
+    ObjectPayload,
+    SplitFeaturesSpec,
+)
 
 
 class TestObjectPayload:
@@ -28,6 +34,8 @@ class TestFeatureSpec:
             "design_deck": "Design",
             "art_deck": "Art",
             "skip_art": False,
+            "audio_deck": None,
+            "skip_audio": False,
             "description": None,
             "owner": None,
             "priority": None,
@@ -61,6 +69,44 @@ class TestFeatureSpec:
         spec = FeatureSpec.from_namespace(self._ns(allow_duplicate=True))
         assert spec.allow_duplicate is True
 
+    def test_audio_deck_passthrough(self):
+        spec = FeatureSpec.from_namespace(self._ns(audio_deck="Audio"))
+        assert spec.audio_deck == "Audio"
+        assert spec.skip_audio is False
+        assert spec.auto_skip_audio is False
+
+    def test_auto_skips_audio_when_no_deck(self):
+        spec = FeatureSpec.from_namespace(self._ns(audio_deck=None, skip_audio=False))
+        assert spec.skip_audio is True
+        assert spec.auto_skip_audio is True
+        assert spec.audio_deck is None
+
+    def test_rejects_skip_audio_with_audio_deck(self):
+        with pytest.raises(CliError):
+            FeatureSpec.from_namespace(self._ns(skip_audio=True, audio_deck="Audio"))
+
+    def test_from_kwargs_audio(self):
+        spec = FeatureSpec.from_kwargs(
+            "Combat",
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            audio_deck="Audio",
+        )
+        assert spec.audio_deck == "Audio"
+        assert spec.skip_audio is False
+
+    def test_from_kwargs_rejects_skip_audio_with_audio_deck(self):
+        with pytest.raises(CliError):
+            FeatureSpec.from_kwargs(
+                "Combat",
+                hero_deck="Features",
+                code_deck="Code",
+                design_deck="Design",
+                skip_audio=True,
+                audio_deck="Audio",
+            )
+
 
 class TestFeatureScaffoldReport:
     def test_to_dict(self):
@@ -77,6 +123,7 @@ class TestFeatureScaffoldReport:
         assert data["ok"] is True
         assert data["hero"]["id"] == "h1"
         assert data["subcards"][0]["lane"] == "code"
+        assert data["decks"]["audio"] is None
 
     def test_to_dict_with_notes(self):
         rep = FeatureScaffoldReport(
@@ -91,3 +138,68 @@ class TestFeatureScaffoldReport:
         )
         data = rep.to_dict()
         assert data["notes"] == ["Art lane auto-skipped"]
+
+    def test_to_dict_with_audio_deck(self):
+        rep = FeatureScaffoldReport(
+            hero_id="h1",
+            hero_title="Feature: Combat",
+            subcards=[FeatureSubcard(lane="audio", id="a1")],
+            hero_deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            art_deck=None,
+            audio_deck="Audio",
+        )
+        data = rep.to_dict()
+        assert data["decks"]["audio"] == "Audio"
+
+
+class TestSplitFeaturesSpec:
+    def _ns(self, **kwargs):
+        base = {
+            "deck": "Features",
+            "code_deck": "Code",
+            "design_deck": "Design",
+            "art_deck": None,
+            "skip_art": False,
+            "audio_deck": None,
+            "skip_audio": False,
+            "priority": None,
+            "dry_run": False,
+        }
+        base.update(kwargs)
+        return argparse.Namespace(**base)
+
+    def test_audio_deck_passthrough(self):
+        spec = SplitFeaturesSpec.from_namespace(self._ns(audio_deck="Audio"))
+        assert spec.audio_deck == "Audio"
+        assert spec.skip_audio is False
+
+    def test_auto_skips_audio_when_no_deck(self):
+        spec = SplitFeaturesSpec.from_namespace(self._ns())
+        assert spec.skip_audio is True
+        assert spec.audio_deck is None
+
+    def test_rejects_skip_audio_with_audio_deck(self):
+        with pytest.raises(CliError):
+            SplitFeaturesSpec.from_namespace(self._ns(skip_audio=True, audio_deck="Audio"))
+
+    def test_from_kwargs_audio(self):
+        spec = SplitFeaturesSpec.from_kwargs(
+            deck="Features",
+            code_deck="Code",
+            design_deck="Design",
+            audio_deck="Audio",
+        )
+        assert spec.audio_deck == "Audio"
+        assert spec.skip_audio is False
+
+    def test_from_kwargs_rejects_skip_audio_with_audio_deck(self):
+        with pytest.raises(CliError):
+            SplitFeaturesSpec.from_kwargs(
+                deck="Features",
+                code_deck="Code",
+                design_deck="Design",
+                skip_audio=True,
+                audio_deck="Audio",
+            )

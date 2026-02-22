@@ -740,16 +740,19 @@ def scaffold_feature(
     design_deck: str,
     art_deck: str | None = None,
     skip_art: bool = False,
+    audio_deck: str | None = None,
+    skip_audio: bool = False,
     description: str | None = None,
     owner: str | None = None,
     priority: Literal["a", "b", "c", "null"] | None = None,
     effort: int | None = None,
     allow_duplicate: bool = False,
 ) -> dict:
-    """Create a Hero card with Code/Design/Art sub-cards. Transaction-safe rollback on failure.
+    """Create a Hero card with Code/Design/Art/Audio sub-cards. Transaction-safe rollback on failure.
 
     Args:
         art_deck: Required unless skip_art=True.
+        audio_deck: Required unless skip_audio=True.
     """
     try:
         title = _validate_input(title, "title")
@@ -766,6 +769,8 @@ def scaffold_feature(
             design_deck=design_deck,
             art_deck=art_deck,
             skip_art=skip_art,
+            audio_deck=audio_deck,
+            skip_audio=skip_audio,
             description=description,
             owner=owner,
             priority=priority,
@@ -782,6 +787,8 @@ def split_features(
     design_deck: str,
     art_deck: str | None = None,
     skip_art: bool = False,
+    audio_deck: str | None = None,
+    skip_audio: bool = False,
     priority: Literal["a", "b", "c", "null"] | None = None,
     dry_run: bool = False,
 ) -> dict:
@@ -794,6 +801,8 @@ def split_features(
             design_deck=design_deck,
             art_deck=art_deck,
             skip_art=skip_art,
+            audio_deck=audio_deck,
+            skip_audio=skip_audio,
             priority=priority,
             dry_run=dry_run,
         )

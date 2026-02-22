@@ -178,7 +178,7 @@ def cmd_create(ns):
 
 
 def cmd_feature(ns):
-    """Scaffold one Hero feature plus Code/Design/(optional Art) sub-cards."""
+    """Scaffold one Hero feature plus Code/Design/(optional Art/Audio) sub-cards."""
     if _dry_run_guard("scaffold feature", f"title='{ns.title}'"):
         return
     spec = FeatureSpec.from_namespace(ns)
@@ -190,6 +190,8 @@ def cmd_feature(ns):
         design_deck=spec.design_deck,
         art_deck=spec.art_deck,
         skip_art=spec.skip_art,
+        audio_deck=spec.audio_deck,
+        skip_audio=spec.skip_audio,
         description=spec.description,
         owner=spec.owner,
         priority=spec.priority,
@@ -222,6 +224,8 @@ def cmd_split_features(ns):
         design_deck=spec.design_deck,
         art_deck=spec.art_deck,
         skip_art=spec.skip_art,
+        audio_deck=spec.audio_deck,
+        skip_audio=spec.skip_audio,
         priority=spec.priority,
         dry_run=dry_run,
     )

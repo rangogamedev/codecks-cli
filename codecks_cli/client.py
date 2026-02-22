@@ -295,6 +295,20 @@ _LANE_KEYWORDS: dict[str, list[str]] = {
         "reward",
         "threshold",
     ],
+    "audio": [
+        "sfx",
+        "sound",
+        "music",
+        "audio",
+        "voice",
+        "dialogue",
+        "ambient",
+        "foley",
+        "mix",
+        "volume",
+        "bgm",
+        "jingle",
+    ],
 }
 
 
@@ -311,7 +325,9 @@ def _classify_checklist_item(text: str) -> str | None:
     return max(scores, key=lambda k: scores[k])
 
 
-def _analyze_feature_for_lanes(content: str, *, include_art: bool = True) -> dict[str, list[str]]:
+def _analyze_feature_for_lanes(
+    content: str, *, include_art: bool = True, include_audio: bool = False
+) -> dict[str, list[str]]:
     """Parse checklist items from card content and classify into lanes.
 
     Handles both ``- []`` (Codecks interactive) and ``- [ ]`` (markdown) formats.
@@ -322,6 +338,8 @@ def _analyze_feature_for_lanes(content: str, *, include_art: bool = True) -> dic
     lanes: dict[str, list[str]] = {"code": [], "design": []}
     if include_art:
         lanes["art"] = []
+    if include_audio:
+        lanes["audio"] = []
 
     items: list[str] = []
     for line in content.splitlines():
@@ -355,6 +373,11 @@ def _analyze_feature_for_lanes(content: str, *, include_art: bool = True) -> dic
             "Create required assets/content",
             "Integrate assets in game flow",
             "Visual quality pass",
+        ],
+        "audio": [
+            "Create required audio assets",
+            "Integrate audio in game flow",
+            "Audio quality/mix pass",
         ],
     }
     for lane in lanes:
@@ -1213,6 +1236,8 @@ class CodecksClient:
         design_deck: str,
         art_deck: str | None = None,
         skip_art: bool = False,
+        audio_deck: str | None = None,
+        skip_audio: bool = False,
         description: str | None = None,
         owner: str | None = None,
         priority: str | None = None,
@@ -1221,7 +1246,7 @@ class CodecksClient:
     ) -> dict[str, Any]:
         """Scaffold a Hero feature with lane sub-cards.
 
-        Creates a Hero card plus Code, Design, and optionally Art sub-cards.
+        Creates a Hero card plus Code, Design, and optionally Art/Audio sub-cards.
         Transaction-safe: archives created cards on partial failure.
 
         Args:
@@ -1231,6 +1256,8 @@ class CodecksClient:
             design_deck: Design sub-card deck.
             art_deck: Art sub-card deck (required unless skip_art).
             skip_art: Skip art lane.
+            audio_deck: Audio sub-card deck (required unless skip_audio).
+            skip_audio: Skip audio lane.
             description: Feature context/goal.
             owner: Owner name for hero and sub-cards.
             priority: Priority level (a, b, c, or 'null').
@@ -1247,6 +1274,8 @@ class CodecksClient:
             design_deck=design_deck,
             art_deck=art_deck,
             skip_art=skip_art,
+            audio_deck=audio_deck,
+            skip_audio=skip_audio,
             description=description,
             owner=owner,
             priority=priority,
@@ -1265,6 +1294,7 @@ class CodecksClient:
         code_deck_id = resolve_deck_id(spec.code_deck)
         design_deck_id = resolve_deck_id(spec.design_deck)
         art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
+        audio_deck_id = resolve_deck_id(spec.audio_deck) if spec.audio_deck else None
 
         owner_id = _resolve_owner_id(spec.owner) if spec.owner else None
         pri = None if spec.priority == "null" else spec.priority
@@ -1278,7 +1308,7 @@ class CodecksClient:
 
         hero_body = (
             (spec.description.strip() + "\n\n" if spec.description else "") + "Success criteria:\n"
-            "- [] Lane coverage agreed (Code/Design/Art)\n"
+            "- [] Lane coverage agreed (Code/Design/Art/Audio)\n"
             "- [] Acceptance criteria validated\n"
             "- [] Integration verified\n\n"
             "Tags: #hero #feature"
@@ -1351,6 +1381,17 @@ class CodecksClient:
                         "Visual quality pass",
                     ],
                 )
+            if not spec.skip_audio and audio_deck_id:
+                _make_sub(
+                    "Audio",
+                    audio_deck_id,
+                    ["audio", "feature"],
+                    [
+                        "Create required audio assets",
+                        "Integrate audio in game flow",
+                        "Audio quality/mix pass",
+                    ],
+                )
         except SetupError as err:
             rolled_back, rollback_failed = _rollback_created(created_ids)
             detail = (
@@ -1374,6 +1415,8 @@ class CodecksClient:
         notes = []
         if spec.auto_skip_art:
             notes.append("Art lane auto-skipped (no --art-deck provided).")
+        if spec.auto_skip_audio:
+            notes.append("Audio lane auto-skipped (no --audio-deck provided).")
         if warnings:
             notes.extend(warnings)
         report = FeatureScaffoldReport(
@@ -1384,6 +1427,7 @@ class CodecksClient:
             code_deck=spec.code_deck,
             design_deck=spec.design_deck,
             art_deck=None if spec.skip_art else spec.art_deck,
+            audio_deck=None if spec.skip_audio else spec.audio_deck,
             notes=notes or None,
         )
         return report.to_dict()  # type: ignore[no-any-return]
@@ -1396,13 +1440,15 @@ class CodecksClient:
         design_deck: str,
         art_deck: str | None = None,
         skip_art: bool = False,
+        audio_deck: str | None = None,
+        skip_audio: bool = False,
         priority: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         """Batch-split feature cards into discipline sub-cards.
 
         Finds unsplit cards in *deck*, analyzes their checklist content,
-        and creates Code/Design/(optional Art) sub-cards in lane decks.
+        and creates Code/Design/(optional Art/Audio) sub-cards in lane decks.
         Transaction-safe: archives created cards on partial failure.
 
         Args:
@@ -1411,6 +1457,8 @@ class CodecksClient:
             design_deck: Destination deck for Design sub-cards.
             art_deck: Destination deck for Art sub-cards (required unless skip_art).
             skip_art: Skip creating art lane sub-cards.
+            audio_deck: Destination deck for Audio sub-cards (required unless skip_audio).
+            skip_audio: Skip creating audio lane sub-cards.
             priority: Override priority for sub-cards (a, b, c, or 'null').
             dry_run: Preview analysis without creating cards.
 
@@ -1423,6 +1471,8 @@ class CodecksClient:
             design_deck=design_deck,
             art_deck=art_deck,
             skip_art=skip_art,
+            audio_deck=audio_deck,
+            skip_audio=skip_audio,
             priority=priority,
             dry_run=dry_run,
         )
@@ -1432,6 +1482,7 @@ class CodecksClient:
         code_deck_id = resolve_deck_id(spec.code_deck)
         design_deck_id = resolve_deck_id(spec.design_deck)
         art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
+        audio_deck_id = resolve_deck_id(spec.audio_deck) if spec.audio_deck else None
 
         # List cards in source deck (lightweight — no content fetched)
         result = self.list_cards(deck=spec.deck)
@@ -1457,7 +1508,10 @@ class CodecksClient:
             content = detail.get("content") or ""
 
             include_art = not spec.skip_art
-            lanes = _analyze_feature_for_lanes(content, include_art=include_art)
+            include_audio = not spec.skip_audio
+            lanes = _analyze_feature_for_lanes(
+                content, include_art=include_art, include_audio=include_audio
+            )
 
             # Determine priority: override > parent's priority
             pri = None
@@ -1474,6 +1528,8 @@ class CodecksClient:
             ]
             if not spec.skip_art and art_deck_id:
                 lane_config.append(("art", art_deck_id, ["art", "feature"]))
+            if not spec.skip_audio and audio_deck_id:
+                lane_config.append(("audio", audio_deck_id, ["audio", "feature"]))
 
             if spec.dry_run:
                 subs = []
@@ -1554,6 +1610,8 @@ class CodecksClient:
         total_subs = sum(len(d.subcards) for d in details)
         if spec.skip_art:
             notes.append("Art lane skipped.")
+        if spec.skip_audio:
+            notes.append("Audio lane skipped.")
 
         report = SplitFeaturesReport(
             features_processed=len(details),
