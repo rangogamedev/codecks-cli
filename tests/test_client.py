@@ -402,7 +402,7 @@ class TestUpdateCards:
         assert result["ok"] is True
         assert result["updated"] == 1
         assert result["failed"] == 0
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
         mock_update.assert_called_once()
 
     @patch("codecks_cli.client.update_card")
@@ -490,7 +490,7 @@ class TestBulkStatus:
         assert result["ok"] is True
         assert result["count"] == 2
         assert result["failed"] == 0
-        assert len(result["per_card"]) == 2
+        assert "per_card" not in result
         mock_bulk.assert_called_once_with(["c1", "c2"], "done")
 
     @patch("codecks_cli.client.bulk_status")
@@ -499,7 +499,7 @@ class TestBulkStatus:
         client = _client()
         result = client.mark_started(["c1"])
         assert result["count"] == 1
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
         mock_bulk.assert_called_once_with(["c1"], "started")
 
 
@@ -516,7 +516,7 @@ class TestArchiveOps:
         result = client.archive_card("c1")
         assert result["ok"] is True
         assert result["card_id"] == "c1"
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
 
     @patch("codecks_cli.client.unarchive_card")
     def test_unarchive(self, mock_unarchive):
@@ -524,7 +524,7 @@ class TestArchiveOps:
         client = _client()
         result = client.unarchive_card("c1")
         assert result["ok"] is True
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
 
     @patch("codecks_cli.client.delete_card")
     def test_delete(self, mock_delete):
@@ -532,7 +532,7 @@ class TestArchiveOps:
         client = _client()
         result = client.delete_card("c1")
         assert result["ok"] is True
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -668,7 +668,7 @@ class TestStandup:
                 "c1": {
                     "title": "Done Yesterday",
                     "status": "done",
-                    "lastUpdatedAt": "2026-02-19T12:00:00Z",
+                    "lastUpdatedAt": "2026-02-21T12:00:00Z",
                 },
                 "c2": {"title": "Working On", "status": "started"},
                 "c3": {"title": "Stuck", "status": "blocked"},
@@ -731,7 +731,7 @@ class TestHandOperations:
         assert result["ok"] is True
         assert result["added"] == 2
         assert result["failed"] == 0
-        assert len(result["per_card"]) == 2
+        assert "per_card" not in result
 
     @patch("codecks_cli.client.remove_from_hand")
     def test_remove_from_hand(self, mock_remove):
@@ -740,7 +740,7 @@ class TestHandOperations:
         result = client.remove_from_hand(["c1"])
         assert result["ok"] is True
         assert result["removed"] == 1
-        assert result["per_card"] == [{"card_id": "c1", "ok": True}]
+        assert "per_card" not in result
 
 
 # ---------------------------------------------------------------------------

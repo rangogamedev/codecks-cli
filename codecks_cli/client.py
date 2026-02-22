@@ -900,12 +900,7 @@ class CodecksClient:
         """
         add_to_hand(card_ids)
         config._cache.pop("hand", None)
-        return {
-            "ok": True,
-            "added": len(card_ids),
-            "failed": 0,
-            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
-        }
+        return {"ok": True, "added": len(card_ids), "failed": 0}
 
     def remove_from_hand(self, card_ids: list[str]) -> dict[str, Any]:
         """Remove cards from the user's hand (personal work queue).
@@ -918,12 +913,7 @@ class CodecksClient:
         """
         remove_from_hand(card_ids)
         config._cache.pop("hand", None)
-        return {
-            "ok": True,
-            "removed": len(card_ids),
-            "failed": 0,
-            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
-        }
+        return {"ok": True, "removed": len(card_ids), "failed": 0}
 
     # -------------------------------------------------------------------
     # Mutation commands
@@ -1137,13 +1127,15 @@ class CodecksClient:
                 f"[ERROR] Failed to update card '{per_card[-1]['card_id']}': {first_error}"
             ) from first_error
 
-        return {
+        result_dict: dict[str, Any] = {
             "ok": failed == 0,
             "updated": updated,
             "failed": failed,
             "fields": update_kwargs,
-            "per_card": per_card,
         }
+        if failed > 0:
+            result_dict["per_card"] = per_card
+        return result_dict
 
     def mark_done(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as done.
@@ -1155,12 +1147,7 @@ class CodecksClient:
             dict with ok=True and count.
         """
         bulk_status(card_ids, "done")
-        return {
-            "ok": True,
-            "count": len(card_ids),
-            "failed": 0,
-            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
-        }
+        return {"ok": True, "count": len(card_ids), "failed": 0}
 
     def mark_started(self, card_ids: list[str]) -> dict[str, Any]:
         """Mark one or more cards as started.
@@ -1172,12 +1159,7 @@ class CodecksClient:
             dict with ok=True and count.
         """
         bulk_status(card_ids, "started")
-        return {
-            "ok": True,
-            "count": len(card_ids),
-            "failed": 0,
-            "per_card": [{"card_id": cid, "ok": True} for cid in card_ids],
-        }
+        return {"ok": True, "count": len(card_ids), "failed": 0}
 
     def archive_card(self, card_id: str) -> dict[str, Any]:
         """Archive a card (reversible).
@@ -1189,7 +1171,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         archive_card(card_id)
-        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
+        return {"ok": True, "card_id": card_id}
 
     def unarchive_card(self, card_id: str) -> dict[str, Any]:
         """Restore an archived card.
@@ -1201,7 +1183,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         unarchive_card(card_id)
-        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
+        return {"ok": True, "card_id": card_id}
 
     def delete_card(self, card_id: str) -> dict[str, Any]:
         """Permanently delete a card.
@@ -1213,7 +1195,7 @@ class CodecksClient:
             dict with ok=True and card_id.
         """
         delete_card(card_id)
-        return {"ok": True, "card_id": card_id, "per_card": [{"card_id": card_id, "ok": True}]}
+        return {"ok": True, "card_id": card_id}
 
     def scaffold_feature(
         self,
