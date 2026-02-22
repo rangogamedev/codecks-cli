@@ -104,6 +104,7 @@ Commands:
     --severity <level>      critical, high, low, or null
     --doc                   Create as a doc card (no workflow states)
     --allow-duplicate       Bypass exact duplicate-title protection
+    --parent <id>           Nest as sub-card under parent card ID
   feature <title>         - Scaffold Hero + lane sub-cards (no Journey mode)
     --hero-deck <name>      Hero destination deck (required)
     --code-deck <name>      Code sub-card deck (required)
@@ -313,6 +314,7 @@ def build_parser():
     p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
+    p.add_argument("--parent")
     p.set_defaults(func=cmd_create)
 
     # --- update ---

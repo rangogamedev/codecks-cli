@@ -163,6 +163,7 @@ def cmd_create(ns):
         severity=ns.severity,
         doc=ns.doc,
         allow_duplicate=getattr(ns, "allow_duplicate", False),
+        parent=getattr(ns, "parent", None),
     )
     for w in result.get("warnings", []):
         print(f"[WARN] {w}", file=sys.stderr)
@@ -171,6 +172,8 @@ def cmd_create(ns):
         detail += f", deck='{result['deck']}'"
     if result.get("doc"):
         detail += ", type=doc"
+    if result.get("parent"):
+        detail += f", parent='{result['parent']}'"
     mutation_response("Created", result["card_id"], detail, fmt=fmt)
 
 

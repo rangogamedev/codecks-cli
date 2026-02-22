@@ -386,6 +386,48 @@ class TestCreateCard:
         result = client.create_card("Totally Unique")
         assert "warnings" not in result
 
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_parent_sets_parent_card_id(self, mock_create, mock_list, mock_update):
+        mock_list.return_value = {"card": {}}
+        mock_create.return_value = {"cardId": "child-id"}
+        mock_update.return_value = {}
+        client = _client()
+        result = client.create_card("Sub Card", parent="parent-uuid")
+        assert result["ok"] is True
+        assert result["parent"] == "parent-uuid"
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["parentCardId"] == "parent-uuid"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.resolve_deck_id")
+    @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_parent_with_deck(self, mock_create, mock_list, mock_resolve, mock_update):
+        mock_list.return_value = {"card": {}}
+        mock_create.return_value = {"cardId": "child-id"}
+        mock_resolve.return_value = "deck-uuid"
+        mock_update.return_value = {}
+        client = _client()
+        result = client.create_card("Sub Card", deck="Features", parent="parent-uuid")
+        assert result["deck"] == "Features"
+        assert result["parent"] == "parent-uuid"
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["parentCardId"] == "parent-uuid"
+        assert call_kwargs["deckId"] == "deck-uuid"
+
+    @patch("codecks_cli.client.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_no_parent_skips_update(self, mock_create, mock_list):
+        mock_list.return_value = {"card": {}}
+        mock_create.return_value = {"cardId": "new-id"}
+        client = _client()
+        result = client.create_card("Solo Card")
+        assert result["parent"] is None
+
 
 # ---------------------------------------------------------------------------
 # update_cards

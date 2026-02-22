@@ -931,6 +931,7 @@ class CodecksClient:
         severity: str | None = None,
         doc: bool = False,
         allow_duplicate: bool = False,
+        parent: str | None = None,
     ) -> dict[str, Any]:
         """Create a new card.
 
@@ -942,6 +943,7 @@ class CodecksClient:
             severity: Card severity (critical, high, low, null).
             doc: If True, create as a doc card.
             allow_duplicate: Bypass duplicate title protection.
+            parent: Parent card ID to nest under (creates a sub-card).
 
         Returns:
             dict with ok=True, card_id, and title.
@@ -973,6 +975,8 @@ class CodecksClient:
                 raise CliError(f"[ERROR] Project '{project}' not found.{hint}")
         if doc:
             post_update["isDoc"] = True
+        if parent:
+            post_update["parentCardId"] = parent
         if post_update:
             update_card(card_id, **post_update)
 
@@ -982,6 +986,7 @@ class CodecksClient:
             "title": title,
             "deck": placed_in,
             "doc": doc,
+            "parent": parent,
         }
         if warnings:
             result_dict["warnings"] = warnings

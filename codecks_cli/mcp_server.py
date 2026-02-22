@@ -602,8 +602,9 @@ def create_card(
     severity: Literal["critical", "high", "low", "null"] | None = None,
     doc: bool = False,
     allow_duplicate: bool = False,
+    parent: str | None = None,
 ) -> dict:
-    """Create a new card. Set deck/project to place it. Checks duplicate titles."""
+    """Create a new card. Set deck/project to place it. Use parent to nest as sub-card."""
     try:
         title = _validate_input(title, "title")
         if content is not None:
@@ -620,6 +621,7 @@ def create_card(
             severity=severity,
             doc=doc,
             allow_duplicate=allow_duplicate,
+            parent=parent,
         )
     )
 

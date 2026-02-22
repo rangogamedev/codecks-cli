@@ -499,6 +499,60 @@ class TestCreateDuplicateGuard:
         assert "[WARN] Similar card titles found" in captured.err
 
 
+class TestCreateParent:
+    @patch("codecks_cli.commands._get_client")
+    def test_parent_passed_through(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.return_value = {
+            "ok": True,
+            "card_id": "child-id",
+            "title": "Sub Task",
+            "deck": None,
+            "doc": False,
+            "parent": "parent-uuid",
+        }
+        ns = argparse.Namespace(
+            title="Sub Task",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="table",
+            allow_duplicate=False,
+            parent="parent-uuid",
+        )
+        cmd_create(ns)
+        mock_client.create_card.assert_called_once()
+        assert mock_client.create_card.call_args[1]["parent"] == "parent-uuid"
+
+    @patch("codecks_cli.commands._get_client")
+    def test_parent_shown_in_detail(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.return_value = {
+            "ok": True,
+            "card_id": "child-id",
+            "title": "Sub Task",
+            "deck": None,
+            "doc": False,
+            "parent": "parent-uuid",
+        }
+        ns = argparse.Namespace(
+            title="Sub Task",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="table",
+            allow_duplicate=False,
+            parent="parent-uuid",
+        )
+        cmd_create(ns)
+        captured = capsys.readouterr()
+        assert "parent='parent-uuid'" in captured.out
+
+
 class TestUpdateValidation:
     @patch("codecks_cli.commands._get_client")
     def test_rejects_invalid_effort_value(self, mock_get_client):

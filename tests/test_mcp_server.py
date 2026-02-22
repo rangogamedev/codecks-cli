@@ -180,6 +180,17 @@ class TestMutationTools:
         assert result["ok"] is True
 
     @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_create_card_with_parent(self, MockClient):
+        client = _mock_client(
+            create_card={"ok": True, "card_id": "child-1", "title": "Sub", "parent": "p-uuid"}
+        )
+        MockClient.return_value = client
+        result = mcp_mod.create_card("Sub", parent="p-uuid")
+        assert result["ok"] is True
+        client.create_card.assert_called_once()
+        assert client.create_card.call_args[1]["parent"] == "p-uuid"
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
     def test_update_cards(self, MockClient):
         client = _mock_client(update_cards={"ok": True, "updated": 1})
         MockClient.return_value = client
