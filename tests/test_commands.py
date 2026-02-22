@@ -22,6 +22,7 @@ from codecks_cli.commands import (
     cmd_gdd_sync,
     cmd_hand,
     cmd_pm_focus,
+    cmd_split_features,
     cmd_standup,
     cmd_update,
 )
@@ -1214,3 +1215,80 @@ class TestCompletion:
         assert "cards" in out
         assert "create" in out
         assert "#compdef" in out
+
+
+# ---------------------------------------------------------------------------
+# split-features
+# ---------------------------------------------------------------------------
+
+
+class TestCmdSplitFeatures:
+    @patch("codecks_cli.commands._get_client")
+    def test_json_output(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.split_features.return_value = {
+            "ok": True,
+            "features_processed": 2,
+            "features_skipped": 1,
+            "subcards_created": 4,
+            "details": [
+                {
+                    "feature_id": "f1",
+                    "feature_title": "Feature A",
+                    "subcards": [
+                        {"lane": "code", "id": "s1"},
+                        {"lane": "design", "id": "s2"},
+                    ],
+                },
+            ],
+            "skipped": [{"id": "f2", "title": "Skip", "reason": "already has sub-cards"}],
+        }
+        ns = argparse.Namespace(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=False,
+            priority=None,
+            dry_run=False,
+            format="json",
+        )
+        cmd_split_features(ns)
+        out = json.loads(capsys.readouterr().out)
+        assert out["ok"] is True
+        assert out["features_processed"] == 2
+
+    @patch("codecks_cli.commands._get_client")
+    def test_table_output(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.split_features.return_value = {
+            "ok": True,
+            "features_processed": 1,
+            "features_skipped": 0,
+            "subcards_created": 2,
+            "details": [
+                {
+                    "feature_id": "f1",
+                    "feature_title": "Feature A",
+                    "subcards": [
+                        {"lane": "code", "id": "s1"},
+                        {"lane": "design", "id": "s2"},
+                    ],
+                },
+            ],
+            "skipped": [],
+        }
+        ns = argparse.Namespace(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=False,
+            priority=None,
+            dry_run=False,
+            format="table",
+        )
+        cmd_split_features(ns)
+        out = capsys.readouterr().out
+        assert "Features processed: 1" in out
+        assert "Sub-cards created: 2" in out

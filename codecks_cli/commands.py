@@ -37,7 +37,7 @@ from codecks_cli.gdd import (
     parse_gdd,
     sync_gdd,
 )
-from codecks_cli.models import FeatureSpec, ObjectPayload
+from codecks_cli.models import FeatureSpec, ObjectPayload, SplitFeaturesSpec
 
 # ---------------------------------------------------------------------------
 # Dry-run helper
@@ -200,6 +200,41 @@ def cmd_feature(ns):
         ]
         for item in result.get("subcards", []):
             lines.append(f"  - [{item['lane']}] {item['id']}")
+        if result.get("notes"):
+            for note in result["notes"]:
+                lines.append(f"[NOTE] {note}")
+        print("\n".join(lines))
+    else:
+        output(result, fmt=fmt)
+
+
+def cmd_split_features(ns):
+    """Batch-split feature cards into discipline sub-cards."""
+    dry_run = ns.dry_run or config.RUNTIME_DRY_RUN
+    fmt = ns.format
+    spec = SplitFeaturesSpec.from_namespace(ns)
+    result = _get_client().split_features(
+        deck=spec.deck,
+        code_deck=spec.code_deck,
+        design_deck=spec.design_deck,
+        art_deck=spec.art_deck,
+        skip_art=spec.skip_art,
+        priority=spec.priority,
+        dry_run=dry_run,
+    )
+    if fmt == "table":
+        mode = "[DRY-RUN] " if dry_run else ""
+        lines = [
+            f"{mode}Features processed: {result['features_processed']}",
+            f"{mode}Features skipped: {result['features_skipped']}",
+            f"{mode}Sub-cards created: {result['subcards_created']}",
+        ]
+        for detail in result.get("details", []):
+            lines.append(f"  {detail['feature_id'][:8]}.. {detail['feature_title']}")
+            for sub in detail.get("subcards", []):
+                lines.append(f"    [{sub['lane']}] {sub['id']}")
+        for skip in result.get("skipped", []):
+            lines.append(f"  SKIP: {skip['id'][:8]}.. {skip.get('title', '')} ({skip['reason']})")
         if result.get("notes"):
             for note in result["notes"]:
                 lines.append(f"[NOTE] {note}")

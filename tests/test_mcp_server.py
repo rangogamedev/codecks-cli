@@ -962,3 +962,86 @@ class TestInputValidationIntegration:
         assert result["ok"] is False
         assert result["schema_version"] == "1.0"
         assert "must be a list" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# split_features tool
+# ---------------------------------------------------------------------------
+
+
+class TestSplitFeaturesTool:
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_passthrough_to_client(self, MockClient):
+        client = _mock_client(
+            split_features={
+                "ok": True,
+                "features_processed": 2,
+                "features_skipped": 0,
+                "subcards_created": 4,
+                "details": [],
+                "skipped": [],
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.split_features(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            dry_run=True,
+        )
+        assert result["ok"] is True
+        assert result["features_processed"] == 2
+        client.split_features.assert_called_once_with(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck=None,
+            skip_art=False,
+            priority=None,
+            dry_run=True,
+        )
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_error_handling(self, MockClient):
+        client = MagicMock()
+        client.split_features.side_effect = CliError("[ERROR] deck not found")
+        MockClient.return_value = client
+        result = mcp_mod.split_features(
+            deck="Missing",
+            code_deck="Coding",
+            design_deck="Design",
+        )
+        assert result["ok"] is False
+        assert "deck not found" in result["error"]
+
+    @patch("codecks_cli.mcp_server.CodecksClient")
+    def test_with_art_deck(self, MockClient):
+        client = _mock_client(
+            split_features={
+                "ok": True,
+                "features_processed": 1,
+                "features_skipped": 0,
+                "subcards_created": 3,
+                "details": [],
+                "skipped": [],
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.split_features(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck="Art",
+            priority="b",
+        )
+        assert result["ok"] is True
+        assert result["subcards_created"] == 3
+        client.split_features.assert_called_once_with(
+            deck="Features",
+            code_deck="Coding",
+            design_deck="Design",
+            art_deck="Art",
+            skip_art=False,
+            priority="b",
+            dry_run=False,
+        )

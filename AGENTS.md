@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (544 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (564 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py`
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -24,14 +24,14 @@ codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                <- argparse, build_parser(), main() dispatch
   commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
-  client.py             <- CodecksClient: 27 public methods (the API surface, stable mutation contracts)
+  client.py             <- CodecksClient: 28 public methods (the API surface, stable mutation contracts)
   cards.py              <- Card CRUD, hand, conversations, enrichment
   api.py                <- HTTP layer: query(), dispatch(), retries, token check
   config.py             <- Env, tokens, constants, runtime state, contract settings
   exceptions.py         <- CliError, SetupError, HTTPError
   _utils.py             <- _get_field(), get_card_tags(), date/multi-value parsers
   types.py              <- TypedDict response shapes (CardRow, CardDetail, etc.)
-  models.py             <- ObjectPayload, FeatureSpec dataclasses
+  models.py             <- ObjectPayload, FeatureSpec, SplitFeaturesSpec dataclasses
   formatters/           <- JSON/table/CSV output (7 sub-modules)
     __init__.py          re-exports all 24 names
     _table.py            _table(), _trunc(), _sanitize_str()
@@ -43,7 +43,7 @@ codecks_cli/
     _gdd.py              format_gdd_table, format_sync_report
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server.py         <- MCP server: 28 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server.py         <- MCP server: 29 tools wrapping CodecksClient (stdio, legacy/envelope modes)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 ```
 
@@ -109,7 +109,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 28 tools exposed (25 CodecksClient wrappers + 3 PM session tools)
+- 29 tools exposed (26 CodecksClient wrappers + 3 PM session tools)
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`

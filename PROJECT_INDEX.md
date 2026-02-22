@@ -24,7 +24,7 @@ Fast index for agents and maintainers.
 - Shared exceptions: `codecks_cli/exceptions.py`
 - Field/parsing helpers: `codecks_cli/_utils.py`
 - Typed API shapes: `codecks_cli/types.py`
-- Dataclasses for payload contracts: `codecks_cli/models.py`
+- Dataclasses for payload contracts (FeatureSpec, SplitFeaturesSpec): `codecks_cli/models.py`
 - Output formatters: `codecks_cli/formatters/`
 - Google Docs sync/auth: `codecks_cli/gdd.py`
 - Setup wizard: `codecks_cli/setup_wizard.py`

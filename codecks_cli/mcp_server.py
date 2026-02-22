@@ -706,14 +706,14 @@ def create_card(
         return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(
         _call(
-        "create_card",
-        title=title,
-        content=content,
-        deck=deck,
-        project=project,
-        severity=severity,
-        doc=doc,
-        allow_duplicate=allow_duplicate,
+            "create_card",
+            title=title,
+            content=content,
+            deck=deck,
+            project=project,
+            severity=severity,
+            doc=doc,
+            allow_duplicate=allow_duplicate,
         )
     )
 
@@ -765,19 +765,19 @@ def update_cards(
         return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(
         _call(
-        "update_cards",
-        card_ids=card_ids,
-        status=status,
-        priority=priority,
-        effort=effort,
-        deck=deck,
-        title=title,
-        content=content,
-        milestone=milestone,
-        hero=hero,
-        owner=owner,
-        tags=tags,
-        doc=doc,
+            "update_cards",
+            card_ids=card_ids,
+            status=status,
+            priority=priority,
+            effort=effort,
+            deck=deck,
+            title=title,
+            content=content,
+            milestone=milestone,
+            hero=hero,
+            owner=owner,
+            tags=tags,
+            doc=doc,
         )
     )
 
@@ -901,18 +901,68 @@ def scaffold_feature(
         return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finalize_tool_result(
         _call(
-        "scaffold_feature",
-        title=title,
-        hero_deck=hero_deck,
-        code_deck=code_deck,
-        design_deck=design_deck,
-        art_deck=art_deck,
-        skip_art=skip_art,
-        description=description,
-        owner=owner,
-        priority=priority,
-        effort=effort,
-        allow_duplicate=allow_duplicate,
+            "scaffold_feature",
+            title=title,
+            hero_deck=hero_deck,
+            code_deck=code_deck,
+            design_deck=design_deck,
+            art_deck=art_deck,
+            skip_art=skip_art,
+            description=description,
+            owner=owner,
+            priority=priority,
+            effort=effort,
+            allow_duplicate=allow_duplicate,
+        )
+    )
+
+
+@mcp.tool()
+def split_features(
+    deck: str,
+    code_deck: str,
+    design_deck: str,
+    art_deck: str | None = None,
+    skip_art: bool = False,
+    priority: Literal["a", "b", "c", "null"] | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """Batch-split feature cards into discipline sub-cards.
+
+    Finds all unsplit cards in the source deck, analyzes their checklist
+    content for Code/Design/Art items, and creates lane sub-cards in one
+    operation. Use dry_run=True first to preview what would be created.
+
+    This replaces the manual workflow of fetching each card, analyzing
+    content, and creating sub-cards one at a time — saving ~30 API calls
+    and significant token overhead per batch.
+
+    Transaction-safe: archives created cards on partial failure.
+
+    Args:
+        deck: Source deck containing feature cards (required).
+        code_deck: Destination deck for Code sub-cards (required).
+        design_deck: Destination deck for Design sub-cards (required).
+        art_deck: Destination deck for Art sub-cards (optional).
+        skip_art: Skip creating art lane sub-cards.
+        priority: Override priority for sub-cards. Use 'null' to clear.
+        dry_run: Preview analysis without creating cards.
+
+    Returns:
+        dict with ok=True, features_processed, features_skipped,
+        subcards_created, details (per-feature breakdown), and skipped
+        (features with existing sub-cards).
+    """
+    return _finalize_tool_result(
+        _call(
+            "split_features",
+            deck=deck,
+            code_deck=code_deck,
+            design_deck=design_deck,
+            art_deck=art_deck,
+            skip_art=skip_art,
+            priority=priority,
+            dry_run=dry_run,
         )
     )
 

@@ -111,9 +111,13 @@ class FeatureSpec:
 class FeatureSubcard:
     lane: str
     id: str
+    title: str | None = None
 
     def to_dict(self):
-        return {"lane": self.lane, "id": self.id}
+        out = {"lane": self.lane, "id": self.id}
+        if self.title is not None:
+            out["title"] = self.title
+        return out
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,101 @@ class FeatureScaffoldReport:
                 "design": self.design_deck,
                 "art": self.art_deck,
             },
+        }
+        if self.notes:
+            out["notes"] = self.notes
+        return out
+
+
+@dataclass(frozen=True)
+class SplitFeaturesSpec:
+    """Validated input contract for `split-features` batch decomposition."""
+
+    deck: str
+    code_deck: str
+    design_deck: str
+    art_deck: str | None
+    skip_art: bool
+    priority: str | None
+    dry_run: bool
+
+    @classmethod
+    def from_namespace(cls, ns):
+        if ns.skip_art and ns.art_deck:
+            raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
+        skip_art = bool(ns.skip_art or (not ns.art_deck))
+        return cls(
+            deck=ns.deck,
+            code_deck=ns.code_deck,
+            design_deck=ns.design_deck,
+            art_deck=None if skip_art else ns.art_deck,
+            skip_art=skip_art,
+            priority=ns.priority,
+            dry_run=bool(ns.dry_run),
+        )
+
+    @classmethod
+    def from_kwargs(
+        cls,
+        *,
+        deck,
+        code_deck,
+        design_deck,
+        art_deck=None,
+        skip_art=False,
+        priority=None,
+        dry_run=False,
+    ):
+        """Create from keyword arguments (programmatic API / MCP)."""
+        if skip_art and art_deck:
+            raise CliError("[ERROR] Use either --skip-art or --art-deck, not both.")
+        skip_art = bool(skip_art or (not art_deck))
+        return cls(
+            deck=deck,
+            code_deck=code_deck,
+            design_deck=design_deck,
+            art_deck=None if skip_art else art_deck,
+            skip_art=skip_art,
+            priority=priority,
+            dry_run=bool(dry_run),
+        )
+
+
+@dataclass(frozen=True)
+class SplitFeatureDetail:
+    """One processed feature in a split-features batch."""
+
+    feature_id: str
+    feature_title: str
+    subcards: list[FeatureSubcard]
+
+    def to_dict(self):
+        return {
+            "feature_id": self.feature_id,
+            "feature_title": self.feature_title,
+            "subcards": [s.to_dict() for s in self.subcards],
+        }
+
+
+@dataclass(frozen=True)
+class SplitFeaturesReport:
+    """Full report from a split-features batch operation."""
+
+    features_processed: int
+    features_skipped: int
+    subcards_created: int
+    details: list[SplitFeatureDetail]
+    skipped: list[dict]
+    notes: list[str] | None = None
+
+    def to_dict(self):
+        out = {
+            "ok": True,
+            "features_processed": self.features_processed,
+            "features_skipped": self.features_skipped,
+            "subcards_created": self.subcards_created,
+            "details": [d.to_dict() for d in self.details],
+            "skipped": self.skipped,
         }
         if self.notes:
             out["notes"] = self.notes

@@ -55,7 +55,14 @@ from codecks_cli.cards import (
     update_card,
 )
 from codecks_cli.exceptions import CliError, SetupError
-from codecks_cli.models import FeatureScaffoldReport, FeatureSpec, FeatureSubcard
+from codecks_cli.models import (
+    FeatureScaffoldReport,
+    FeatureSpec,
+    FeatureSubcard,
+    SplitFeatureDetail,
+    SplitFeaturesReport,
+    SplitFeaturesSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers (moved from commands.py)
@@ -224,6 +231,137 @@ def _to_legacy_format(cards_list):
         if cid:
             result[cid] = card_copy
     return result
+
+
+# ---------------------------------------------------------------------------
+# Content analysis helpers for split-features
+# ---------------------------------------------------------------------------
+
+_LANE_KEYWORDS: dict[str, list[str]] = {
+    "code": [
+        "implement",
+        "build",
+        "create bp_",
+        "struct",
+        "function",
+        "test:",
+        "logic",
+        "system",
+        "enum",
+        "component",
+        "manager",
+        "tracking",
+        "handle",
+        "wire",
+        "connect",
+        "refactor",
+        "fix",
+        "debug",
+        "integrate",
+        "script",
+        "blueprint",
+        "variable",
+        "class",
+        "method",
+    ],
+    "art": [
+        "sprite",
+        "animation",
+        "visual",
+        "portrait",
+        "ui layout",
+        "effect",
+        "icon",
+        "color",
+        "asset",
+        "texture",
+        "particle",
+        "vfx",
+    ],
+    "design": [
+        "balance",
+        "tune",
+        "playtest",
+        "define",
+        "pacing",
+        "feel",
+        "scaling",
+        "progression",
+        "economy",
+        "curve",
+        "difficulty",
+        "feedback",
+        "flow",
+        "reward",
+        "threshold",
+    ],
+}
+
+
+def _classify_checklist_item(text: str) -> str | None:
+    """Score a checklist item against lane keywords, return highest lane or None."""
+    lower = text.lower()
+    scores: dict[str, int] = {}
+    for lane, keywords in _LANE_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in lower)
+        if score > 0:
+            scores[lane] = score
+    if not scores:
+        return None
+    return max(scores, key=lambda k: scores[k])
+
+
+def _analyze_feature_for_lanes(content: str, *, include_art: bool = True) -> dict[str, list[str]]:
+    """Parse checklist items from card content and classify into lanes.
+
+    Handles both ``- []`` (Codecks interactive) and ``- [ ]`` (markdown) formats.
+    Unclassified items go to the smallest lane. Empty lanes get generic defaults.
+    """
+    import re
+
+    lanes: dict[str, list[str]] = {"code": [], "design": []}
+    if include_art:
+        lanes["art"] = []
+
+    items: list[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        match = re.match(r"^-\s*\[[\sx]?\]\s*(.+)", stripped)
+        if match:
+            items.append(match.group(1).strip())
+
+    unclassified: list[str] = []
+    for item in items:
+        lane = _classify_checklist_item(item)
+        if lane and lane in lanes:
+            lanes[lane].append(item)
+        else:
+            unclassified.append(item)
+
+    # Distribute unclassified items to the smallest lane
+    for item in unclassified:
+        smallest = min(lanes, key=lambda k: len(lanes[k]))
+        lanes[smallest].append(item)
+
+    # Fill empty lanes with generic defaults
+    defaults = {
+        "code": ["Implement core logic", "Handle edge cases", "Add tests/verification"],
+        "design": [
+            "Define target player feel",
+            "Tune balance/economy parameters",
+            "Run playtest and iterate",
+        ],
+        "art": [
+            "Create required assets/content",
+            "Integrate assets in game flow",
+            "Visual quality pass",
+        ],
+    }
+    for lane in lanes:
+        if not lanes[lane]:
+            lanes[lane] = list(defaults.get(lane, [f"Complete {lane} tasks"]))
+
+    return lanes
 
 
 # ---------------------------------------------------------------------------
@@ -1268,6 +1406,198 @@ class CodecksClient:
             code_deck=spec.code_deck,
             design_deck=spec.design_deck,
             art_deck=None if spec.skip_art else spec.art_deck,
+            notes=notes or None,
+        )
+        return report.to_dict()  # type: ignore[no-any-return]
+
+    def split_features(
+        self,
+        *,
+        deck: str,
+        code_deck: str,
+        design_deck: str,
+        art_deck: str | None = None,
+        skip_art: bool = False,
+        priority: str | None = None,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Batch-split feature cards into discipline sub-cards.
+
+        Finds unsplit cards in *deck*, analyzes their checklist content,
+        and creates Code/Design/(optional Art) sub-cards in lane decks.
+        Transaction-safe: archives created cards on partial failure.
+
+        Args:
+            deck: Source deck containing feature cards.
+            code_deck: Destination deck for Code sub-cards.
+            design_deck: Destination deck for Design sub-cards.
+            art_deck: Destination deck for Art sub-cards (required unless skip_art).
+            skip_art: Skip creating art lane sub-cards.
+            priority: Override priority for sub-cards (a, b, c, or 'null').
+            dry_run: Preview analysis without creating cards.
+
+        Returns:
+            SplitFeaturesReport as dict with ok=True.
+        """
+        spec = SplitFeaturesSpec.from_kwargs(
+            deck=deck,
+            code_deck=code_deck,
+            design_deck=design_deck,
+            art_deck=art_deck,
+            skip_art=skip_art,
+            priority=priority,
+            dry_run=dry_run,
+        )
+
+        # Resolve deck IDs upfront (fail fast)
+        source_deck_id = resolve_deck_id(spec.deck)
+        code_deck_id = resolve_deck_id(spec.code_deck)
+        design_deck_id = resolve_deck_id(spec.design_deck)
+        art_deck_id = resolve_deck_id(spec.art_deck) if spec.art_deck else None
+        # Suppress unused variable warning — art_deck_id is used in the loop below
+        _ = source_deck_id
+
+        # List cards in source deck (lightweight — no content fetched)
+        result = self.list_cards(deck=spec.deck)
+        all_cards = result.get("cards", [])
+
+        details: list[SplitFeatureDetail] = []
+        skipped: list[dict[str, Any]] = []
+        notes: list[str] = []
+        created_ids: list[str] = []
+
+        def _rollback():
+            rolled_back = []
+            rollback_failed = []
+            for cid in reversed(created_ids):
+                try:
+                    archive_card(cid)
+                    rolled_back.append(cid)
+                except Exception:
+                    rollback_failed.append(cid)
+            return rolled_back, rollback_failed
+
+        for card in all_cards:
+            cid = card.get("id", "")
+            title = card.get("title", "")
+            sub_count = card.get("sub_card_count") or 0
+
+            # Skip cards that already have sub-cards
+            if sub_count > 0:
+                skipped.append({"id": cid, "title": title, "reason": "already has sub-cards"})
+                continue
+
+            # Fetch full content for analysis
+            detail = self.get_card(cid, include_conversations=False)
+            content = detail.get("content") or ""
+
+            include_art = not spec.skip_art
+            lanes = _analyze_feature_for_lanes(content, include_art=include_art)
+
+            # Determine priority: override > parent's priority
+            pri = None
+            if spec.priority is not None:
+                pri = None if spec.priority == "null" else spec.priority
+            else:
+                parent_pri = detail.get("priority")
+                if parent_pri:
+                    pri = parent_pri
+
+            lane_config = [
+                ("code", code_deck_id, ["code", "feature"]),
+                ("design", design_deck_id, ["design", "feel", "economy", "feature"]),
+            ]
+            if not spec.skip_art and art_deck_id:
+                lane_config.append(("art", art_deck_id, ["art", "feature"]))
+
+            if spec.dry_run:
+                subs = []
+                for lane_name, _deck_id, _tags in lane_config:
+                    checklist = lanes.get(lane_name, [])
+                    sub_title = f"[{lane_name.capitalize()}] {title}"
+                    subs.append(FeatureSubcard(lane=lane_name, id="(dry-run)", title=sub_title))
+                    notes_items = [f"  {lane_name}: {len(checklist)} items"]
+                    if notes_items:
+                        notes.extend(notes_items)
+                details.append(
+                    SplitFeatureDetail(
+                        feature_id=cid,
+                        feature_title=title,
+                        subcards=subs,
+                    )
+                )
+                continue
+
+            # Live mode: create sub-cards
+            try:
+                feature_subs: list[FeatureSubcard] = []
+                for lane_name, lane_deck_id, lane_tags in lane_config:
+                    checklist = lanes.get(lane_name, [])
+                    sub_title = f"[{lane_name.capitalize()}] {title}"
+                    sub_body = (
+                        "Scope:\n"
+                        f"- {lane_name.capitalize()} lane execution for feature goal\n\n"
+                        "Checklist:\n"
+                        + "\n".join(f"- [] {item}" for item in checklist)
+                        + "\n\nTags: "
+                        + " ".join(f"#{t}" for t in lane_tags)
+                    )
+                    res = create_card(sub_title, sub_body)
+                    sub_id = res.get("cardId")
+                    if not sub_id:
+                        raise CliError(
+                            f"[ERROR] {lane_name} sub-card creation failed: missing cardId."
+                        )
+                    created_ids.append(sub_id)
+
+                    update_kwargs: dict[str, Any] = {
+                        "parentCardId": cid,
+                        "deckId": lane_deck_id,
+                        "masterTags": lane_tags,
+                    }
+                    if pri is not None:
+                        update_kwargs["priority"] = pri
+                    update_card(sub_id, **update_kwargs)
+
+                    feature_subs.append(FeatureSubcard(lane=lane_name, id=sub_id, title=sub_title))
+
+                details.append(
+                    SplitFeatureDetail(
+                        feature_id=cid,
+                        feature_title=title,
+                        subcards=feature_subs,
+                    )
+                )
+            except SetupError as err:
+                rolled_back, rollback_failed = _rollback()
+                detail_msg = (
+                    f"{err}\n[ERROR] Rollback archived "
+                    f"{len(rolled_back)}/{len(created_ids)} created cards."
+                )
+                if rollback_failed:
+                    detail_msg += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
+                raise SetupError(detail_msg) from err
+            except Exception as err:
+                rolled_back, rollback_failed = _rollback()
+                detail_msg = (
+                    f"[ERROR] Split-features failed: {err}\n"
+                    f"[ERROR] Rollback archived {len(rolled_back)}/{len(created_ids)} "
+                    "created cards."
+                )
+                if rollback_failed:
+                    detail_msg += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
+                raise CliError(detail_msg) from err
+
+        total_subs = sum(len(d.subcards) for d in details)
+        if spec.skip_art:
+            notes.append("Art lane skipped.")
+
+        report = SplitFeaturesReport(
+            features_processed=len(details),
+            features_skipped=len(skipped),
+            subcards_created=total_subs if not spec.dry_run else 0,
+            details=details,
+            skipped=skipped,
             notes=notes or None,
         )
         return report.to_dict()  # type: ignore[no-any-return]

@@ -33,6 +33,7 @@ from codecks_cli.commands import (
     cmd_pm_focus,
     cmd_projects,
     cmd_query,
+    cmd_split_features,
     cmd_standup,
     cmd_start,
     cmd_unarchive,
@@ -114,6 +115,14 @@ Commands:
     --priority <level>      a, b, c, or null
     --effort <n>            Apply effort to sub-cards
     --allow-duplicate       Bypass exact duplicate Hero-title protection
+  split-features          - Batch-split feature cards into discipline sub-cards
+    --deck <name>           Source deck containing features (required)
+    --code-deck <name>      Code sub-card deck (required)
+    --design-deck <name>    Design sub-card deck (required)
+    --art-deck <name>       Art sub-card deck (optional)
+    --skip-art              Skip art lane
+    --priority <level>      Override priority for sub-cards (a, b, c, null)
+    --dry-run               Preview analysis without creating cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
     --status <state>        not_started, started, done, blocked, in_review
     --priority <level>      a (high), b (medium), c (low), or null
@@ -336,6 +345,17 @@ def build_parser():
     p.add_argument("--effort", type=_positive_int)
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
     p.set_defaults(func=cmd_feature)
+
+    # --- split-features ---
+    p = sub.add_parser("split-features")
+    p.add_argument("--deck", required=True)
+    p.add_argument("--code-deck", required=True, dest="code_deck")
+    p.add_argument("--design-deck", required=True, dest="design_deck")
+    p.add_argument("--art-deck", dest="art_deck")
+    p.add_argument("--skip-art", action="store_true", dest="skip_art")
+    p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
+    p.add_argument("--dry-run", action="store_true", dest="dry_run")
+    p.set_defaults(func=cmd_split_features)
 
     # --- archive / remove ---
     for name in ("archive", "remove"):
