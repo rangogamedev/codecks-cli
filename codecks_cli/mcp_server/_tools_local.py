@@ -1,4 +1,4 @@
-"""Local tools: PM session, feedback, planning, registry (11 tools, no API calls)."""
+"""Local tools: PM session, feedback, planning, registry (12 tools, no API calls)."""
 
 from __future__ import annotations
 
@@ -185,6 +185,67 @@ def get_cli_feedback(
         return _finalize_tool_result(_contract_error(f"Cannot read feedback: {e}", "error"))
 
 
+def clear_cli_feedback(
+    category: Literal["missing_feature", "bug", "error", "improvement", "usability"] | None = None,
+) -> dict:
+    """Clear resolved CLI feedback items. Optionally filter by category. No auth needed.
+
+    Use after fixing issues reported in .cli_feedback.json to keep the file tidy.
+
+    Args:
+        category: Clear only this category (default: clear all items).
+
+    Returns:
+        Dict with cleared (int) and remaining (int) counts.
+    """
+    if category is not None and category not in _FEEDBACK_CATEGORIES:
+        return _finalize_tool_result(
+            _contract_error(
+                f"Invalid category: {category!r}. "
+                f"Must be one of: {', '.join(sorted(_FEEDBACK_CATEGORIES))}",
+                "error",
+            )
+        )
+
+    # Load existing feedback
+    items: list[dict] = []
+    try:
+        with open(_FEEDBACK_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            items = data["items"]
+    except FileNotFoundError:
+        return _finalize_tool_result({"cleared": 0, "remaining": 0})
+    except (json.JSONDecodeError, OSError) as e:
+        return _finalize_tool_result(_contract_error(f"Cannot read feedback: {e}", "error"))
+
+    original_count = len(items)
+    if category is not None:
+        remaining = [i for i in items if i.get("category") != category]
+    else:
+        remaining = []
+
+    cleared = original_count - len(remaining)
+
+    # Atomic write
+    out_data = {
+        "items": remaining,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_FEEDBACK_PATH), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(out_data, f, indent=2)
+            os.replace(tmp_path, _FEEDBACK_PATH)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
+        return _finalize_tool_result({"cleared": cleared, "remaining": len(remaining)})
+    except OSError as e:
+        return _finalize_tool_result(_contract_error(f"Cannot write feedback: {e}", "error"))
+
+
 def planning_init(force: bool = False) -> dict:
     """Create lean planning files (task_plan.md, findings.md, progress.md) in project root.
 
@@ -356,6 +417,7 @@ def register(mcp):
     mcp.tool()(save_workflow_preferences)
     mcp.tool()(save_cli_feedback)
     mcp.tool()(get_cli_feedback)
+    mcp.tool()(clear_cli_feedback)
     mcp.tool()(planning_init)
     mcp.tool()(planning_status)
     mcp.tool()(planning_update)

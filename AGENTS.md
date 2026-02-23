@@ -80,7 +80,7 @@ codecks_cli/
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- MCP server package: 38 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server/            <- MCP server package: 39 tools wrapping CodecksClient (stdio, legacy/envelope modes)
     __init__.py          FastMCP init, register() calls, re-exports
     __main__.py          ``py -m codecks_cli.mcp_server`` entry point
     _core.py             Client caching, _call dispatcher, response contract, UUID validation
@@ -88,7 +88,7 @@ codecks_cli/
     _tools_read.py       10 query/dashboard tools
     _tools_write.py      12 mutation/hand/scaffolding tools
     _tools_comments.py   5 comment CRUD tools
-    _tools_local.py      11 local tools (PM session, feedback, planning, registry)
+    _tools_local.py      12 local tools (PM session, feedback, planning, registry)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell, dev, logs, claude)
 Dockerfile              <- Multi-stage build (Python 3.12-slim, dev+mcp+claude deps)
@@ -163,7 +163,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 38 tools exposed (27 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 2 feedback tools + 2 registry tools)
+- 39 tools exposed (27 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 3 feedback tools + 2 registry tools)
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`
@@ -181,12 +181,12 @@ for item in feedback["items"]:
     print(f"[{item['category']}] {item['message']}")
 ```
 
-Or via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")`
+Or via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")` / `clear_cli_feedback()`
 
 Feedback categories: `missing_feature`, `bug`, `error`, `improvement`, `usability`.
 Each item has: `timestamp`, `category`, `message`, optional `tool_name` and `context`.
 
-When you fix an issue reported in feedback, consider clearing those items or noting the fix. The file caps at 200 items (oldest removed automatically).
+When you fix an issue reported in feedback, clear resolved items with `clear_cli_feedback()` (all) or `clear_cli_feedback(category="bug")` (by category). The file caps at 200 items (oldest removed automatically).
 
 ## Commands
 Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.

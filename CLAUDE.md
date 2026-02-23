@@ -36,7 +36,7 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- 38 MCP tools (package: _core, _security, _tools_*)
+  mcp_server/            <- 39 MCP tools (package: _core, _security, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.
@@ -72,12 +72,12 @@ Quick: `./docker/build.sh` then `./docker/test.sh`, `./docker/quality.sh`, `./do
 
 ## MCP Server
 - Run: `py -m codecks_cli.mcp_server` (stdio). Install: `py -m pip install .[mcp]`
-- 38 tools. Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
+- 39 tools. Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
 - Standalone wrapper repos archived (unnecessary — use `py -m codecks_cli.mcp_server` directly)
 
 ## CLI Feedback
 Read `.cli_feedback.json` at session start — PM agent reports bugs/improvements there.
-Via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")`
+Via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")` / `clear_cli_feedback()`
 
 ## Skills (`.claude/commands/`)
 `/pm`, `/release`, `/api-ref`, `/codecks-docs <topic>`, `/quality`, `/mcp-validate`, `/troubleshoot`, `/split-features`, `/doc-update`, `/changelog`, `/docker`, `/registry`, `/architecture`, `/api-pitfalls`, `/maintenance`
@@ -97,7 +97,7 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 | mypy | `/websites/mypy_readthedocs_io_en` |
 
 ## MCP Servers (`.claude/settings.json`)
-- `codecks` — this project's own MCP server (38 tools, Codecks API access)
+- `codecks` — this project's own MCP server (39 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 

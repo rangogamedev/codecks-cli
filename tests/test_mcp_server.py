@@ -1271,6 +1271,57 @@ class TestFeedbackTools:
             assert result["found"] is False
             assert result["count"] == 0
 
+    def test_clear_cli_feedback_all(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
+            mcp_mod.save_cli_feedback(category="bug", message="Bug one")
+            mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
+            mcp_mod.save_cli_feedback(category="bug", message="Bug three")
+            result = mcp_mod.clear_cli_feedback()
+            assert result["ok"] is True
+            assert result["cleared"] == 3
+            assert result["remaining"] == 0
+            data = json.loads(feedback_file.read_text())
+            assert len(data["items"]) == 0
+
+    def test_clear_cli_feedback_by_category(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
+            mcp_mod.save_cli_feedback(category="bug", message="Bug one")
+            mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
+            mcp_mod.save_cli_feedback(category="bug", message="Bug three")
+            result = mcp_mod.clear_cli_feedback(category="bug")
+            assert result["ok"] is True
+            assert result["cleared"] == 2
+            assert result["remaining"] == 1
+            data = json.loads(feedback_file.read_text())
+            assert len(data["items"]) == 1
+            assert data["items"][0]["category"] == "improvement"
+
+    def test_clear_cli_feedback_no_file(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.clear_cli_feedback()
+            assert result["ok"] is True
+            assert result["cleared"] == 0
+            assert result["remaining"] == 0
+
+    def test_clear_cli_feedback_invalid_category(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.clear_cli_feedback(category="nonsense")
+            assert result["ok"] is False
+            assert "Invalid category" in result["error"]
+
+    def test_clear_cli_feedback_empty_file(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        feedback_file.write_text(json.dumps({"items": [], "updated_at": "t"}))
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.clear_cli_feedback()
+            assert result["ok"] is True
+            assert result["cleared"] == 0
+            assert result["remaining"] == 0
+
 
 # ---------------------------------------------------------------------------
 # Planning tools

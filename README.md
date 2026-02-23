@@ -449,7 +449,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes 38 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 39 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -477,7 +477,7 @@ Add to your MCP settings:
 }
 ```
 
-### 38 tools
+### 39 tools
 
 | Category | Tools |
 |----------|-------|
@@ -487,7 +487,7 @@ Add to your MCP settings:
 | **Comments** (5) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
 | **Planning** (4) | `planning_init`, `planning_status`, `planning_update`, `planning_measure` |
-| **Feedback** (2) | `get_cli_feedback`, `save_cli_feedback` |
+| **Feedback** (3) | `get_cli_feedback`, `save_cli_feedback`, `clear_cli_feedback` |
 | **Registry** (2) | `get_tag_registry`, `get_lane_registry` |
 
 ### Features
