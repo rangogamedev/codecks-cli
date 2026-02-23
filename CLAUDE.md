@@ -36,7 +36,7 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server.py         <- 38 MCP tools
+  mcp_server/            <- 38 MCP tools (package: _core, _security, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.

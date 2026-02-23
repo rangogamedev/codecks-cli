@@ -8,10 +8,14 @@ import pytest
 
 mcp_mod = pytest.importorskip("codecks_cli.mcp_server", reason="mcp package not installed")
 
+import importlib  # noqa: E402
 import json  # noqa: E402
 from unittest.mock import MagicMock, patch  # noqa: E402
 
 from codecks_cli.exceptions import CliError, SetupError  # noqa: E402
+
+_core = importlib.import_module("codecks_cli.mcp_server._core")
+_tools_local = importlib.import_module("codecks_cli.mcp_server._tools_local")
 
 # Test UUIDs (36-char, 4 dashes — passes _validate_uuid)
 _C1 = "00000000-0000-0000-0000-000000000001"
@@ -23,9 +27,9 @@ _BAD = "bad-id"  # intentionally invalid for error tests
 @pytest.fixture(autouse=True)
 def _reset_client_cache():
     """Reset the cached CodecksClient between tests."""
-    mcp_mod._client = None
+    _core._client = None
     yield
-    mcp_mod._client = None
+    _core._client = None
 
 
 def _mock_client(**method_returns):
@@ -42,13 +46,13 @@ def _mock_client(**method_returns):
 
 
 class TestReadTools:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_account(self, MockClient):
         MockClient.return_value = _mock_client(get_account={"name": "Alice", "id": "u1"})
         result = mcp_mod.get_account()
         assert result["name"] == "Alice"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_cards(self, MockClient):
         client = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": None})
         MockClient.return_value = client
@@ -76,26 +80,26 @@ class TestReadTools:
             include_stats=False,
         )
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_card(self, MockClient):
         MockClient.return_value = _mock_client(get_card={"id": _C1, "title": "Test"})
         result = mcp_mod.get_card(_C1)
         assert result["id"] == _C1
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_decks(self, MockClient):
         MockClient.return_value = _mock_client(list_decks=[{"id": "d1", "title": "Features"}])
         result = mcp_mod.list_decks()
         assert result[0]["title"] == "Features"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_decks_passes_include_card_counts(self, MockClient):
         client = _mock_client(list_decks=[{"id": "d1", "title": "Features", "card_count": None}])
         MockClient.return_value = client
         mcp_mod.list_decks(include_card_counts=False)
         client.list_decks.assert_called_once_with(include_card_counts=False)
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_card_passes_field_control(self, MockClient):
         client = _mock_client(get_card={"id": _C1, "title": "Test"})
         MockClient.return_value = client
@@ -104,19 +108,19 @@ class TestReadTools:
             card_id=_C1, include_content=False, include_conversations=False, archived=False
         )
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_projects(self, MockClient):
         MockClient.return_value = _mock_client(list_projects=[{"id": "p1", "name": "Tea"}])
         result = mcp_mod.list_projects()
         assert result[0]["name"] == "Tea"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_milestones(self, MockClient):
         MockClient.return_value = _mock_client(list_milestones=[{"id": "m1", "name": "MVP"}])
         result = mcp_mod.list_milestones()
         assert result[0]["name"] == "MVP"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_tags(self, MockClient):
         MockClient.return_value = _mock_client(
             list_tags=[{"id": "t1", "title": "Feature", "color": "#ff0000"}]
@@ -124,7 +128,7 @@ class TestReadTools:
         result = mcp_mod.list_tags()
         assert result[0]["title"] == "Feature"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_activity(self, MockClient):
         client = _mock_client(list_activity={"activity": {}})
         MockClient.return_value = client
@@ -132,13 +136,13 @@ class TestReadTools:
         client.list_activity.assert_called_once_with(limit=5)
         assert "activity" in result
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pm_focus(self, MockClient):
         MockClient.return_value = _mock_client(pm_focus={"counts": {}, "suggested": []})
         result = mcp_mod.pm_focus(project="Tea")
         assert "counts" in result
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_standup(self, MockClient):
         MockClient.return_value = _mock_client(standup={"recently_done": [], "in_progress": []})
         result = mcp_mod.standup(days=3)
@@ -151,13 +155,13 @@ class TestReadTools:
 
 
 class TestHandTools:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_hand(self, MockClient):
         MockClient.return_value = _mock_client(list_hand=[{"id": "c1"}])
         result = mcp_mod.list_hand()
         assert len(result) == 1
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_add_to_hand(self, MockClient):
         client = _mock_client(add_to_hand={"ok": True, "added": 2})
         MockClient.return_value = client
@@ -165,7 +169,7 @@ class TestHandTools:
         assert result["added"] == 2
         client.add_to_hand.assert_called_once_with(card_ids=[_C1, _C2])
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_remove_from_hand(self, MockClient):
         client = _mock_client(remove_from_hand={"ok": True, "removed": 1})
         MockClient.return_value = client
@@ -179,7 +183,7 @@ class TestHandTools:
 
 
 class TestMutationTools:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_card(self, MockClient):
         MockClient.return_value = _mock_client(
             create_card={"ok": True, "card_id": "new-1", "title": "Test"}
@@ -187,7 +191,7 @@ class TestMutationTools:
         result = mcp_mod.create_card("Test", deck="Features")
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_card_with_parent(self, MockClient):
         client = _mock_client(
             create_card={"ok": True, "card_id": "child-1", "title": "Sub", "parent": "p-uuid"}
@@ -198,7 +202,7 @@ class TestMutationTools:
         client.create_card.assert_called_once()
         assert client.create_card.call_args[1]["parent"] == "p-uuid"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_update_cards(self, MockClient):
         client = _mock_client(update_cards={"ok": True, "updated": 1})
         MockClient.return_value = client
@@ -206,37 +210,37 @@ class TestMutationTools:
         assert result["updated"] == 1
         client.update_cards.assert_called_once()
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_mark_done(self, MockClient):
         MockClient.return_value = _mock_client(mark_done={"ok": True, "count": 2})
         result = mcp_mod.mark_done([_C1, _C2])
         assert result["count"] == 2
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_mark_started(self, MockClient):
         MockClient.return_value = _mock_client(mark_started={"ok": True, "count": 1})
         result = mcp_mod.mark_started([_C1])
         assert result["count"] == 1
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_archive_card(self, MockClient):
         MockClient.return_value = _mock_client(archive_card={"ok": True, "card_id": _C1})
         result = mcp_mod.archive_card(_C1)
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_unarchive_card(self, MockClient):
         MockClient.return_value = _mock_client(unarchive_card={"ok": True, "card_id": _C1})
         result = mcp_mod.unarchive_card(_C1)
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_delete_card(self, MockClient):
         MockClient.return_value = _mock_client(delete_card={"ok": True, "card_id": _C1})
         result = mcp_mod.delete_card(_C1)
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_scaffold_feature(self, MockClient):
         MockClient.return_value = _mock_client(
             scaffold_feature={"ok": True, "hero": {"id": "h1"}, "subcards": []}
@@ -246,7 +250,7 @@ class TestMutationTools:
         )
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_scaffold_feature_with_audio(self, MockClient):
         client = _mock_client(
             scaffold_feature={
@@ -281,13 +285,13 @@ class TestMutationTools:
 
 
 class TestCommentTools:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_comment(self, MockClient):
         MockClient.return_value = _mock_client(create_comment={"ok": True})
         result = mcp_mod.create_comment(_C1, "Hello")
         assert result["ok"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_reply_comment(self, MockClient):
         client = _mock_client(reply_comment={"ok": True, "thread_id": "t1", "data": {}})
         MockClient.return_value = client
@@ -295,7 +299,7 @@ class TestCommentTools:
         assert result["ok"] is True
         client.reply_comment.assert_called_once_with(thread_id="t1", message="Thanks!")
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_close_comment(self, MockClient):
         client = _mock_client(close_comment={"ok": True, "thread_id": "t1", "data": {}})
         MockClient.return_value = client
@@ -303,7 +307,7 @@ class TestCommentTools:
         assert result["ok"] is True
         client.close_comment.assert_called_once_with(thread_id="t1", card_id=_C1)
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_reopen_comment(self, MockClient):
         client = _mock_client(reopen_comment={"ok": True, "thread_id": "t1", "data": {}})
         MockClient.return_value = client
@@ -311,7 +315,7 @@ class TestCommentTools:
         assert result["ok"] is True
         client.reopen_comment.assert_called_once_with(thread_id="t1", card_id=_C1)
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_conversations(self, MockClient):
         MockClient.return_value = _mock_client(list_conversations={"resolvable": {}})
         result = mcp_mod.list_conversations(_C1)
@@ -324,7 +328,7 @@ class TestCommentTools:
 
 
 class TestPagination:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_defaults(self, MockClient):
         """Default limit=50, offset=0 returns all cards when under limit."""
         cards = [{"id": f"c{i}"} for i in range(10)]
@@ -336,7 +340,7 @@ class TestPagination:
         assert result["limit"] == 50
         assert result["offset"] == 0
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_limit(self, MockClient):
         """Limit restricts the number of returned cards."""
         cards = [{"id": f"c{i}"} for i in range(10)]
@@ -347,7 +351,7 @@ class TestPagination:
         assert result["total_count"] == 10
         assert result["has_more"] is True
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_offset(self, MockClient):
         """Offset skips cards."""
         cards = [{"id": f"c{i}"} for i in range(10)]
@@ -358,7 +362,7 @@ class TestPagination:
         assert result["total_count"] == 10
         assert result["has_more"] is False
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_offset_past_end(self, MockClient):
         """Offset past end returns empty cards list."""
         cards = [{"id": f"c{i}"} for i in range(5)]
@@ -368,7 +372,7 @@ class TestPagination:
         assert result["total_count"] == 5
         assert result["has_more"] is False
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_preserves_stats(self, MockClient):
         """Stats are passed through from the client response."""
         stats = {"by_status": {"started": 3}}
@@ -376,7 +380,7 @@ class TestPagination:
         result = mcp_mod.list_cards(include_stats=True)
         assert result["stats"] == stats
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_pagination_not_applied_to_errors(self, MockClient):
         """Error dicts are returned as-is without pagination."""
         client = MagicMock()
@@ -393,7 +397,7 @@ class TestPagination:
 
 
 class TestClientCaching:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_client_is_cached(self, MockClient):
         """CodecksClient is instantiated once and reused across calls."""
         client = _mock_client(
@@ -412,7 +416,7 @@ class TestClientCaching:
 
 
 class TestErrorHandling:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_cli_error_returns_error_dict(self, MockClient):
         client = MagicMock()
         client.list_cards.side_effect = CliError("[ERROR] Invalid sort field")
@@ -424,7 +428,7 @@ class TestErrorHandling:
         assert "Invalid sort field" in result["error"]
         assert result["error_detail"]["type"] == "error"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_setup_error_returns_setup_dict(self, MockClient):
         MockClient.side_effect = SetupError("[TOKEN_EXPIRED] Session expired")
         result = mcp_mod.get_account()
@@ -439,7 +443,7 @@ class TestErrorHandling:
         assert result["ok"] is False
         assert "Unknown method" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_unexpected_exception_returns_error(self, MockClient):
         client = MagicMock()
         client.list_cards.side_effect = RuntimeError("boom")
@@ -448,7 +452,7 @@ class TestErrorHandling:
         assert result["ok"] is False
         assert "Unexpected error" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_error_result_is_json_serializable(self, MockClient):
         import json
 
@@ -467,24 +471,24 @@ class TestErrorHandling:
 
 
 class TestResponseModes:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_envelope_mode_wraps_success_dict(self, MockClient):
-        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        original_mode = _core.MCP_RESPONSE_MODE
         try:
-            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            _core.MCP_RESPONSE_MODE = "envelope"
             MockClient.return_value = _mock_client(get_account={"name": "Alice", "id": "u1"})
             result = mcp_mod.get_account()
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
             assert result["data"]["name"] == "Alice"
         finally:
-            mcp_mod.MCP_RESPONSE_MODE = original_mode
+            _core.MCP_RESPONSE_MODE = original_mode
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_envelope_mode_wraps_success_list(self, MockClient):
-        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        original_mode = _core.MCP_RESPONSE_MODE
         try:
-            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            _core.MCP_RESPONSE_MODE = "envelope"
             MockClient.return_value = _mock_client(list_decks=[{"id": "d1", "title": "Features"}])
             result = mcp_mod.list_decks()
             assert result["ok"] is True
@@ -492,13 +496,13 @@ class TestResponseModes:
             assert isinstance(result["data"], list)
             assert result["data"][0]["id"] == "d1"
         finally:
-            mcp_mod.MCP_RESPONSE_MODE = original_mode
+            _core.MCP_RESPONSE_MODE = original_mode
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_envelope_mode_keeps_error_shape(self, MockClient):
-        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        original_mode = _core.MCP_RESPONSE_MODE
         try:
-            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            _core.MCP_RESPONSE_MODE = "envelope"
             client = MagicMock()
             client.list_cards.side_effect = CliError("[ERROR] Bad filter")
             MockClient.return_value = client
@@ -507,7 +511,7 @@ class TestResponseModes:
             assert result["type"] == "error"
             assert "Bad filter" in result["error"]
         finally:
-            mcp_mod.MCP_RESPONSE_MODE = original_mode
+            _core.MCP_RESPONSE_MODE = original_mode
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +566,7 @@ class TestSlimCard:
         slim = mcp_mod._slim_card(card)
         assert slim == card
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_cards_returns_slimmed_cards(self, MockClient):
         cards = [{"id": "c1", "title": "A", "deckId": "d1", "deck_name": "Features"}]
         MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
@@ -570,7 +574,7 @@ class TestSlimCard:
         assert "deckId" not in result["cards"][0]
         assert result["cards"][0]["deck_name"] == "[USER_DATA]Features[/USER_DATA]"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_hand_returns_slimmed_cards(self, MockClient):
         hand = [{"id": "c1", "title": "A", "assignee": "u1", "owner_name": "Alice"}]
         MockClient.return_value = _mock_client(list_hand=hand)
@@ -603,30 +607,30 @@ class TestPMPlaybook:
         assert "Feature Decomposition" in text
 
     def test_get_pm_playbook_missing_file(self):
-        original = mcp_mod._PLAYBOOK_PATH
+        original = _tools_local._PLAYBOOK_PATH
         try:
-            mcp_mod._PLAYBOOK_PATH = "/nonexistent/playbook.md"
+            _tools_local._PLAYBOOK_PATH = "/nonexistent/playbook.md"
             result = mcp_mod.get_pm_playbook()
             assert result["ok"] is False
             assert result["schema_version"] == "1.0"
             assert "Cannot read playbook" in result["error"]
             assert result["type"] == "error"
         finally:
-            mcp_mod._PLAYBOOK_PATH = original
+            _tools_local._PLAYBOOK_PATH = original
 
 
 class TestWorkflowPreferences:
     def test_get_workflow_preferences_no_file(self):
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = "/nonexistent/.pm_preferences.json"
+            _tools_local._PREFS_PATH = "/nonexistent/.pm_preferences.json"
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
             assert result["found"] is False
             assert result["preferences"] == []
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
     def test_get_workflow_preferences_reads_file(self, tmp_path):
         prefs_file = tmp_path / ".pm_preferences.json"
@@ -638,9 +642,9 @@ class TestWorkflowPreferences:
                 }
             )
         )
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = str(prefs_file)
+            _tools_local._PREFS_PATH = str(prefs_file)
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
@@ -648,13 +652,13 @@ class TestWorkflowPreferences:
             assert len(result["preferences"]) == 2
             assert "priority-first" in result["preferences"][0]
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
     def test_save_workflow_preferences_writes_file(self, tmp_path):
         prefs_file = tmp_path / ".pm_preferences.json"
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = str(prefs_file)
+            _tools_local._PREFS_PATH = str(prefs_file)
             result = mcp_mod.save_workflow_preferences(
                 ["Picks own cards", "Finishes started before new"]
             )
@@ -669,14 +673,14 @@ class TestWorkflowPreferences:
             ]
             assert "updated_at" in data
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
     def test_save_workflow_preferences_atomic(self, tmp_path):
         """Verify atomic write: no partial files left on success."""
         prefs_file = tmp_path / ".pm_preferences.json"
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = str(prefs_file)
+            _tools_local._PREFS_PATH = str(prefs_file)
             mcp_mod.save_workflow_preferences(["Test observation"])
 
             # Only the final file should exist, no .tmp leftovers
@@ -684,35 +688,35 @@ class TestWorkflowPreferences:
             assert len(files) == 1
             assert files[0].name == ".pm_preferences.json"
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
     def test_save_workflow_preferences_overwrites(self, tmp_path):
         """Second save fully replaces the first."""
         prefs_file = tmp_path / ".pm_preferences.json"
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = str(prefs_file)
+            _tools_local._PREFS_PATH = str(prefs_file)
             mcp_mod.save_workflow_preferences(["First pattern"])
             mcp_mod.save_workflow_preferences(["Second pattern", "Third pattern"])
 
             data = json.loads(prefs_file.read_text())
             assert data["observations"] == ["Second pattern", "Third pattern"]
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
     def test_get_workflow_preferences_invalid_json(self, tmp_path):
         prefs_file = tmp_path / ".pm_preferences.json"
         prefs_file.write_text("not valid json {{{")
-        original = mcp_mod._PREFS_PATH
+        original = _tools_local._PREFS_PATH
         try:
-            mcp_mod._PREFS_PATH = str(prefs_file)
+            _tools_local._PREFS_PATH = str(prefs_file)
             result = mcp_mod.get_workflow_preferences()
             assert result["ok"] is False
             assert result["schema_version"] == "1.0"
             assert "Cannot read preferences" in result["error"]
             assert result["type"] == "error"
         finally:
-            mcp_mod._PREFS_PATH = original
+            _tools_local._PREFS_PATH = original
 
 
 # ---------------------------------------------------------------------------
@@ -945,7 +949,7 @@ class TestPreferencesValidation:
 
 
 class TestOutputSanitizationIntegration:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_cards_returns_tagged_output(self, MockClient):
         cards = [{"id": "c1", "title": "Fix bug", "deck_name": "Features"}]
         MockClient.return_value = _mock_client(list_cards={"cards": cards, "stats": None})
@@ -953,7 +957,7 @@ class TestOutputSanitizationIntegration:
         assert result["cards"][0]["title"] == "[USER_DATA]Fix bug[/USER_DATA]"
         assert result["cards"][0]["deck_name"] == "[USER_DATA]Features[/USER_DATA]"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_card_returns_tagged_output(self, MockClient):
         MockClient.return_value = _mock_client(
             get_card={"id": _C1, "title": "Test Card", "content": "Body text"}
@@ -962,7 +966,7 @@ class TestOutputSanitizationIntegration:
         assert result["title"] == "[USER_DATA]Test Card[/USER_DATA]"
         assert result["content"] == "[USER_DATA]Body text[/USER_DATA]"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_hand_returns_tagged_output(self, MockClient):
         hand = [{"id": "c1", "title": "My task here", "owner_name": "Alice"}]
         MockClient.return_value = _mock_client(list_hand=hand)
@@ -970,7 +974,7 @@ class TestOutputSanitizationIntegration:
         assert result[0]["title"] == "[USER_DATA]My task here[/USER_DATA]"
         assert result[0]["owner_name"] == "[USER_DATA]Alice[/USER_DATA]"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_card_error_not_sanitized(self, MockClient):
         client = MagicMock()
         client.get_card.side_effect = CliError("[ERROR] Not found")
@@ -979,7 +983,7 @@ class TestOutputSanitizationIntegration:
         assert result["ok"] is False
         assert "_safety_warnings" not in result
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_get_card_with_injection_adds_warnings(self, MockClient):
         MockClient.return_value = _mock_client(
             get_card={
@@ -999,7 +1003,7 @@ class TestOutputSanitizationIntegration:
 
 
 class TestInputValidationIntegration:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_card_validates_title_length(self, MockClient):
         MockClient.return_value = _mock_client(create_card={"ok": True})
         result = mcp_mod.create_card("x" * 501)
@@ -1007,7 +1011,7 @@ class TestInputValidationIntegration:
         assert result["schema_version"] == "1.0"
         assert "exceeds maximum length" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_card_strips_control_chars(self, MockClient):
         client = _mock_client(create_card={"ok": True, "card_id": "c1", "title": "Clean"})
         MockClient.return_value = client
@@ -1015,7 +1019,7 @@ class TestInputValidationIntegration:
         call_kwargs = client.create_card.call_args[1]
         assert call_kwargs["title"] == "CleanTitle"
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_create_comment_validates_message_length(self, MockClient):
         MockClient.return_value = _mock_client(create_comment={"ok": True})
         result = mcp_mod.create_comment(_C1, "x" * 10_001)
@@ -1023,7 +1027,7 @@ class TestInputValidationIntegration:
         assert result["schema_version"] == "1.0"
         assert "exceeds maximum length" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_save_preferences_validates_observations(self, MockClient):
         result = mcp_mod.save_workflow_preferences("not a list")
         assert result["ok"] is False
@@ -1040,7 +1044,7 @@ class TestInputValidationIntegration:
         assert result["ok"] is False
         assert "36-char UUID" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_uuid_validation_accepts_valid_uuids(self, MockClient):
         MockClient.return_value = _mock_client(get_card={"id": _C1, "title": "T"})
         result = mcp_mod.get_card(_C1)
@@ -1053,7 +1057,7 @@ class TestInputValidationIntegration:
 
 
 class TestSplitFeaturesTool:
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_passthrough_to_client(self, MockClient):
         client = _mock_client(
             split_features={
@@ -1086,7 +1090,7 @@ class TestSplitFeaturesTool:
             dry_run=True,
         )
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_error_handling(self, MockClient):
         client = MagicMock()
         client.split_features.side_effect = CliError("[ERROR] deck not found")
@@ -1099,7 +1103,7 @@ class TestSplitFeaturesTool:
         assert result["ok"] is False
         assert "deck not found" in result["error"]
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_with_art_deck(self, MockClient):
         client = _mock_client(
             split_features={
@@ -1133,7 +1137,7 @@ class TestSplitFeaturesTool:
             dry_run=False,
         )
 
-    @patch("codecks_cli.mcp_server.CodecksClient")
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_with_audio_deck(self, MockClient):
         client = _mock_client(
             split_features={
@@ -1175,7 +1179,7 @@ class TestSplitFeaturesTool:
 class TestFeedbackTools:
     def test_save_cli_feedback(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.save_cli_feedback(
                 category="bug",
                 message="Card detail 500s on sub-cards",
@@ -1196,7 +1200,7 @@ class TestFeedbackTools:
 
     def test_save_cli_feedback_appends(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             mcp_mod.save_cli_feedback(category="bug", message="First")
             mcp_mod.save_cli_feedback(category="improvement", message="Second")
             result = mcp_mod.save_cli_feedback(category="bug", message="Third")
@@ -1206,14 +1210,14 @@ class TestFeedbackTools:
 
     def test_save_cli_feedback_validates_message_length(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.save_cli_feedback(category="bug", message="x" * 10_001)
             assert result["ok"] is False
             assert "exceeds maximum length" in result["error"]
 
     def test_save_cli_feedback_optional_fields(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.save_cli_feedback(category="improvement", message="Add CSV export")
             assert result["ok"] is True
             data = json.loads(feedback_file.read_text())
@@ -1223,7 +1227,7 @@ class TestFeedbackTools:
 
     def test_get_cli_feedback_no_file(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.get_cli_feedback()
             assert result["ok"] is True
             assert result["found"] is False
@@ -1232,7 +1236,7 @@ class TestFeedbackTools:
 
     def test_get_cli_feedback_reads_items(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             mcp_mod.save_cli_feedback(category="bug", message="Bug one")
             mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
             result = mcp_mod.get_cli_feedback()
@@ -1242,7 +1246,7 @@ class TestFeedbackTools:
 
     def test_get_cli_feedback_filters_by_category(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             mcp_mod.save_cli_feedback(category="bug", message="Bug one")
             mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
             mcp_mod.save_cli_feedback(category="bug", message="Bug three")
@@ -1253,7 +1257,7 @@ class TestFeedbackTools:
     def test_get_cli_feedback_invalid_json(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
         feedback_file.write_text("not json{{{")
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.get_cli_feedback()
             assert result["ok"] is False
             assert "Cannot read feedback" in result["error"]
@@ -1261,7 +1265,7 @@ class TestFeedbackTools:
     def test_get_cli_feedback_malformed_structure(self, tmp_path):
         feedback_file = tmp_path / ".cli_feedback.json"
         feedback_file.write_text(json.dumps({"wrong_key": []}))
-        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+        with patch.object(_tools_local, "_FEEDBACK_PATH", str(feedback_file)):
             result = mcp_mod.get_cli_feedback()
             assert result["ok"] is True
             assert result["found"] is False
@@ -1369,28 +1373,28 @@ class TestRegistryTools:
 
 class TestRegistryResponseModes:
     def test_envelope_mode_wraps_tag_registry(self):
-        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        original_mode = _core.MCP_RESPONSE_MODE
         try:
-            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            _core.MCP_RESPONSE_MODE = "envelope"
             result = mcp_mod.get_tag_registry()
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
             assert "tags" in result["data"]
             assert result["data"]["count"] == 8
         finally:
-            mcp_mod.MCP_RESPONSE_MODE = original_mode
+            _core.MCP_RESPONSE_MODE = original_mode
 
     def test_envelope_mode_wraps_lane_registry(self):
-        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        original_mode = _core.MCP_RESPONSE_MODE
         try:
-            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            _core.MCP_RESPONSE_MODE = "envelope"
             result = mcp_mod.get_lane_registry()
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
             assert "lanes" in result["data"]
             assert result["data"]["count"] == 4
         finally:
-            mcp_mod.MCP_RESPONSE_MODE = original_mode
+            _core.MCP_RESPONSE_MODE = original_mode
 
 
 # ---------------------------------------------------------------------------
@@ -1405,40 +1409,40 @@ class TestPlanningToolSmoke:
     """
 
     def test_planning_init_delegates(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
+        original = _tools_local._PLANNING_DIR
         try:
-            mcp_mod._PLANNING_DIR = tmp_path
+            _tools_local._PLANNING_DIR = tmp_path
             result = mcp_mod.planning_init()
             assert result["ok"] is True
             assert (tmp_path / "task_plan.md").exists()
         finally:
-            mcp_mod._PLANNING_DIR = original
+            _tools_local._PLANNING_DIR = original
 
     def test_planning_status_returns_error_without_files(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
+        original = _tools_local._PLANNING_DIR
         try:
-            mcp_mod._PLANNING_DIR = tmp_path
+            _tools_local._PLANNING_DIR = tmp_path
             result = mcp_mod.planning_status()
             assert result["ok"] is False
         finally:
-            mcp_mod._PLANNING_DIR = original
+            _tools_local._PLANNING_DIR = original
 
     def test_planning_update_delegates(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
+        original = _tools_local._PLANNING_DIR
         try:
-            mcp_mod._PLANNING_DIR = tmp_path
+            _tools_local._PLANNING_DIR = tmp_path
             mcp_mod.planning_init()
             result = mcp_mod.planning_update("goal", text="Test goal")
             assert result["ok"] is True
         finally:
-            mcp_mod._PLANNING_DIR = original
+            _tools_local._PLANNING_DIR = original
 
     def test_planning_measure_delegates(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
+        original = _tools_local._PLANNING_DIR
         try:
-            mcp_mod._PLANNING_DIR = tmp_path
+            _tools_local._PLANNING_DIR = tmp_path
             mcp_mod.planning_init()
             result = mcp_mod.planning_measure("report")
             assert result["ok"] is True
         finally:
-            mcp_mod._PLANNING_DIR = original
+            _tools_local._PLANNING_DIR = original

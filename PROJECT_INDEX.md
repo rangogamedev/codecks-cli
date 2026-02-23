@@ -25,7 +25,7 @@ Fast index for agents and maintainers.
 - Command handlers: `codecks_cli/commands.py`
 - Programmatic API: `codecks_cli/client.py`
 - Feature scaffolding: `codecks_cli/scaffolding.py`
-- MCP server: `codecks_cli/mcp_server.py`
+- MCP server: `codecks_cli/mcp_server/` (package with 6 sub-modules)
 
 ## Core Modules
 - HTTP + retries + token checks: `codecks_cli/api.py`
@@ -44,7 +44,7 @@ Fast index for agents and maintainers.
 ## Flow By Concern
 - CLI request flow: `cli.py` -> `commands.py` -> `CodecksClient` (`client.py`) -> `cards.py`/`scaffolding.py`/`api.py`
 - Output flow: `commands.py` -> `formatters/*` -> JSON/table/CSV
-- MCP flow: `mcp_server.py` -> `_call()` -> `CodecksClient` methods -> `_finalize_tool_result()` contract shape
+- MCP flow: `mcp_server/` -> `_core._call()` -> `CodecksClient` methods -> `_core._finalize_tool_result()` contract shape
 
 ## Change Hotspots
 - Add/modify command:
@@ -57,7 +57,8 @@ Fast index for agents and maintainers.
   - `codecks_cli/formatters/__init__.py` export list
   - `tests/test_formatters.py`
 - Add MCP tool:
-  - `codecks_cli/mcp_server.py` (`@mcp.tool()`)
+  - `codecks_cli/mcp_server/_tools_*.py` (add function + register call)
+  - `codecks_cli/mcp_server/__init__.py` (re-export)
   - `tests/test_mcp_server.py`
   - Update AI docs: `AGENTS.md`, `CLAUDE.md`, `.claude/commands/api-ref.md`, `.claude/commands/mcp-validate.md`
 - Update response contracts/pagination:
@@ -65,7 +66,7 @@ Fast index for agents and maintainers.
   - `codecks_cli/cli.py` (`_emit_cli_error` JSON envelope)
   - `codecks_cli/commands.py` (`cmd_cards` `limit`/`offset` + pagination metadata)
   - `codecks_cli/client.py` (mutation `per_card`/`failed`, `continue_on_error`)
-  - `codecks_cli/mcp_server.py` (`legacy` vs `envelope` success output)
+  - `codecks_cli/mcp_server/_core.py` (`legacy` vs `envelope` success output)
 
 ## Docker
 - Build image: `docker/build.sh`
