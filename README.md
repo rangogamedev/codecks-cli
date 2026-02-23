@@ -449,7 +449,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes 36 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 38 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -477,7 +477,7 @@ Add to your MCP settings:
 }
 ```
 
-### 36 tools
+### 38 tools
 
 | Category | Tools |
 |----------|-------|
@@ -488,6 +488,7 @@ Add to your MCP settings:
 | **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
 | **Planning** (4) | `planning_init`, `planning_status`, `planning_update`, `planning_measure` |
 | **Feedback** (2) | `get_cli_feedback`, `save_cli_feedback` |
+| **Registry** (2) | `get_tag_registry`, `get_lane_registry` |
 
 ### Features
 
@@ -694,7 +695,7 @@ codecks-cli/
       _gdd.py                 format_gdd_table, format_sync_report
     gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
     setup_wizard.py           ← Interactive .env bootstrap
-    mcp_server.py             ← MCP server: 36 tools (stdio transport)
+    mcp_server.py             ← MCP server: 38 tools (stdio transport)
     pm_playbook.md            ← Agent-agnostic PM methodology
     py.typed                  ← PEP 561 type marker
   tests/                      ← 627 pytest tests (no live API calls)

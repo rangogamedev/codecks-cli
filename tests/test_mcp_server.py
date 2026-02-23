@@ -1172,6 +1172,131 @@ class TestSplitFeaturesTool:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Registry tools
+# ---------------------------------------------------------------------------
+
+
+class TestRegistryTools:
+    def test_tag_registry_returns_all_tags(self):
+        result = mcp_mod.get_tag_registry()
+        assert result["ok"] is True
+        assert result["count"] == 8
+        assert len(result["tags"]) == 8
+
+    def test_tag_registry_filter_system(self):
+        result = mcp_mod.get_tag_registry(category="system")
+        assert result["ok"] is True
+        assert result["count"] == 2
+        names = [t["name"] for t in result["tags"]]
+        assert "hero" in names
+        assert "feature" in names
+
+    def test_tag_registry_filter_discipline(self):
+        result = mcp_mod.get_tag_registry(category="discipline")
+        assert result["ok"] is True
+        assert result["count"] == 6
+        names = [t["name"] for t in result["tags"]]
+        assert "code" in names
+        assert "art" in names
+
+    def test_tag_registry_includes_hero_tags(self):
+        result = mcp_mod.get_tag_registry()
+        assert result["hero_tags"] == ["hero", "feature"]
+
+    def test_tag_registry_includes_lane_tags(self):
+        result = mcp_mod.get_tag_registry()
+        assert "code" in result["lane_tags"]
+        assert "design" in result["lane_tags"]
+        assert isinstance(result["lane_tags"]["code"], list)
+
+    def test_tag_registry_dict_shape(self):
+        result = mcp_mod.get_tag_registry()
+        tag = result["tags"][0]
+        assert "name" in tag
+        assert "display_name" in tag
+        assert "category" in tag
+        assert "description" in tag
+
+    def test_lane_registry_returns_all_lanes(self):
+        result = mcp_mod.get_lane_registry()
+        assert result["ok"] is True
+        assert result["count"] == 4
+        assert len(result["lanes"]) == 4
+
+    def test_lane_registry_required_only(self):
+        result = mcp_mod.get_lane_registry(required_only=True)
+        assert result["ok"] is True
+        assert result["count"] == 2
+        names = [ln["name"] for ln in result["lanes"]]
+        assert "code" in names
+        assert "design" in names
+        assert "art" not in names
+
+    def test_lane_registry_includes_required_optional_lists(self):
+        result = mcp_mod.get_lane_registry()
+        assert "code" in result["required_lanes"]
+        assert "design" in result["required_lanes"]
+        assert "art" in result["optional_lanes"]
+        assert "audio" in result["optional_lanes"]
+
+    def test_lane_registry_dict_shape(self):
+        result = mcp_mod.get_lane_registry()
+        lane = result["lanes"][0]
+        assert "name" in lane
+        assert "display_name" in lane
+        assert "required" in lane
+        assert "keywords" in lane
+        assert "default_checklist" in lane
+        assert "tags" in lane
+        assert "cli_help" in lane
+
+    def test_lane_registry_keywords_nonempty(self):
+        result = mcp_mod.get_lane_registry()
+        for lane in result["lanes"]:
+            assert len(lane["keywords"]) > 0
+
+    def test_lane_registry_tags_nonempty(self):
+        result = mcp_mod.get_lane_registry()
+        for lane in result["lanes"]:
+            assert len(lane["tags"]) > 0
+
+    def test_tag_registry_schema_version(self):
+        result = mcp_mod.get_tag_registry()
+        assert result["schema_version"] == "1.0"
+
+
+class TestRegistryResponseModes:
+    def test_envelope_mode_wraps_tag_registry(self):
+        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        try:
+            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            result = mcp_mod.get_tag_registry()
+            assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
+            assert "tags" in result["data"]
+            assert result["data"]["count"] == 8
+        finally:
+            mcp_mod.MCP_RESPONSE_MODE = original_mode
+
+    def test_envelope_mode_wraps_lane_registry(self):
+        original_mode = mcp_mod.MCP_RESPONSE_MODE
+        try:
+            mcp_mod.MCP_RESPONSE_MODE = "envelope"
+            result = mcp_mod.get_lane_registry()
+            assert result["ok"] is True
+            assert result["schema_version"] == "1.0"
+            assert "lanes" in result["data"]
+            assert result["data"]["count"] == 4
+        finally:
+            mcp_mod.MCP_RESPONSE_MODE = original_mode
+
+
+# ---------------------------------------------------------------------------
+# Planning tools
+# ---------------------------------------------------------------------------
+
+
 class TestPlanningInit:
     def test_creates_all_files(self, tmp_path):
         original = mcp_mod._PLANNING_DIR

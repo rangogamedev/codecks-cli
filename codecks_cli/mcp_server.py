@@ -1153,6 +1153,89 @@ def planning_measure(
 
 
 # -------------------------------------------------------------------
+# Registry tools (local, no CodecksClient needed)
+# -------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_tag_registry(
+    category: Literal["system", "discipline"] | None = None,
+) -> dict:
+    """Get the local tag taxonomy (definitions, hero tags, lane-tag mappings).
+
+    Returns all TagDefinitions as dicts plus pre-built sets.
+    Use list_tags() for live API tags; this tool reads the local registry.
+    No auth needed.
+
+    Args:
+        category: Filter to 'system' or 'discipline' tags only.
+    """
+    from codecks_cli.tags import HERO_TAGS, LANE_TAGS, TAGS, tags_by_category
+
+    if category is not None:
+        tags = tags_by_category(category)
+    else:
+        tags = TAGS
+    tag_dicts = [
+        {
+            "name": t.name,
+            "display_name": t.display_name,
+            "category": t.category,
+            "description": t.description,
+        }
+        for t in tags
+    ]
+    return _finalize_tool_result(
+        {
+            "tags": tag_dicts,
+            "count": len(tag_dicts),
+            "hero_tags": list(HERO_TAGS),
+            "lane_tags": {k: list(v) for k, v in LANE_TAGS.items()},
+        }
+    )
+
+
+@mcp.tool()
+def get_lane_registry(
+    required_only: bool = False,
+) -> dict:
+    """Get the local lane (deck category) definitions and metadata.
+
+    Returns all LaneDefinitions as dicts plus required/optional lane name lists.
+    No auth needed.
+
+    Args:
+        required_only: If True, return only required lanes (code, design).
+    """
+    from codecks_cli.lanes import LANES, optional_lanes, required_lanes
+
+    if required_only:
+        lanes = required_lanes()
+    else:
+        lanes = LANES
+    lane_dicts = [
+        {
+            "name": ln.name,
+            "display_name": ln.display_name,
+            "required": ln.required,
+            "keywords": list(ln.keywords),
+            "default_checklist": list(ln.default_checklist),
+            "tags": list(ln.tags),
+            "cli_help": ln.cli_help,
+        }
+        for ln in lanes
+    ]
+    return _finalize_tool_result(
+        {
+            "lanes": lane_dicts,
+            "count": len(lane_dicts),
+            "required_lanes": [ln.name for ln in required_lanes()],
+            "optional_lanes": [ln.name for ln in optional_lanes()],
+        }
+    )
+
+
+# -------------------------------------------------------------------
 # Entry point
 # -------------------------------------------------------------------
 

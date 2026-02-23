@@ -1,10 +1,13 @@
 """Lane registry — single source of truth for deck categories.
 
-Standalone module (no project imports). Adding a new category means
-appending one LaneDefinition to LANES.
+Imports only tags.py (another standalone data module). Adding a new
+category means appending one LaneDefinition to LANES and updating
+LANE_TAGS in tags.py.
 """
 
 from dataclasses import dataclass
+
+from codecks_cli.tags import LANE_TAGS
 
 
 @dataclass(frozen=True)
@@ -56,7 +59,7 @@ LANES: tuple[LaneDefinition, ...] = (
             "Handle edge cases",
             "Add tests/verification",
         ),
-        tags=("code", "feature"),
+        tags=LANE_TAGS["code"],
         cli_help="Code sub-card deck",
     ),
     LaneDefinition(
@@ -85,7 +88,7 @@ LANES: tuple[LaneDefinition, ...] = (
             "Tune balance/economy parameters",
             "Run playtest and iterate",
         ),
-        tags=("design", "feel", "economy", "feature"),
+        tags=LANE_TAGS["design"],
         cli_help="Design sub-card deck",
     ),
     LaneDefinition(
@@ -111,7 +114,7 @@ LANES: tuple[LaneDefinition, ...] = (
             "Integrate assets in game flow",
             "Visual quality pass",
         ),
-        tags=("art", "feature"),
+        tags=LANE_TAGS["art"],
         cli_help="Art sub-card deck",
     ),
     LaneDefinition(
@@ -137,7 +140,7 @@ LANES: tuple[LaneDefinition, ...] = (
             "Integrate audio in game flow",
             "Audio quality/mix pass",
         ),
-        tags=("audio", "feature"),
+        tags=LANE_TAGS["audio"],
         cli_help="Audio sub-card deck",
     ),
 )

@@ -63,6 +63,7 @@ from codecks_cli.models import (
     SplitFeaturesReport,
     SplitFeaturesSpec,
 )
+from codecks_cli.tags import HERO_TAGS
 
 # ---------------------------------------------------------------------------
 # Helpers (moved from commands.py)
@@ -1272,9 +1273,7 @@ class CodecksClient:
             if not hero_id:
                 raise CliError("[ERROR] Hero creation failed: missing cardId.")
             created_ids.append(hero_id)
-            update_card(
-                hero_id, deckId=hero_deck_id, masterTags=["hero", "feature"], **common_update
-            )
+            update_card(hero_id, deckId=hero_deck_id, masterTags=list(HERO_TAGS), **common_update)
 
             def _make_sub(lane_def_inner, deck_id):
                 sub_title = f"[{lane_def_inner.display_name}] {spec.title}"
