@@ -12,7 +12,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
 - **Test**: `pwsh -File scripts/run-tests.ps1` (673 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
-- **Type check**: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/setup_wizard.py codecks_cli/lanes.py codecks_cli/tags.py`
+- **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
@@ -57,7 +57,8 @@ codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                <- argparse, build_parser(), main() dispatch
   commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
-  client.py             <- CodecksClient: 27 public methods (the API surface, stable mutation contracts)
+  client.py             <- CodecksClient: 25 core methods + 2 scaffolding stubs (the API surface)
+  scaffolding.py        <- Feature scaffolding: scaffold_feature(), split_features() + helpers
   cards.py              <- Card CRUD, hand, conversations, enrichment
   api.py                <- HTTP layer: query(), dispatch(), retries, token check
   config.py             <- Env, tokens, constants, runtime state, contract settings
@@ -88,9 +89,9 @@ docker-compose.yml      <- Services: cli, test, quality, lint, typecheck, mcp, m
 
 ### Import graph (no circular deps)
 ```
-exceptions.py  <-  config.py  <-  _utils.py  <-  api.py  <-  cards.py  <-  client.py
-                                                                              |
-types.py (standalone)    formatters/ <- commands.py <- cli.py          models.py
+exceptions.py  <-  config.py  <-  _utils.py  <-  api.py  <-  cards.py  <-  scaffolding.py  <-  client.py
+                                                                                                                |
+types.py (standalone)    formatters/ <- commands.py <- cli.py                                              models.py
 tags.py (standalone) <- lanes.py
 ```
 
@@ -137,7 +138,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- 14 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_lanes.py`, `test_tags.py`
+- 15 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_scaffolding.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_lanes.py`, `test_tags.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)
@@ -192,5 +193,5 @@ Use `py codecks_api.py <cmd> --help` for flags.
 ## Maintenance
 When adding new modules, commands, tests, or fixing bugs:
 - Update the Architecture section and test count in this file and `CLAUDE.md`
-- Update the mypy command if new modules need type checking
+- Update `MYPY_TARGETS` in `scripts/quality_gate.py` if new modules need type checking
 - Add new bug patterns to "Known Bugs Fixed" so they aren't reintroduced

@@ -1,5 +1,8 @@
 """
 Command implementations for codecks-cli.
+
+Module map: .claude/maps/commands.md (read before editing)
+
 Each cmd_*() function receives an argparse.Namespace and handles one CLI command.
 
 Business logic lives in client.py (CodecksClient). These thin wrappers

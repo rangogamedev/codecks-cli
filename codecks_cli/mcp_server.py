@@ -1,5 +1,7 @@
 """MCP server exposing CodecksClient methods as tools.
 
+Module map: .claude/maps/mcp-server.md (read before editing)
+
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
 """

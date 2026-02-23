@@ -8,7 +8,7 @@ Fast index for agents and maintainers.
 - Tests: `pwsh -File scripts/run-tests.ps1`
 - Lint: `py -m ruff check .`
 - Format check: `py -m ruff format --check .`
-- Types: `py -m mypy codecks_cli/api.py codecks_cli/cards.py codecks_cli/client.py codecks_cli/commands.py codecks_cli/formatters/ codecks_cli/models.py codecks_cli/exceptions.py codecks_cli/_utils.py codecks_cli/types.py codecks_cli/planning.py codecks_cli/lanes.py codecks_cli/tags.py`
+- Types: `py scripts/quality_gate.py --mypy-only`
 - All quality checks: `py scripts/quality_gate.py`
 - Docker build: `./docker/build.sh`
 - Docker tests: `./docker/test.sh`
@@ -24,6 +24,7 @@ Fast index for agents and maintainers.
 - CLI parser + dispatch: `codecks_cli/cli.py`
 - Command handlers: `codecks_cli/commands.py`
 - Programmatic API: `codecks_cli/client.py`
+- Feature scaffolding: `codecks_cli/scaffolding.py`
 - MCP server: `codecks_cli/mcp_server.py`
 
 ## Core Modules
@@ -41,7 +42,7 @@ Fast index for agents and maintainers.
 - Setup wizard: `codecks_cli/setup_wizard.py`
 
 ## Flow By Concern
-- CLI request flow: `cli.py` -> `commands.py` -> `CodecksClient` (`client.py`) -> `cards.py`/`api.py`
+- CLI request flow: `cli.py` -> `commands.py` -> `CodecksClient` (`client.py`) -> `cards.py`/`scaffolding.py`/`api.py`
 - Output flow: `commands.py` -> `formatters/*` -> JSON/table/CSV
 - MCP flow: `mcp_server.py` -> `_call()` -> `CodecksClient` methods -> `_finalize_tool_result()` contract shape
 

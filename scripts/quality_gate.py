@@ -4,6 +4,7 @@ Usage:
     py scripts/quality_gate.py              # run all, JSON output
     py scripts/quality_gate.py --skip-tests # skip pytest (fast)
     py scripts/quality_gate.py --fix        # auto-fix ruff issues first
+    py scripts/quality_gate.py --mypy-only  # run just mypy (raw output)
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ MYPY_TARGETS = [
     "codecks_cli/setup_wizard.py",
     "codecks_cli/lanes.py",
     "codecks_cli/tags.py",
+    "codecks_cli/scaffolding.py",
 ]
 
 
@@ -144,11 +146,23 @@ def check_pytest() -> dict:
     return result
 
 
+def run_mypy_only() -> None:
+    """Run just mypy with raw output and propagate exit code."""
+    cmd = [sys.executable, "-m", "mypy"] + MYPY_TARGETS
+    r = subprocess.run(cmd, cwd=str(ROOT))
+    sys.exit(r.returncode)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run all quality checks")
     parser.add_argument("--skip-tests", action="store_true", help="Skip pytest")
     parser.add_argument("--fix", action="store_true", help="Auto-fix ruff issues first")
+    parser.add_argument("--mypy-only", action="store_true", help="Run just mypy (raw output)")
     args = parser.parse_args()
+
+    if args.mypy_only:
+        run_mypy_only()
+        return
 
     t0 = time.monotonic()
     checks: dict[str, dict] = {}
