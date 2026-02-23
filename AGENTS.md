@@ -80,7 +80,15 @@ codecks_cli/
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server.py         <- MCP server: 38 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server/            <- MCP server package: 38 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+    __init__.py          FastMCP init, register() calls, re-exports
+    __main__.py          ``py -m codecks_cli.mcp_server`` entry point
+    _core.py             Client caching, _call dispatcher, response contract, UUID validation
+    _security.py         Injection detection, sanitization, input validation
+    _tools_read.py       10 query/dashboard tools
+    _tools_write.py      12 mutation/hand/scaffolding tools
+    _tools_comments.py   5 comment CRUD tools
+    _tools_local.py      11 local tools (PM session, feedback, planning, registry)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell, dev, logs, claude)
 Dockerfile              <- Multi-stage build (Python 3.12-slim, dev+mcp+claude deps)
