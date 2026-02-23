@@ -83,6 +83,7 @@ Via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")`
 - `test-runner` — full test suite
 
 ## MCP Servers (`.claude/settings.json`)
+- `codecks` — this project's own MCP server (38 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 

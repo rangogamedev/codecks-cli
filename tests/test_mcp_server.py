@@ -1168,6 +1168,107 @@ class TestSplitFeaturesTool:
 
 
 # ---------------------------------------------------------------------------
+# Feedback tools
+# ---------------------------------------------------------------------------
+
+
+class TestFeedbackTools:
+    def test_save_cli_feedback(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.save_cli_feedback(
+                category="bug",
+                message="Card detail 500s on sub-cards",
+                tool_name="get_card",
+                context="PM session",
+            )
+            assert result["ok"] is True
+            assert result["saved"] is True
+            assert result["total_items"] == 1
+            data = json.loads(feedback_file.read_text())
+            assert len(data["items"]) == 1
+            item = data["items"][0]
+            assert item["category"] == "bug"
+            assert item["message"] == "Card detail 500s on sub-cards"
+            assert item["tool_name"] == "get_card"
+            assert item["context"] == "PM session"
+            assert "timestamp" in item
+
+    def test_save_cli_feedback_appends(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            mcp_mod.save_cli_feedback(category="bug", message="First")
+            mcp_mod.save_cli_feedback(category="improvement", message="Second")
+            result = mcp_mod.save_cli_feedback(category="bug", message="Third")
+            assert result["total_items"] == 3
+            data = json.loads(feedback_file.read_text())
+            assert len(data["items"]) == 3
+
+    def test_save_cli_feedback_validates_message_length(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.save_cli_feedback(category="bug", message="x" * 10_001)
+            assert result["ok"] is False
+            assert "exceeds maximum length" in result["error"]
+
+    def test_save_cli_feedback_optional_fields(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.save_cli_feedback(category="improvement", message="Add CSV export")
+            assert result["ok"] is True
+            data = json.loads(feedback_file.read_text())
+            item = data["items"][0]
+            assert "tool_name" not in item
+            assert "context" not in item
+
+    def test_get_cli_feedback_no_file(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.get_cli_feedback()
+            assert result["ok"] is True
+            assert result["found"] is False
+            assert result["items"] == []
+            assert result["count"] == 0
+
+    def test_get_cli_feedback_reads_items(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            mcp_mod.save_cli_feedback(category="bug", message="Bug one")
+            mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
+            result = mcp_mod.get_cli_feedback()
+            assert result["ok"] is True
+            assert result["found"] is True
+            assert result["count"] == 2
+
+    def test_get_cli_feedback_filters_by_category(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            mcp_mod.save_cli_feedback(category="bug", message="Bug one")
+            mcp_mod.save_cli_feedback(category="improvement", message="Improve two")
+            mcp_mod.save_cli_feedback(category="bug", message="Bug three")
+            result = mcp_mod.get_cli_feedback(category="bug")
+            assert result["count"] == 2
+            assert all(i["category"] == "bug" for i in result["items"])
+
+    def test_get_cli_feedback_invalid_json(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        feedback_file.write_text("not json{{{")
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.get_cli_feedback()
+            assert result["ok"] is False
+            assert "Cannot read feedback" in result["error"]
+
+    def test_get_cli_feedback_malformed_structure(self, tmp_path):
+        feedback_file = tmp_path / ".cli_feedback.json"
+        feedback_file.write_text(json.dumps({"wrong_key": []}))
+        with patch.object(mcp_mod, "_FEEDBACK_PATH", str(feedback_file)):
+            result = mcp_mod.get_cli_feedback()
+            assert result["ok"] is True
+            assert result["found"] is False
+            assert result["count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Planning tools
 # ---------------------------------------------------------------------------
 

@@ -420,7 +420,7 @@ def list_cards(
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
-    """List cards. Filters combine with AND. Returns {cards, total_count, has_more}.
+    """List cards. Filters combine with AND.
 
     Args:
         status: Comma-separated. Values: not_started, started, done, blocked, in_review.
@@ -429,6 +429,9 @@ def list_cards(
         stale_days: Cards not updated in N days.
         updated_after/updated_before: YYYY-MM-DD date strings.
         limit/offset: Pagination (default 50/0).
+
+    Returns:
+        Dict with cards (list), stats, total_count, has_more, limit, offset.
     """
     result = _call(
         "list_cards",
@@ -482,6 +485,9 @@ def get_card(
         include_content: False to strip body (keeps title) for metadata-only checks.
         include_conversations: False to skip comment thread resolution.
         archived: True to look up archived cards.
+
+    Returns:
+        Card dict with id, title, status, content, sub_cards, conversations, etc.
     """
     try:
         _validate_uuid(card_id)
@@ -539,7 +545,17 @@ def pm_focus(
     limit: int = 5,
     stale_days: int = 14,
 ) -> dict:
-    """PM focus dashboard: blocked, stale, unassigned, and suggested next cards."""
+    """PM focus dashboard: blocked, stale, unassigned, and suggested next cards.
+
+    Args:
+        project: Filter to a specific project name.
+        owner: Filter to a specific owner name.
+        limit: Max cards per category (default 5).
+        stale_days: Days since last update to consider stale (default 14).
+
+    Returns:
+        Dict with counts, blocked, stale, in_review, hand, and suggested lists.
+    """
     result = _call("pm_focus", project=project, owner=owner, limit=limit, stale_days=stale_days)
     if isinstance(result, dict) and "counts" in result:
         result = dict(result)
@@ -553,7 +569,16 @@ def pm_focus(
 
 @mcp.tool()
 def standup(days: int = 2, project: str | None = None, owner: str | None = None) -> dict:
-    """Daily standup summary: recently done, in-progress, blocked, and hand."""
+    """Daily standup summary: recently done, in-progress, blocked, and hand.
+
+    Args:
+        days: Lookback window for recently done cards (default 2).
+        project: Filter to a specific project name.
+        owner: Filter to a specific owner name.
+
+    Returns:
+        Dict with recently_done, in_progress, blocked, and hand lists.
+    """
     result = _call("standup", days=days, project=project, owner=owner)
     if isinstance(result, dict) and result.get("ok") is not False:
         result = dict(result)
@@ -615,7 +640,21 @@ def create_card(
     allow_duplicate: bool = False,
     parent: str | None = None,
 ) -> dict:
-    """Create a new card. Set deck/project to place it. Use parent to nest as sub-card."""
+    """Create a new card. Set deck/project to place it. Use parent to nest as sub-card.
+
+    Args:
+        title: Card title (max 500 chars).
+        content: Card body/description (max 10000 chars). Use ``- []`` for checkboxes.
+        deck: Destination deck name.
+        project: Project name.
+        severity: Card severity level, or 'null' to clear.
+        doc: True to create a doc card instead of a normal card.
+        allow_duplicate: True to skip duplicate-title check.
+        parent: Parent card UUID to nest this as a sub-card.
+
+    Returns:
+        Dict with ok, card_id, and title of the created card.
+    """
     try:
         title = _validate_input(title, "title")
         if content is not None:
@@ -664,6 +703,9 @@ def update_cards(
         owner: Name, or 'none' to unassign.
         tags: Comma-separated, or 'none' to clear all.
         continue_on_error: If True, continue updating remaining cards after a failure.
+
+    Returns:
+        Dict with ok, updated count, and per-card results.
     """
     try:
         _validate_uuid_list(card_ids)
@@ -803,7 +845,22 @@ def split_features(
     priority: Literal["a", "b", "c", "null"] | None = None,
     dry_run: bool = False,
 ) -> dict:
-    """Batch-split unsplit feature cards into lane sub-cards. Use dry_run=True to preview."""
+    """Batch-split unsplit feature cards into lane sub-cards. Use dry_run=True to preview.
+
+    Args:
+        deck: Source deck containing feature cards.
+        code_deck: Destination deck for Code sub-cards.
+        design_deck: Destination deck for Design sub-cards.
+        art_deck: Destination deck for Art sub-cards (required unless skip_art=True).
+        skip_art: True to skip Art lane entirely.
+        audio_deck: Destination deck for Audio sub-cards (required unless skip_audio=True).
+        skip_audio: True to skip Audio lane entirely.
+        priority: Priority for created sub-cards (a/b/c/null).
+        dry_run: True to preview without creating cards.
+
+    Returns:
+        Dict with features_processed, features_skipped, subcards_created, details, skipped.
+    """
     return _finalize_tool_result(
         _call(
             "split_features",
@@ -1039,7 +1096,14 @@ def save_cli_feedback(
 def get_cli_feedback(
     category: Literal["missing_feature", "bug", "error", "improvement", "usability"] | None = None,
 ) -> dict:
-    """Read saved CLI feedback items. Optionally filter by category. No auth needed."""
+    """Read saved CLI feedback items. Optionally filter by category. No auth needed.
+
+    Args:
+        category: Filter to a specific feedback category.
+
+    Returns:
+        Dict with found (bool), items (list), and count.
+    """
     try:
         with open(_FEEDBACK_PATH, encoding="utf-8") as f:
             data = json.load(f)

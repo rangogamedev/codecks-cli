@@ -5,6 +5,7 @@
 .gdd_tokens.json
 .pm_preferences.json
 .cli_feedback.json
+.mcp.json
 task_plan.md
 findings.md
 progress.md
