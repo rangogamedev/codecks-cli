@@ -4,6 +4,13 @@ Module map: .claude/maps/mcp-server.md (read before editing)
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
+
+Architecture note: 38 tools in one module (~1,300 lines). If this grows
+past ~1,500 lines, consider splitting into sub-modules by concern:
+  - read tools (list_cards, get_card, list_decks, etc.)
+  - mutation tools (create_card, update_cards, mark_done, etc.)
+  - local tools (planning, feedback, registry, PM session)
+  - security helpers (_check_injection, _sanitize_card, etc.)
 """
 
 from __future__ import annotations
@@ -393,7 +400,11 @@ def _validate_preferences(observations: list[str]) -> list[str]:
 
 @mcp.tool()
 def get_account() -> dict:
-    """Get current account info (name, id, email, role)."""
+    """Get current account info (name, id, email, role).
+
+    Returns:
+        Dict with name, id, email, organizationId, role.
+    """
     return _finalize_tool_result(_call("get_account"))
 
 
@@ -597,7 +608,11 @@ def standup(days: int = 2, project: str | None = None, owner: str | None = None)
 
 @mcp.tool()
 def list_hand() -> dict:
-    """List cards in the user's hand (personal work queue), sorted by hand order."""
+    """List cards in the user's hand (personal work queue), sorted by hand order.
+
+    Returns:
+        List of card dicts with id, title, status, priority, effort, deck_name.
+    """
     result = _call("list_hand")
     if isinstance(result, list):
         return _finalize_tool_result([_sanitize_card(_slim_card(c)) for c in result])
@@ -737,7 +752,14 @@ def update_cards(
 
 @mcp.tool()
 def mark_done(card_ids: list[str]) -> dict:
-    """Mark cards as done."""
+    """Mark cards as done.
+
+    Args:
+        card_ids: Full 36-char UUIDs.
+
+    Returns:
+        Dict with ok, count of marked cards.
+    """
     try:
         _validate_uuid_list(card_ids)
     except CliError as e:
@@ -747,7 +769,14 @@ def mark_done(card_ids: list[str]) -> dict:
 
 @mcp.tool()
 def mark_started(card_ids: list[str]) -> dict:
-    """Mark cards as started."""
+    """Mark cards as started.
+
+    Args:
+        card_ids: Full 36-char UUIDs.
+
+    Returns:
+        Dict with ok, count of marked cards.
+    """
     try:
         _validate_uuid_list(card_ids)
     except CliError as e:
@@ -757,7 +786,14 @@ def mark_started(card_ids: list[str]) -> dict:
 
 @mcp.tool()
 def archive_card(card_id: str) -> dict:
-    """Archive a card (reversible)."""
+    """Archive a card (reversible). Use unarchive_card to restore.
+
+    Args:
+        card_id: Full 36-char UUID.
+
+    Returns:
+        Dict with ok and card_id.
+    """
     try:
         _validate_uuid(card_id)
     except CliError as e:
@@ -767,7 +803,14 @@ def archive_card(card_id: str) -> dict:
 
 @mcp.tool()
 def unarchive_card(card_id: str) -> dict:
-    """Restore an archived card."""
+    """Restore an archived card to active state.
+
+    Args:
+        card_id: Full 36-char UUID.
+
+    Returns:
+        Dict with ok and card_id.
+    """
     try:
         _validate_uuid(card_id)
     except CliError as e:
@@ -777,7 +820,14 @@ def unarchive_card(card_id: str) -> dict:
 
 @mcp.tool()
 def delete_card(card_id: str) -> dict:
-    """Permanently delete a card. Cannot be undone — use archive_card if reversibility needed."""
+    """Permanently delete a card. Cannot be undone — use archive_card if reversibility needed.
+
+    Args:
+        card_id: Full 36-char UUID.
+
+    Returns:
+        Dict with ok and card_id.
+    """
     try:
         _validate_uuid(card_id)
     except CliError as e:

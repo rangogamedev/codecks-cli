@@ -7,7 +7,7 @@ Fast navigation map: `PROJECT_INDEX.md`.
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (673 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (711 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -56,7 +56,10 @@ cards = client.list_cards(status="started", sort="priority")
 
 ## Commands
 Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.
-- `cards` supports `--limit <n>` and `--offset <n>`.
+- Common flags have short aliases: `-d` (deck), `-s` (status), `-p` (priority), `-S` (search), `-e` (effort), `-c` (content).
+- `cards` supports `--limit <n>` and `--offset <n>` (client-side pagination).
+- `card` supports `--no-content` and `--no-conversations` for metadata-only lookups.
+- `update` supports `--continue-on-error` for partial batch updates. Effort accepts positive int or `"null"`.
 - `create` supports `--parent <id>` for sub-cards.
 - `tags` lists project-level tags (masterTags).
 - `split-features` batch-splits feature cards (use `--dry-run` first).
@@ -70,6 +73,7 @@ Quick: `./docker/build.sh` then `./docker/test.sh`, `./docker/quality.sh`, `./do
 ## MCP Server
 - Run: `py -m codecks_cli.mcp_server` (stdio). Install: `py -m pip install .[mcp]`
 - 38 tools. Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
+- Standalone wrapper repos archived (unnecessary — use `py -m codecks_cli.mcp_server` directly)
 
 ## CLI Feedback
 Read `.cli_feedback.json` at session start — PM agent reports bugs/improvements there.
@@ -81,6 +85,16 @@ Via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")`
 ## Subagents (`.claude/agents/`)
 - `security-reviewer` — credential exposure, injection vulns, unsafe patterns
 - `test-runner` — full test suite
+
+## Context7 Library IDs (pre-resolved)
+Always use Context7 MCP for library/API docs. These IDs are pre-resolved — skip the resolve step.
+
+| Library | Context7 ID |
+|---------|-------------|
+| MCP SDK (Python) | `/modelcontextprotocol/python-sdk` |
+| pytest | `/pytest-dev/pytest` |
+| ruff | `/websites/astral_sh_ruff` |
+| mypy | `/websites/mypy_readthedocs_io_en` |
 
 ## MCP Servers (`.claude/settings.json`)
 - `codecks` — this project's own MCP server (38 tools, Codecks API access)

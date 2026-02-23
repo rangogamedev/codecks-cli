@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (673 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (711 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -23,7 +23,7 @@ Runs the project in a sandboxed Linux container. Requires [Docker Desktop](https
 
 ```bash
 ./docker/build.sh                        # Build image (once, or after dep changes)
-./docker/test.sh                         # Run pytest (673 tests)
+./docker/test.sh                         # Run pytest (711 tests)
 ./docker/quality.sh                      # Ruff + mypy + pytest
 ./docker/cli.sh cards --format table     # Any CLI command
 ./docker/mcp.sh                          # MCP server (stdio)
@@ -138,7 +138,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- 15 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_scaffolding.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_lanes.py`, `test_tags.py`
+- 16 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_scaffolding.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_planning.py`, `test_lanes.py`, `test_tags.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)
@@ -181,9 +181,13 @@ Each item has: `timestamp`, `category`, `message`, optional `tool_name` and `con
 When you fix an issue reported in feedback, consider clearing those items or noting the fix. The file caps at 200 items (oldest removed automatically).
 
 ## Commands
-Use `py codecks_api.py <cmd> --help` for flags.
-- `cards` supports pagination flags: `--limit <n>` and `--offset <n>` (non-negative).
-- `create` supports `--parent <id>` to nest as sub-card under a parent card.
+Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill.
+- Common flags have short aliases: `-d` (deck), `-s` (status), `-p` (priority), `-S` (search), `-e` (effort), `-c` (content).
+- `cards` supports `--limit <n>` and `--offset <n>` (client-side pagination).
+- `card` supports `--no-content` and `--no-conversations` for metadata-only lookups.
+- `update` supports `--continue-on-error` for partial batch updates. Effort accepts positive int or `"null"`.
+- `create` supports `--parent <id>` for sub-cards.
+- `tags` lists project-level tags (masterTags).
 - `split-features` batch-splits feature cards into Code/Design/Art/Audio sub-cards (use `--dry-run` first).
 
 ## Git

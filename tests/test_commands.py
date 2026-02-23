@@ -11,6 +11,7 @@ import pytest
 from codecks_cli import config
 from codecks_cli.commands import (
     cmd_activity,
+    cmd_card,
     cmd_cards,
     cmd_comment,
     cmd_completion,
@@ -354,7 +355,8 @@ class TestUpdateNoFlags:
         mock_client = mock_get_client.return_value
         mock_client.update_cards.side_effect = CliError(
             "[ERROR] No update flags provided. Use --status, "
-            "--priority, --effort, --owner, --tag, --doc, etc."
+            "--priority, --effort, --deck, --title, --content, "
+            "--milestone, --hero, --owner, --tag, or --doc."
         )
         ns = argparse.Namespace(
             card_ids=["c1"],
@@ -1275,6 +1277,214 @@ class TestCompletion:
         assert "cards" in out
         assert "create" in out
         assert "#compdef" in out
+
+
+# ---------------------------------------------------------------------------
+# split-features
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Pagination edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestPaginationEdgeCases:
+    @patch("codecks_cli.commands._get_client")
+    def test_offset_past_total_returns_empty(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(3)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=10, offset=20))
+        out = json.loads(capsys.readouterr().out)
+        assert out["cards"] == []
+        assert out["total_count"] == 3
+        assert out["has_more"] is False
+
+    @patch("codecks_cli.commands._get_client")
+    def test_limit_one_returns_exactly_one(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(5)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=1, offset=0))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["cards"]) == 1
+        assert out["cards"][0]["id"] == "c0"
+        assert out["has_more"] is True
+
+    @patch("codecks_cli.commands._get_client")
+    def test_limit_exceeds_total_returns_all(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(3)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=100, offset=0))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["cards"]) == 3
+        assert out["total_count"] == 3
+        assert out["has_more"] is False
+
+    @patch("codecks_cli.commands._get_client")
+    def test_last_page_has_more_false(self, mock_get_client, capsys):
+        """offset + limit == total should yield has_more=False."""
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(6)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=3, offset=3))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["cards"]) == 3
+        assert [c["id"] for c in out["cards"]] == ["c3", "c4", "c5"]
+        assert out["has_more"] is False
+
+    @patch("codecks_cli.commands._get_client")
+    def test_no_limit_with_offset(self, mock_get_client, capsys):
+        """No --limit with --offset should return all cards from offset."""
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(5)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=None, offset=3))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["cards"]) == 2
+        assert out["has_more"] is False
+
+    @patch("codecks_cli.commands._get_client")
+    def test_zero_cards_with_pagination(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {"cards": [], "stats": None}
+        cmd_cards(_ns(format="json", limit=10, offset=0))
+        out = json.loads(capsys.readouterr().out)
+        assert out["cards"] == []
+        assert out["total_count"] == 0
+        assert out["has_more"] is False
+
+    @patch("codecks_cli.commands._get_client")
+    def test_middle_page(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": f"c{i}", "title": f"Card {i}"} for i in range(10)],
+            "stats": None,
+        }
+        cmd_cards(_ns(format="json", limit=3, offset=3))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out["cards"]) == 3
+        assert [c["id"] for c in out["cards"]] == ["c3", "c4", "c5"]
+        assert out["has_more"] is True
+
+
+# ---------------------------------------------------------------------------
+# card --no-content / --no-conversations
+# ---------------------------------------------------------------------------
+
+
+class TestCardFieldControl:
+    @patch("codecks_cli.commands._get_client")
+    def test_no_content_forwarded(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.get_card.return_value = {"id": "c1", "title": "Test"}
+        ns = argparse.Namespace(
+            card_id="c1", no_content=True, no_conversations=False, format="json"
+        )
+        cmd_card(ns)
+        mock_client.get_card.assert_called_once_with(
+            "c1", include_content=False, include_conversations=True
+        )
+
+    @patch("codecks_cli.commands._get_client")
+    def test_no_conversations_forwarded(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.get_card.return_value = {"id": "c1", "title": "Test"}
+        ns = argparse.Namespace(
+            card_id="c1", no_content=False, no_conversations=True, format="json"
+        )
+        cmd_card(ns)
+        mock_client.get_card.assert_called_once_with(
+            "c1", include_content=True, include_conversations=False
+        )
+
+    @patch("codecks_cli.commands._get_client")
+    def test_defaults_include_both(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.get_card.return_value = {"id": "c1", "title": "Test"}
+        ns = argparse.Namespace(card_id="c1", format="json")
+        cmd_card(ns)
+        mock_client.get_card.assert_called_once_with(
+            "c1", include_content=True, include_conversations=True
+        )
+
+
+# ---------------------------------------------------------------------------
+# update --continue-on-error
+# ---------------------------------------------------------------------------
+
+
+class TestContinueOnError:
+    @patch("codecks_cli.commands._get_client")
+    def test_continue_on_error_forwarded(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": False,
+            "updated": 1,
+            "failed": 1,
+            "fields": {"status": "done"},
+            "per_card": [
+                {"card_id": "c1", "ok": True},
+                {"card_id": "c2", "ok": False, "error": "Not found"},
+            ],
+        }
+        ns = argparse.Namespace(
+            card_ids=["c1", "c2"],
+            status="done",
+            priority=None,
+            effort=None,
+            deck=None,
+            title=None,
+            content=None,
+            milestone=None,
+            hero=None,
+            owner=None,
+            tag=None,
+            doc=None,
+            continue_on_error=True,
+            format="json",
+        )
+        cmd_update(ns)
+        assert mock_client.update_cards.call_args[1]["continue_on_error"] is True
+
+    @patch("codecks_cli.commands._get_client")
+    def test_continue_on_error_default_false(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "failed": 0,
+            "fields": {"status": "done"},
+        }
+        ns = argparse.Namespace(
+            card_ids=["c1"],
+            status="done",
+            priority=None,
+            effort=None,
+            deck=None,
+            title=None,
+            content=None,
+            milestone=None,
+            hero=None,
+            owner=None,
+            tag=None,
+            doc=None,
+            format="table",
+        )
+        cmd_update(ns)
+        assert mock_client.update_cards.call_args[1]["continue_on_error"] is False
 
 
 # ---------------------------------------------------------------------------

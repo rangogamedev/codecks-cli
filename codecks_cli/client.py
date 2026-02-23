@@ -364,7 +364,10 @@ class CodecksClient:
                     break
 
         if target_key is None:
-            raise CliError(f"[ERROR] Card '{card_id}' not found.")
+            hint = ""
+            if len(card_id) < 36:
+                hint = " If using a short ID, try the full 36-character UUID."
+            raise CliError(f"[ERROR] Card '{card_id}' not found.{hint}")
 
         card_data = cards[target_key]
         detail = dict(card_data)
@@ -915,7 +918,8 @@ class CodecksClient:
         if not update_kwargs:
             raise CliError(
                 "[ERROR] No update flags provided. Use --status, "
-                "--priority, --effort, --owner, --tag, --doc, etc."
+                "--priority, --effort, --deck, --title, --content, "
+                "--milestone, --hero, --owner, --tag, or --doc."
             )
 
         per_card: list[dict[str, Any]] = []

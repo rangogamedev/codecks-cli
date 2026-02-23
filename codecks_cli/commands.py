@@ -131,6 +131,8 @@ def cmd_cards(ns):
     if ns.stats:
         output(result["stats"], format_stats_table, fmt)
     else:
+        # Client-side pagination: the API returns all matching cards,
+        # and we slice here using --limit/--offset.
         cards = result.get("cards", [])
         total = len(cards)
         limit = getattr(ns, "limit", None)
@@ -151,7 +153,15 @@ def cmd_cards(ns):
 
 
 def cmd_card(ns):
-    output(_get_client().get_card(ns.card_id), format_card_detail, ns.format)
+    output(
+        _get_client().get_card(
+            ns.card_id,
+            include_content=not getattr(ns, "no_content", False),
+            include_conversations=not getattr(ns, "no_conversations", False),
+        ),
+        format_card_detail,
+        ns.format,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +285,7 @@ def cmd_update(ns):
         owner=ns.owner,
         tags=ns.tag,
         doc=ns.doc,
+        continue_on_error=getattr(ns, "continue_on_error", False),
     )
     fields = result.get("fields", {})
     detail_parts = [f"{k}={v}" for k, v in fields.items()]

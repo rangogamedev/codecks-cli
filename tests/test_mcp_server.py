@@ -1398,311 +1398,47 @@ class TestRegistryResponseModes:
 # ---------------------------------------------------------------------------
 
 
-class TestPlanningInit:
-    def test_creates_all_files(self, tmp_path):
+class TestPlanningToolSmoke:
+    """Slim smoke tests verifying MCP tool wrappers delegate to planning.py.
+
+    Full planning logic is tested in test_planning.py.
+    """
+
+    def test_planning_init_delegates(self, tmp_path):
         original = mcp_mod._PLANNING_DIR
         try:
             mcp_mod._PLANNING_DIR = tmp_path
             result = mcp_mod.planning_init()
             assert result["ok"] is True
-            assert len(result["files"]) == 3
-            assert result["total_bytes"] > 0
             assert (tmp_path / "task_plan.md").exists()
-            assert (tmp_path / "findings.md").exists()
-            assert (tmp_path / "progress.md").exists()
         finally:
             mcp_mod._PLANNING_DIR = original
 
-    def test_skips_existing_without_force(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            (tmp_path / "task_plan.md").write_text("existing")
-            result = mcp_mod.planning_init()
-            assert result["ok"] is True
-            assert len(result["files"]) == 2  # only findings + progress
-            assert (tmp_path / "task_plan.md").read_text() == "existing"
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_force_overwrites(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            (tmp_path / "task_plan.md").write_text("old")
-            result = mcp_mod.planning_init(force=True)
-            assert result["ok"] is True
-            assert len(result["files"]) == 3
-            assert "## Goal" in (tmp_path / "task_plan.md").read_text()
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-
-class TestPlanningStatus:
-    def test_no_files_returns_error(self, tmp_path):
+    def test_planning_status_returns_error_without_files(self, tmp_path):
         original = mcp_mod._PLANNING_DIR
         try:
             mcp_mod._PLANNING_DIR = tmp_path
             result = mcp_mod.planning_status()
             assert result["ok"] is False
-            assert "No planning files" in result["error"]
         finally:
             mcp_mod._PLANNING_DIR = original
 
-    def test_returns_structured_status(self, tmp_path):
+    def test_planning_update_delegates(self, tmp_path):
         original = mcp_mod._PLANNING_DIR
         try:
             mcp_mod._PLANNING_DIR = tmp_path
             mcp_mod.planning_init()
-            result = mcp_mod.planning_status()
+            result = mcp_mod.planning_update("goal", text="Test goal")
             assert result["ok"] is True
-            assert result["current_phase"] == "Phase 1"
-            assert len(result["phases"]) == 5
-            assert result["phases"][0]["status"] == "in_progress"
-            assert result["decisions"] == 0
-            assert result["errors"] == 0
-            assert result["total_tokens"] > 0
-            assert result["files"]["task_plan.md"] is True
         finally:
             mcp_mod._PLANNING_DIR = original
 
-    def test_shows_goal_after_set(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            mcp_mod.planning_update("goal", text="Build auth system")
-            result = mcp_mod.planning_status()
-            assert result["goal"] == "Build auth system"
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-
-class TestPlanningUpdate:
-    def test_goal(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("goal", text="Ship v2.0")
-            assert result["ok"] is True
-            assert "Ship v2.0" in result["message"]
-            content = (tmp_path / "task_plan.md").read_text()
-            assert "Ship v2.0" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_advance(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("advance")
-            assert result["ok"] is True
-            assert "Phase 2" in result["message"]
-            content = (tmp_path / "task_plan.md").read_text()
-            assert "Phase 2" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_advance_to_specific_phase(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("advance", phase=3)
-            assert result["ok"] is True
-            assert "Phase 3" in result["message"]
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_phase_status(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("phase_status", phase=2, status="in_progress")
-            assert result["ok"] is True
-            assert "Phase 2" in result["message"]
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_error(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("error", text="API timeout")
-            assert result["ok"] is True
-            content = (tmp_path / "task_plan.md").read_text()
-            assert "API timeout" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_decision(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("decision", text="Use JWT", rationale="Stateless auth")
-            assert result["ok"] is True
-            content = (tmp_path / "task_plan.md").read_text()
-            assert "Use JWT" in content
-            assert "Stateless auth" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_finding(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update(
-                "finding", section="Requirements", text="Must support OAuth2"
-            )
-            assert result["ok"] is True
-            content = (tmp_path / "findings.md").read_text()
-            assert "Must support OAuth2" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_issue(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update(
-                "issue", text="Rate limit hit", resolution="Add retry logic"
-            )
-            assert result["ok"] is True
-            content = (tmp_path / "findings.md").read_text()
-            assert "Rate limit hit" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_log(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("log", text="Implemented login flow")
-            assert result["ok"] is True
-            content = (tmp_path / "progress.md").read_text()
-            assert "Implemented login flow" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_file_changed(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update("file_changed", text="src/auth.py")
-            assert result["ok"] is True
-            content = (tmp_path / "progress.md").read_text()
-            assert "src/auth.py" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_test_result(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_update(
-                "test",
-                test_name="test_login",
-                expected="200 OK",
-                actual="200 OK",
-                result="pass",
-            )
-            assert result["ok"] is True
-            content = (tmp_path / "progress.md").read_text()
-            assert "test_login" in content
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_invalid_operation(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            # Note: Literal type would catch this at type-check time,
-            # but at runtime the function still handles it gracefully.
-            result = mcp_mod.planning_update("invalid_op")  # type: ignore[arg-type]
-            assert result["ok"] is False
-            assert "Unknown operation" in result["error"]
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_missing_file_returns_error(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            result = mcp_mod.planning_update("goal", text="test")
-            assert result["ok"] is False
-            assert "not found" in result["error"]
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-
-class TestPlanningMeasure:
-    def test_snapshot(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_measure("snapshot")
-            assert result["ok"] is True
-            assert result["total_bytes"] > 0
-            assert (tmp_path / ".plan_metrics.jsonl").exists()
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_report(self, tmp_path):
+    def test_planning_measure_delegates(self, tmp_path):
         original = mcp_mod._PLANNING_DIR
         try:
             mcp_mod._PLANNING_DIR = tmp_path
             mcp_mod.planning_init()
             result = mcp_mod.planning_measure("report")
             assert result["ok"] is True
-            assert result["total_bytes"] > 0
-            assert "savings_vs_old" in result
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_report_with_snapshots(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            mcp_mod.planning_measure("snapshot")
-            result = mcp_mod.planning_measure("report")
-            assert result["ok"] is True
-            assert result["snapshot_count"] == 1
-            assert "initial_tokens" in result
-            assert "peak_tokens" in result
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_compare_templates(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            mcp_mod.planning_init()
-            result = mcp_mod.planning_measure("compare_templates")
-            assert result["ok"] is True
-            assert len(result["files"]) == 3
-            assert result["total_old_bytes"] == 12516
-            assert result["tokens_saved_per_read"] > 0
-        finally:
-            mcp_mod._PLANNING_DIR = original
-
-    def test_invalid_operation(self, tmp_path):
-        original = mcp_mod._PLANNING_DIR
-        try:
-            mcp_mod._PLANNING_DIR = tmp_path
-            result = mcp_mod.planning_measure("invalid")  # type: ignore[arg-type]
-            assert result["ok"] is False
-            assert "Unknown measure operation" in result["error"]
         finally:
             mcp_mod._PLANNING_DIR = original

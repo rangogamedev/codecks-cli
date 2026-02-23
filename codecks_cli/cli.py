@@ -61,14 +61,14 @@ Commands:
   query <json>            - Run a raw query against the API (uses session token)
   account                 - Show account info
   cards                   - List all cards
-    --deck <name>           Filter by deck name (e.g. --deck Features)
-    --status <s>            Filter: not_started, started, done, blocked, in_review
-                            (comma-separated: --status started,blocked)
-    --priority <p>          Filter: a, b, c, null
-                            (comma-separated: --priority a,b)
+    -d, --deck <name>       Filter by deck name (e.g. -d Features)
+    -s, --status <s>        Filter: not_started, started, done, blocked, in_review
+                            (comma-separated: -s started,blocked)
+    -p, --priority <p>      Filter: a, b, c, null
+                            (comma-separated: -p a,b)
     --project <name>        Filter by project (e.g. --project "Tea Shop")
     --milestone <name>      Filter by milestone (e.g. --milestone MVP)
-    --search <text>         Search cards by title/content
+    -S, --search <text>     Search cards by title/content
     --tag <name>            Filter by tag (e.g. --tag bug)
     --owner <name>          Filter by owner (e.g. --owner Thomas, --owner none)
     --sort <field>          Sort by: status, priority, effort, deck, title,
@@ -76,7 +76,7 @@ Commands:
     --stale <days>          Find cards not updated in N days
     --updated-after <date>  Cards updated after date (YYYY-MM-DD)
     --updated-before <date> Cards updated before date (YYYY-MM-DD)
-    --limit <n>             Limit results (pagination)
+    --limit <n>             Limit output count (client-side pagination)
     --offset <n>            Skip first N results (pagination)
     --stats                 Show card count summary instead of card list
     --hand                  Show only cards in your hand
@@ -84,6 +84,8 @@ Commands:
     --type <type>           Filter by card type: hero, doc
     --archived              Show archived cards instead of active ones
   card <id>               - Get details for a specific card
+    --no-content            Strip card body (keep title only)
+    --no-conversations      Skip comment thread resolution
   decks                   - List all decks
   projects                - List all projects (derived from decks)
   milestones              - List all milestones
@@ -100,9 +102,9 @@ Commands:
     --project <name>        Filter by project
     --owner <name>          Filter by owner
   create <title>          - Create a card via Report Token (stable, no expiry)
-    --deck <name>           Place card in a specific deck
+    -d, --deck <name>       Place card in a specific deck
     --project <name>        Place card in first deck of a project
-    --content <text>        Card description/content
+    -c, --content <text>    Card description/content
     --severity <level>      critical, high, low, or null
     --doc                   Create as a doc card (no workflow states)
     --allow-duplicate       Bypass exact duplicate-title protection
@@ -131,10 +133,10 @@ Commands:
     --priority <level>      Override priority for sub-cards (a, b, c, null)
     --dry-run               Preview analysis without creating cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
-    --status <state>        not_started, started, done, blocked, in_review
-    --priority <level>      a (high), b (medium), c (low), or null
-    --effort <n>            Effort estimation (number)
-    --deck <name>           Move card to a different deck
+    -s, --status <state>    not_started, started, done, blocked, in_review
+    -p, --priority <level>  a (high), b (medium), c (low), or null
+    -e, --effort <n>        Effort estimation (positive integer or "null")
+    -d, --deck <name>       Move card to a different deck
     --title <text>          Rename the card (single card only)
     --content <text>        Update card description (single card only)
     --milestone <name>      Assign to milestone (use "none" to clear)
@@ -142,6 +144,7 @@ Commands:
     --owner <name>          Assign owner (use "none" to unassign)
     --tag <tags>            Set tags (comma-separated, use "none" to clear all)
     --doc <true|false>      Convert to/from doc card
+    --continue-on-error     Continue updating remaining cards after failure
   archive|remove <id>     - Remove a card (reversible, this is the standard way)
   unarchive <id>          - Restore an archived card
   delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
@@ -259,6 +262,19 @@ def _non_negative_int(value):
     return parsed
 
 
+def _effort_value(value):
+    """Parse effort: positive integer or 'null' to clear."""
+    if value == "null":
+        return "null"
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'null'") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'null'")
+    return str(parsed)
+
+
 def build_parser():
     parser = _SubcommandParser(
         prog="codecks-cli",
@@ -286,11 +302,11 @@ def build_parser():
 
     # --- cards ---
     p = sub.add_parser("cards")
-    p.add_argument("--deck")
-    p.add_argument("--status")  # comma-separated: started,blocked
-    p.add_argument("--priority")  # comma-separated: a,b
+    p.add_argument("--deck", "-d")
+    p.add_argument("--status", "-s")  # comma-separated: started,blocked
+    p.add_argument("--priority", "-p")  # comma-separated: a,b
     p.add_argument("--project")
-    p.add_argument("--search")
+    p.add_argument("--search", "-S")
     p.add_argument("--milestone")
     p.add_argument("--tag")
     p.add_argument("--owner")
@@ -310,14 +326,16 @@ def build_parser():
     # --- card ---
     p = sub.add_parser("card")
     p.add_argument("card_id")
+    p.add_argument("--no-content", action="store_true", dest="no_content")
+    p.add_argument("--no-conversations", action="store_true", dest="no_conversations")
     p.set_defaults(func=cmd_card)
 
     # --- create ---
     p = sub.add_parser("create")
     p.add_argument("title")
-    p.add_argument("--deck")
+    p.add_argument("--deck", "-d")
     p.add_argument("--project")
-    p.add_argument("--content")
+    p.add_argument("--content", "-c")
     p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
@@ -327,10 +345,10 @@ def build_parser():
     # --- update ---
     p = sub.add_parser("update")
     p.add_argument("card_ids", nargs="+")
-    p.add_argument("--status", choices=sorted(config.VALID_STATUSES))
-    p.add_argument("--priority", choices=sorted(config.VALID_PRIORITIES))
-    p.add_argument("--effort")
-    p.add_argument("--deck")
+    p.add_argument("--status", "-s", choices=sorted(config.VALID_STATUSES))
+    p.add_argument("--priority", "-p", choices=sorted(config.VALID_PRIORITIES))
+    p.add_argument("--effort", "-e", type=_effort_value)
+    p.add_argument("--deck", "-d")
     p.add_argument("--title")
     p.add_argument("--content")
     p.add_argument("--milestone")
@@ -338,6 +356,7 @@ def build_parser():
     p.add_argument("--owner")
     p.add_argument("--tag")
     p.add_argument("--doc")
+    p.add_argument("--continue-on-error", action="store_true", dest="continue_on_error")
     p.set_defaults(func=cmd_update)
 
     # --- feature ---

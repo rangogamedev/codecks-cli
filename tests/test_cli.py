@@ -377,6 +377,78 @@ class TestBuildParser:
                     defaults = subparser._defaults
                     assert "func" in defaults, f"Subparser '{name}' missing func default"
 
+    # --- Short flag aliases ---
+
+    def test_cards_short_flags(self):
+        ns = self.parser.parse_args(
+            ["cards", "-d", "Features", "-s", "started", "-p", "a", "-S", "combat"]
+        )
+        assert ns.deck == "Features"
+        assert ns.status == "started"
+        assert ns.priority == "a"
+        assert ns.search == "combat"
+
+    def test_update_short_flags(self):
+        ns = self.parser.parse_args(
+            ["update", "id1", "-s", "done", "-p", "b", "-e", "5", "-d", "Tasks"]
+        )
+        assert ns.status == "done"
+        assert ns.priority == "b"
+        assert ns.effort == "5"
+        assert ns.deck == "Tasks"
+
+    def test_create_short_flags(self):
+        ns = self.parser.parse_args(["create", "My Card", "-d", "Inbox", "-c", "Some content"])
+        assert ns.deck == "Inbox"
+        assert ns.content == "Some content"
+
+    # --- card --no-content / --no-conversations ---
+
+    def test_card_no_content_flag(self):
+        ns = self.parser.parse_args(["card", "abc-123", "--no-content"])
+        assert ns.no_content is True
+
+    def test_card_no_conversations_flag(self):
+        ns = self.parser.parse_args(["card", "abc-123", "--no-conversations"])
+        assert ns.no_conversations is True
+
+    def test_card_defaults_include_content(self):
+        ns = self.parser.parse_args(["card", "abc-123"])
+        assert ns.no_content is False
+        assert ns.no_conversations is False
+
+    # --- update --continue-on-error ---
+
+    def test_update_continue_on_error_flag(self):
+        ns = self.parser.parse_args(["update", "id1", "--status", "done", "--continue-on-error"])
+        assert ns.continue_on_error is True
+
+    def test_update_continue_on_error_default(self):
+        ns = self.parser.parse_args(["update", "id1", "--status", "done"])
+        assert ns.continue_on_error is False
+
+    # --- update --effort validation ---
+
+    def test_update_effort_accepts_positive_int(self):
+        ns = self.parser.parse_args(["update", "id1", "--effort", "5"])
+        assert ns.effort == "5"
+
+    def test_update_effort_accepts_null(self):
+        ns = self.parser.parse_args(["update", "id1", "--effort", "null"])
+        assert ns.effort == "null"
+
+    def test_update_effort_rejects_zero(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["update", "id1", "--effort", "0"])
+
+    def test_update_effort_rejects_negative(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["update", "id1", "--effort", "-1"])
+
+    def test_update_effort_rejects_non_numeric(self):
+        with pytest.raises(CliError):
+            self.parser.parse_args(["update", "id1", "--effort", "abc"])
+
 
 class TestCliErrorOutput:
     def test_error_type_mapping(self):
