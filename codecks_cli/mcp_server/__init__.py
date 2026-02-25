@@ -8,7 +8,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_read.py    — 10 query/dashboard tools
   _tools_write.py   — 12 mutation/hand/scaffolding tools
   _tools_comments.py — 5 comment CRUD tools
-  _tools_local.py   — 12 local tools (PM session, feedback, planning, registry)
+  _tools_local.py   — 13 local tools (PM session, feedback, planning, registry)
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
@@ -86,6 +86,7 @@ from codecks_cli.mcp_server._tools_local import (  # noqa: E402, F401
     _PLAYBOOK_PATH,
     _PREFS_PATH,
     clear_cli_feedback,
+    clear_workflow_preferences,
     get_cli_feedback,
     get_lane_registry,
     get_pm_playbook,

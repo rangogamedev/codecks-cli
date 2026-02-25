@@ -148,7 +148,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
     request_id = (headers or {}).get("X-Request-Id")
     safe_url = _sanitize_url_for_log(url)
     sampled = _is_sampled_request(request_id)
-    max_attempts = 1 + max(0, config.HTTP_MAX_RETRIES if idempotent else 0)
+    max_attempts = 1 + max(0, config.HTTP_MAX_RETRIES)
     timeout = max(1, config.HTTP_TIMEOUT_SECONDS)
     last_timeout = False
     last_url_error = None
@@ -207,7 +207,9 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 else ""
             )
             retryable = e.code in _RETRYABLE_HTTP_CODES
-            can_retry = idempotent and attempt < max_attempts - 1 and retryable
+            # 429 = rate limit (request never processed) — always safe to retry.
+            # 502/503/504 — only retry if idempotent.
+            can_retry = attempt < max_attempts - 1 and retryable and (e.code == 429 or idempotent)
             if sampled:
                 _log_http_event(
                     phase="response",

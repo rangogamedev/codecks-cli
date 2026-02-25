@@ -622,6 +622,60 @@ class TestPMFocus:
         assert len(result["suggested"]) == 1
         assert result["suggested"][0]["title"] == "Candidate"
 
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.list_cards")
+    def test_deck_health_aggregation(self, mock_list, mock_enrich, mock_hand, mock_extract):
+        from datetime import datetime, timezone
+
+        mock_list.return_value = {
+            "card": {
+                "c1": {
+                    "title": "Blocked Code",
+                    "status": "blocked",
+                    "deck_name": "Code",
+                    "owner_name": "Thomas",
+                },
+                "c2": {
+                    "title": "Stale Art",
+                    "status": "started",
+                    "deck_name": "Art",
+                    "owner_name": "Thomas",
+                    "lastUpdatedAt": "2025-01-01T00:00:00Z",
+                },
+                "c3": {
+                    "title": "Active Code",
+                    "status": "started",
+                    "deck_name": "Code",
+                    "owner_name": None,
+                    "lastUpdatedAt": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        result = client.pm_focus()
+
+        health = result["deck_health"]
+        assert "by_deck" in health
+        assert "by_owner" in health
+
+        # Code deck: 2 cards, 1 blocked, 1 in_progress
+        assert health["by_deck"]["Code"]["total"] == 2
+        assert health["by_deck"]["Code"]["blocked"] == 1
+        assert health["by_deck"]["Code"]["in_progress"] == 1
+
+        # Art deck: 1 card, stale
+        assert health["by_deck"]["Art"]["total"] == 1
+        assert health["by_deck"]["Art"]["stale"] == 1
+
+        # Owner aggregation
+        assert health["by_owner"]["Thomas"]["total"] == 2
+        assert health["by_owner"]["unassigned"]["total"] == 1
+
 
 # ---------------------------------------------------------------------------
 # standup

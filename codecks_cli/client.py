@@ -571,10 +571,13 @@ class CodecksClient:
         hand = []
         stale = []
         candidates = []
+        deck_agg: dict[str, dict[str, int]] = {}
+        owner_agg: dict[str, dict[str, int]] = {}
 
         for cid, card in cards.items():
             status = card.get("status")
             row = _card_row(cid, card)
+            is_stale = False
             if status == "started":
                 started.append(row)
             if status == "blocked":
@@ -590,6 +593,21 @@ class CodecksClient:
                 updated = _parse_iso_timestamp(_get_field(card, "last_updated_at", "lastUpdatedAt"))
                 if updated and updated < cutoff:
                     stale.append(row)
+                    is_stale = True
+
+            # Aggregate by deck and owner
+            deck = row.get("deck_name") or "unknown"
+            owner = row.get("owner_name") or "unassigned"
+            for key, agg in ((deck, deck_agg), (owner, owner_agg)):
+                if key not in agg:
+                    agg[key] = {"total": 0, "blocked": 0, "stale": 0, "in_progress": 0}
+                agg[key]["total"] += 1
+                if status == "blocked":
+                    agg[key]["blocked"] += 1
+                if is_stale:
+                    agg[key]["stale"] += 1
+                if status in ("started", "in_review"):
+                    agg[key]["in_progress"] += 1
 
         pri_rank = {"a": 0, "b": 1, "c": 2, None: 3, "": 3}
         candidates.sort(
@@ -615,6 +633,10 @@ class CodecksClient:
             "hand": hand,
             "stale": stale,
             "suggested": suggested,
+            "deck_health": {
+                "by_deck": deck_agg,
+                "by_owner": owner_agg,
+            },
             "filters": {
                 "project": project,
                 "owner": owner,
@@ -671,6 +693,24 @@ class CodecksClient:
             "blocked": blocked,
             "hand": hand,
             "filters": {"project": project, "owner": owner, "days": days},
+        }
+
+    # -------------------------------------------------------------------
+    # Cache / prefetch
+    # -------------------------------------------------------------------
+
+    def prefetch_snapshot(
+        self, *, days: int = 2, project: str | None = None, owner: str | None = None
+    ) -> dict[str, Any]:
+        """Fetch standup + hand + account in one call for caching.
+
+        Returns:
+            dict with 'account', 'standup', and 'hand' keys.
+        """
+        return {
+            "account": self.get_account(),
+            "standup": self.standup(days=days, project=project, owner=owner),
+            "hand": self.list_hand(),
         }
 
     # -------------------------------------------------------------------

@@ -175,14 +175,37 @@ class TestHttpRetries:
         assert mock_urlopen.call_count == 2
         mock_sleep.assert_called_once()
 
+    @patch("codecks_cli.api.time.sleep")
     @patch("codecks_cli.api.urllib.request.urlopen")
-    def test_does_not_retry_429_for_non_idempotent_request(self, mock_urlopen):
+    def test_retries_429_for_non_idempotent_request(self, mock_urlopen, mock_sleep):
+        """429 = rate limit (request never processed), safe to retry even for mutations."""
         first = urllib.error.HTTPError(
             "https://api.codecks.io/",
             429,
             "Too Many Requests",
             {"Retry-After": "0"},
             io.BytesIO(b"busy"),
+        )
+        success_cm = MagicMock()
+        success_resp = success_cm.__enter__.return_value
+        success_resp.headers.get.return_value = "application/json"
+        success_resp.read.return_value = b'{"ok": true}'
+        mock_urlopen.side_effect = [first, success_cm]
+
+        result = _http_request("https://api.codecks.io/", {"x": 1}, idempotent=False)
+        assert result["ok"] is True
+        assert mock_urlopen.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch("codecks_cli.api.urllib.request.urlopen")
+    def test_does_not_retry_502_for_non_idempotent_request(self, mock_urlopen):
+        """502/503/504 should NOT retry for mutations (may have been processed)."""
+        first = urllib.error.HTTPError(
+            "https://api.codecks.io/",
+            502,
+            "Bad Gateway",
+            {},
+            io.BytesIO(b"error"),
         )
         mock_urlopen.side_effect = first
 

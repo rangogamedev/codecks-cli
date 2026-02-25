@@ -1172,6 +1172,26 @@ class TestSplitFeaturesTool:
 
 
 # ---------------------------------------------------------------------------
+# Preference tools
+# ---------------------------------------------------------------------------
+
+
+class TestPreferenceTools:
+    def test_clear_workflow_preferences_removes_file(self, tmp_path):
+        prefs_file = tmp_path / ".pm_preferences.json"
+        prefs_file.write_text('{"observations": ["test"], "updated_at": "now"}')
+        with patch.object(_tools_local, "_PREFS_PATH", str(prefs_file)):
+            result = mcp_mod.clear_workflow_preferences()
+        assert result["cleared"] is True
+        assert not prefs_file.exists()
+
+    def test_clear_workflow_preferences_no_file(self, tmp_path):
+        prefs_file = tmp_path / ".pm_preferences.json"
+        with patch.object(_tools_local, "_PREFS_PATH", str(prefs_file)):
+            result = mcp_mod.clear_workflow_preferences()
+        assert result["cleared"] is False
+
+
 # Feedback tools
 # ---------------------------------------------------------------------------
 

@@ -79,6 +79,17 @@ def save_workflow_preferences(observations: list[str]) -> dict:
         return _finalize_tool_result(_contract_error(f"Cannot save preferences: {e}", "error"))
 
 
+def clear_workflow_preferences() -> dict:
+    """Clear all saved workflow preferences. Use to reset learned patterns. No auth needed."""
+    try:
+        os.remove(_PREFS_PATH)
+        return _finalize_tool_result({"cleared": True})
+    except FileNotFoundError:
+        return _finalize_tool_result({"cleared": False, "message": "No preferences file found"})
+    except OSError as e:
+        return _finalize_tool_result(_contract_error(f"Cannot clear preferences: {e}", "error"))
+
+
 def save_cli_feedback(
     category: Literal["missing_feature", "bug", "error", "improvement", "usability"],
     message: str,
@@ -418,6 +429,7 @@ def register(mcp):
     mcp.tool()(get_pm_playbook)
     mcp.tool()(get_workflow_preferences)
     mcp.tool()(save_workflow_preferences)
+    mcp.tool()(clear_workflow_preferences)
     mcp.tool()(save_cli_feedback)
     mcp.tool()(get_cli_feedback)
     mcp.tool()(clear_cli_feedback)
