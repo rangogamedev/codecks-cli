@@ -146,8 +146,35 @@ def list_milestones() -> dict:
 
 
 def list_tags() -> dict:
-    """List project-level tags (sanctioned taxonomy). Use these tag names with update_cards --tags."""
-    return _finalize_tool_result(_call("list_tags"))
+    """List project-level tags (sanctioned taxonomy).
+
+    Falls back to the local tag registry if the API is unavailable.
+    Note: tag *creation* is not supported via the API — use the Codecks web UI
+    to add new project-level tags, then they will appear here.
+    """
+    result = _call("list_tags")
+    if isinstance(result, dict) and result.get("ok") is False:
+        # API failed — fall back to local tag registry
+        from codecks_cli.tags import TAGS
+
+        tag_dicts = [
+            {
+                "name": t.name,
+                "display_name": t.display_name,
+                "category": t.category,
+                "description": t.description,
+            }
+            for t in TAGS
+        ]
+        return _finalize_tool_result(
+            {
+                "tags": tag_dicts,
+                "count": len(tag_dicts),
+                "source": "local_registry",
+                "warning": "API unavailable — showing local tag definitions (may not include recently added tags)",
+            }
+        )
+    return _finalize_tool_result(result)
 
 
 def list_activity(limit: int = 20) -> dict:

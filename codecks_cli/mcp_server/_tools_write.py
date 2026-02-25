@@ -79,6 +79,11 @@ def update_cards(
 ) -> dict:
     """Update card properties. Doc cards: only owner/tags/milestone/deck/title/content/hero.
 
+    Tagging: Prefer inline tags in card content body (``Tags: #tag1 #tag2``) over
+    the ``tags`` parameter. Inline tags are the project standard. The ``tags``
+    parameter sets card-level masterTags and should only be used for system tags
+    (hero, feature) applied during scaffolding.
+
     Args:
         card_ids: Full 36-char UUIDs (short IDs cause 400 errors).
         effort: Integer string, or 'null' to clear.
@@ -86,7 +91,7 @@ def update_cards(
         milestone: Name, or 'none' to clear.
         hero: Parent card UUID, or 'none' to detach.
         owner: Name, or 'none' to unassign.
-        tags: Comma-separated, or 'none' to clear all.
+        tags: Card-level masterTags (comma-separated, or 'none'). Prefer inline body tags.
         continue_on_error: If True, continue updating remaining cards after a failure.
 
     Returns:

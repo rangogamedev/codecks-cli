@@ -343,6 +343,9 @@ def get_tag_registry(
     Use list_tags() for live API tags; this tool reads the local registry.
     No auth needed.
 
+    Note: Tag *creation* is not supported via the API. To add new project-level
+    tags, use the Codecks web UI. This registry defines the CLI's known tags.
+
     Args:
         category: Filter to 'system' or 'discipline' tags only.
     """
