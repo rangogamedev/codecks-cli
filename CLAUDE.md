@@ -10,8 +10,10 @@ Fast navigation map: `PROJECT_INDEX.md`.
 - **Test**: `pwsh -File scripts/run-tests.ps1` (711 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
-- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
-- **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14) + Codecov coverage
+- **Deps**: `uv sync --extra dev` (uv manages lock file). Fallback: `py -m pip install .[dev]`
+- **Lock file**: `uv.lock` — pinned dependency versions, committed to git
+- **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps + GitHub Actions
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
 
 ## Architecture

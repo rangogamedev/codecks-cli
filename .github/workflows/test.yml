@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -14,20 +18,27 @@ jobs:
         python-version: ["3.10", "3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install project + dev tools
-        run: pip install .[dev]
+        run: uv sync --extra dev
       - name: Ruff lint
-        run: ruff check .
+        run: uv run ruff check .
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run ruff format --check .
       - name: Mypy (core modules)
-        run: python scripts/quality_gate.py --mypy-only
+        run: uv run python scripts/quality_gate.py --mypy-only
       - name: Pytest with coverage
-        run: pytest tests/ -v --basetemp .tmp/pytest-ci
+        run: uv run pytest tests/ -v --basetemp .tmp/pytest-ci --cov=codecks_cli --cov-report=xml
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
 
   docker-smoke:
     runs-on: ubuntu-latest

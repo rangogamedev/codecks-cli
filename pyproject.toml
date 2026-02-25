@@ -59,6 +59,7 @@ exclude = [
   ".git",
   ".pytest_cache",
   ".tmp",
+  ".venv",
   "__pycache__",
   "build",
 ]

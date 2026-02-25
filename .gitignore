@@ -11,6 +11,7 @@ findings.md
 progress.md
 .plan_metrics.jsonl
 .project-meta.json
+.venv/
 __pycache__/
 *.pyc
 build/
@@ -18,6 +19,9 @@ dist/
 *.egg-info/
 .claude/
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 .tmp/
 .tmp-codex/
 .sandbox_tmp/

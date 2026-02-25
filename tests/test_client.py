@@ -634,12 +634,17 @@ class TestStandup:
     @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
     @patch("codecks_cli.client.list_cards")
     def test_categorizes_cards(self, mock_list, mock_enrich, mock_hand, mock_extract):
+        from datetime import datetime, timedelta, timezone
+
+        yesterday = (datetime.now(timezone.utc) - timedelta(hours=12)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         mock_list.return_value = {
             "card": {
                 "c1": {
                     "title": "Done Yesterday",
                     "status": "done",
-                    "lastUpdatedAt": "2026-02-21T12:00:00Z",
+                    "lastUpdatedAt": yesterday,
                 },
                 "c2": {"title": "Working On", "status": "started"},
                 "c3": {"title": "Stuck", "status": "blocked"},
