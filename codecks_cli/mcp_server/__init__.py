@@ -6,7 +6,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _core.py          — Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
   _security.py      — Injection detection, sanitization, input validation
   _tools_read.py    — 10 query/dashboard tools (cache-aware)
-  _tools_write.py   — 12 mutation/hand/scaffolding tools
+  _tools_write.py   — 13 mutation/hand/scaffolding tools
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 15 local tools (PM session, feedback, planning, registry, cache)
   _tools_team.py    — 8 team coordination tools (claim, delegate, partition, dashboard)

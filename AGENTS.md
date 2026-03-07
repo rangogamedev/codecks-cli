@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (772 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (863 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -77,18 +77,20 @@ codecks_cli/
     _activity.py         format_activity_table, format_activity_diff
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
+  _content.py           <- Content title/body parsing, serialization, replace helpers
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- MCP server package: 42 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server/            <- MCP server package: 51 tools wrapping CodecksClient (stdio, legacy/envelope modes)
     __init__.py          FastMCP init, register() calls, re-exports
     __main__.py          ``py -m codecks_cli.mcp_server`` entry point
-    _core.py             Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
+    _core.py             Client caching, _call dispatcher, response contract, UUID validation, snapshot cache, agent session registry
     _security.py         Injection detection, sanitization, input validation
     _tools_read.py       10 query/dashboard tools (cache-aware)
-    _tools_write.py      12 mutation/hand/scaffolding tools
+    _tools_write.py      13 mutation/hand/scaffolding tools
     _tools_comments.py   5 comment CRUD tools
     _tools_local.py      15 local tools (PM session, feedback, planning, registry, cache)
+    _tools_team.py       8 team coordination tools (claim/release/delegate, status/dashboard, partitioning, playbook)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell, dev, logs, claude)
 Dockerfile              <- Multi-stage build (Python 3.12-slim, dev+mcp+claude deps)
@@ -159,11 +161,13 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 7. Archive uses `visibility: "archived"` not `isArchived: True` (silently ignored by API)
 8. `parentCardId` in get_card query causes HTTP 500 for sub-cards — use `{"parentCard": ["title"]}` relation instead
 9. Tags in card body text (`#tag`) create deprecated user-style tags — use `masterTags` dispatch field for project tags
+10. `update_cards` content-only update duplicated title when content already started with existing title — now auto-detected and skipped
+11. Content title/body handling refactored to use `_content.py` helpers (single source of truth). Error responses include `retryable` and `error_code` for agent decision-making. Cache includes `stale_warning` when age > 80% TTL. New `update_card_body` tool for body-only edits.
 
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 42 tools exposed (27 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 3 feedback tools + 2 registry tools + 2 cache tools + 1 CLI cache command)
+- 51 tools exposed (28 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 3 feedback tools + 2 registry tools + 2 cache tools + 1 CLI cache command + 8 team coordination tools)
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`
@@ -171,19 +175,48 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ### Snapshot Cache (fast reads for AI agents)
 **STARTUP: Call `warm_cache()` first in every session.** This fetches all project data (account, cards, hand, decks, pm_focus, standup) in one batch and caches it in memory + disk (`.pm_cache.json`). Subsequent reads complete in <50ms instead of 1-2s per API call.
 
-- **`warm_cache()`** — Fetches all data (6 API calls), stores in memory + disk. Returns summary with card_count, hand_size, deck_count.
+- **`warm_cache(force?)`** — Fetches all data (6 API calls), stores in memory + disk. Skips if cache already valid (use `force=True` to always re-fetch). Returns summary with card_count, hand_size, deck_count.
 - **`cache_status()`** — Check cache state without fetching. Returns TTL remaining, counts, expiry status.
 - **TTL**: Default 5 minutes. Set `CODECKS_CACHE_TTL_SECONDS=0` to disable caching.
 - **Cache-aware tools**: `get_account`, `list_cards`, `get_card`, `list_decks`, `pm_focus`, `standup`, `list_hand` all check cache first with automatic API fallback.
-- **Write-through invalidation**: Any mutation (create/update/delete/archive) automatically clears the cache. Next read refetches from API.
+- **Selective invalidation**: Mutations only clear affected cache keys (e.g., `add_to_hand` clears `hand`/`pm_focus`/`standup` but preserves `account`/`decks`/`cards_result`). Comment mutations don't invalidate anything. Unknown methods fall back to full invalidation.
 - **Cached responses** include `"cached": true` and `"cache_age_seconds"` metadata so agents know data freshness.
 - **CLI**: `py codecks_api.py cache` pre-populates the disk cache. `--show` to inspect, `--clear` to reset.
 
 **Optimal agent workflow:**
 1. Call `warm_cache()` at session start (one-time ~3s)
 2. All subsequent reads are instant from cache
-3. Mutations auto-invalidate; next read refreshes
+3. Mutations auto-invalidate affected keys; next read refreshes
 4. Use `include_content=False` / `include_conversations=False` on `get_card` for metadata-only checks
+
+### Agent Team Coordination (8 tools)
+For multi-agent workflows (Claude Code agent teams or parallel independent agents).
+
+**Claiming** — In-memory claim registry prevents card conflicts:
+- `claim_card(card_id, agent_name, reason?)` — Exclusive claim, returns conflict info if already taken
+- `release_card(card_id, agent_name, summary?)` — Release when done
+- `delegate_card(card_id, from_agent, to_agent, message?)` — Transfer claim between agents
+
+**Status & Dashboards:**
+- `team_status()` — All agents and their active cards
+- `team_dashboard(project?)` — Combined health + agent workload + unclaimed in-progress cards
+- `partition_by_lane(project?)` — Cards grouped by lane tag (code/design/art) with claim annotations
+- `partition_by_owner(project?)` — Cards grouped by Codecks owner with claim annotations
+- `get_team_playbook()` — Team coordination section from PM playbook (token-efficient for workers)
+
+**Agent-scoped preferences:**
+- `save_workflow_preferences(observations, agent_name?)` — Per-agent or global preference storage
+- `get_workflow_preferences(agent_name?)` — Returns agent-specific + global merged preferences
+- `planning_update(..., agent_name?)` — Log entries prefixed with agent name
+
+**Lead + Worker pattern:**
+1. Lead: `warm_cache()` → `partition_by_lane()` → assign cards to workers via SendMessage
+2. Workers: `claim_card()` → do work → `release_card(summary="...")`
+3. Lead: `team_dashboard()` to monitor health + unclaimed work
+
+**Parallel Independent pattern:**
+1. Each agent: `warm_cache()` → `claim_card()` → work → `release_card()`
+2. Use `team_status()` to see who's working on what and avoid conflicts
 
 ## CLI Feedback (from the PM Agent)
 

@@ -25,7 +25,7 @@ Fast index for agents and maintainers.
 - Command handlers: `codecks_cli/commands.py`
 - Programmatic API: `codecks_cli/client.py`
 - Feature scaffolding: `codecks_cli/scaffolding.py`
-- MCP server: `codecks_cli/mcp_server/` (package with 6 sub-modules)
+- MCP server: `codecks_cli/mcp_server/` (package with 7 sub-modules, 51 tools)
 
 ## Core Modules
 - HTTP + retries + token checks: `codecks_cli/api.py`
@@ -37,6 +37,7 @@ Fast index for agents and maintainers.
 - Dataclasses for payload contracts (FeatureSpec, SplitFeaturesSpec): `codecks_cli/models.py`
 - Tag registry (TagDefinition, TAGS, HERO_TAGS, LANE_TAGS, helpers): `codecks_cli/tags.py`
 - Lane registry (LaneDefinition, LANES, helpers): `codecks_cli/lanes.py`
+- Content title/body parse, serialize, replace: `codecks_cli/_content.py`
 - Output formatters: `codecks_cli/formatters/`
 - Google Docs sync/auth: `codecks_cli/gdd.py`
 - Setup wizard: `codecks_cli/setup_wizard.py`
