@@ -1980,7 +1980,7 @@ class TestUpdateCardBody:
             update_cards={"ok": True, "updated": 1, "per_card": [{"card_id": _C1, "ok": True}]},
         )
         MockClient.return_value = client
-        result = mcp_mod.update_card_body(card_id=_C1, body="New body text")
+        mcp_mod.update_card_body(card_id=_C1, body="New body text")
         # Verify update_cards was called with preserved title + new body
         client.update_cards.assert_called_once()
         call_args = client.update_cards.call_args
