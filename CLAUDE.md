@@ -14,7 +14,8 @@ Fast navigation map: `PROJECT_INDEX.md`.
 - **Deps**: `uv sync --extra dev` (uv manages lock file). Fallback: `py -m pip install .[dev]`
 - **Lock file**: `uv.lock` — pinned dependency versions, committed to git
 - **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps + GitHub Actions
-- **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
+- **Version**: `VERSION` in `codecks_cli/config.py` + `pyproject.toml` (keep in sync). See `DEVELOPMENT.md` for release process.
+- **Tags**: annotated git tags (`v0.1.0`..`v0.4.0`). Create with `git tag -a vX.Y.Z -m "..."`
 
 ## Architecture
 
@@ -117,11 +118,14 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 - `py scripts/project_meta.py` — project metadata JSON.
 - `py scripts/validate_docs.py` — checks docs for stale counts.
 
-## Git
+## Git & Versioning
 - Commit style: short present tense ("Add X", "Fix Y")
 - Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
 - `.claude/` is gitignored
 - Run security-reviewer agent before pushing (public repo)
+- **Semver**: version in `config.py` + `pyproject.toml`. Tags: `v0.1.0`..`v0.4.0`
+- **Release**: update version in both files, move CHANGELOG unreleased to versioned section, tag, push. Use `/release` skill.
+- **Dev docs**: `DEVELOPMENT.md` (setup, architecture, release process), `CONTRIBUTING.md` (contributor guide)
 
 ## Maintenance
 Use `/maintenance` skill for the full checklist. Key points:

@@ -2,14 +2,65 @@
 
 All notable changes to codecks-cli will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
 - `--parent <id>` flag on `create` command — nest new cards as sub-cards under a parent card
   - Also exposed via MCP `create_card` tool (`parent` parameter)
-  - Uses the existing two-step create-then-update pattern internally
+- `split-features` command — batch-split feature cards into Code/Design/Art/Audio sub-cards
+  - `--dry-run` to preview without creating cards
+  - Audio lane opt-in via `--audio-deck`
+- `tags` command — list project-level tags (masterTags)
+- `pm-focus` command — PM-optimized dashboard with actionable insights
+- `standup` command — daily standup summary
+- CLI short flags: `-d` (deck), `-s` (status), `-p` (priority), `-S` (search), `-e` (effort), `-c` (content)
+- `--continue-on-error` on `update` — partial batch updates
+- `--no-content` / `--no-conversations` on `card` — metadata-only lookups
+- `--limit` / `--offset` on `cards` — client-side pagination
+- Content parsing helper module (`_content.py`) — single source of truth for title/body parsing
+- `update_card_body` MCP tool — update card body without touching title
+- Docker development environment with security hardening
+- Automated docs backup workflow (GitHub Actions)
+- Response contracts — `schema_version`, `ok`, `error_detail` on all MCP/CLI responses
+- In-memory snapshot cache for MCP server — `warm_cache()` for instant reads (<50ms)
+  - Selective cache invalidation (only affected keys cleared on mutations)
+  - Cache stale warnings when age exceeds 80% of TTL
+- Error classification in MCP responses — `retryable` and `error_code` fields
+- Agent team coordination — 8 MCP tools for multi-agent work
+  - `claim_card` / `release_card` / `delegate_card` — card ownership
+  - `team_status` / `team_dashboard` — health and workload views
+  - `partition_by_lane` / `partition_by_owner` — work division
+  - `get_team_playbook` — agent team methodology
+- MCP prompt injection detection and input sanitization
+- PM planning tools (4 tools: init, update, measure, status)
+- Tag and lane registry tools — introspect project taxonomy via MCP
+- CLI feedback system — `save_cli_feedback` / `get_cli_feedback` / `clear_cli_feedback`
+- uv for dependency management (`uv.lock` committed)
+
+### Changed
+- MCP server refactored from single file to package (7 sub-modules, 51 tools)
+  - `_core.py` — client caching, dispatcher, response contract, snapshot cache
+  - `_security.py` — injection detection, sanitization, validation
+  - `_tools_read.py` (10), `_tools_write.py` (13), `_tools_comments.py` (5)
+  - `_tools_local.py` (15), `_tools_team.py` (8)
+- `scaffolding.py` extracted from `client.py` — scaffold/split logic isolated
+- `tags.py` — standalone tag registry (TagDefinition, TAGS, helpers)
+- `lanes.py` — standalone lane registry (LaneDefinition, LANES, helpers)
+- `models.py` — dataclasses for payload contracts (FeatureSpec, SplitFeaturesSpec)
+- `client.py` content handling refactored to use `_content.py` helpers
+- CI matrix expanded to Python 3.10, 3.12, 3.14
+- mypy targets centralized in `scripts/quality_gate.py`
+- Test suite grown from 588 to 863 tests
+
+### Fixed
+- Title duplication in `update_cards` when content already included the existing title
+- `list_tags` API 500 — MCP tool falls back to local tag registry
+- `severity` field API 500 — removed from card queries
+- `isArchived` field API 500 — use `visibility` field instead
+- Docker MCP HTTP binding and compose build
 
 ## [0.4.0] - 2026-02-19
 
@@ -123,3 +174,9 @@ Initial public release.
 - 30-second HTTP timeout on all requests
 - Deck lookup caching to minimize API calls
 - Card list output optimized for AI agent token efficiency
+
+[Unreleased]: https://github.com/rangogamedev/codecks-cli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/rangogamedev/codecks-cli/releases/tag/v0.1.0

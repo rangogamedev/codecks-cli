@@ -2,20 +2,24 @@
 
 Thanks for your interest in contributing! This is a small, focused project and contributions of all kinds are welcome.
 
-For architecture details, see `AGENTS.md` (agent-agnostic) or `CLAUDE.md` (Claude Code). For current project state, see `HANDOFF.md`.
+For architecture details, see `AGENTS.md` (agent-agnostic) or `CLAUDE.md` (Claude Code). For development setup, see `DEVELOPMENT.md`.
 
-## Development setup
+## Quick start
 
-1. Clone the repo and create a `.env` file (see [README.md](README.md#quick-start))
-2. You need a [Codecks](https://codecks.io) account to test against (free tier works)
-3. Run `codecks-cli` with no arguments to see all available commands
+```bash
+git clone https://github.com/rangogamedev/codecks-cli.git
+cd codecks-cli
+uv sync --extra dev          # or: py -m pip install -e .[dev]
+pwsh -File scripts/run-tests.ps1   # 863 tests, no API calls
+```
 
 ## Project principles
 
-- **Zero runtime dependencies.** The CLI runtime uses only Python's standard library.
+- **Zero runtime dependencies.** The CLI uses only Python's standard library.
 - **Dev tooling is allowed.** Lint/type/test tools may be added as `dev` extras in `pyproject.toml`, but must not become runtime dependencies.
 - **AI-agent first, human-friendly second.** JSON output is the default for agent consumption. Table output (`--format table`) is for humans.
-- **Token efficiency.** Minimize output noise — AI agents pay per token. Avoid verbose responses.
+- **Token efficiency.** Minimize output noise — AI agents pay per token.
+- **Semantic versioning.** Follow [semver](https://semver.org/) — see the release process in `DEVELOPMENT.md`.
 
 ## How to contribute
 
@@ -37,17 +41,18 @@ Open an issue describing:
 ### Submitting code
 
 1. Fork the repo and create a branch
-2. Make your changes in the relevant module (see `CLAUDE.md` for module layout)
-3. Install dev tools: `py -m pip install .[dev]`
+2. Make your changes in the relevant module (see `DEVELOPMENT.md` for module layout)
+3. Install dev tools: `uv sync --extra dev` (or `py -m pip install -e .[dev]`)
 4. Run quality checks:
-   - `py -m ruff check .`
-   - `py -m ruff format --check .`
-   - `py scripts/quality_gate.py --mypy-only`
-   - `pwsh -File scripts/run-tests.ps1`
+   ```bash
+   py -m ruff check .                    # lint
+   py -m ruff format --check .           # format
+   py scripts/quality_gate.py --mypy-only  # type check
+   pwsh -File scripts/run-tests.ps1      # tests
+   ```
 5. Test your changes with real Codecks API calls if they touch the API layer
-6. Update `README.md` if you add new commands or flags
-7. Update `CHANGELOG.md` with user-visible changes
-8. Open a pull request with a clear description
+6. Update `CHANGELOG.md` under `[Unreleased]` with user-visible changes
+7. Open a pull request with a clear description
 
 ### Commit messages
 
@@ -66,14 +71,16 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 
 ## Code style
 
-- Standard Python conventions (PEP 8 mostly)
-- Code is split across 24 source modules: `codecks_api.py` (entry point), `cli.py` (argparse/dispatch), `commands.py` (CLI handlers), `client.py` (CodecksClient API), `cards.py` (card CRUD), `api.py` (HTTP layer), `config.py` (env/constants), `exceptions.py` (error types), `_utils.py` (helpers), `types.py` (TypedDicts), `models.py` (dataclasses), `formatters/` (7 sub-modules), `gdd.py` (Google Docs), `setup_wizard.py` (setup), `mcp_server.py` (MCP)
+- Standard Python conventions (PEP 8)
+- Enforced by [ruff](https://docs.astral.sh/ruff/) (lint + format)
+- Type annotations checked by [mypy](https://mypy.readthedocs.io/) (strict on source, not tests)
 - Error messages use `[ERROR]` prefix, token issues use `[TOKEN_EXPIRED]`
-- All HTTP calls go through `session_request()`, `report_request()`, or `generate_report_token()` in `api.py`
+- All HTTP calls go through `api.py` (`session_request`, `report_request`, `generate_report_token`)
+- Always use `raise X from e` in except blocks (ruff B904)
 
 ## Testing
 
-The test suite has **588 tests** across 12 test files. All must pass before submitting:
+The test suite has **863 tests** across 17 test files. All must pass before submitting:
 
 ```bash
 pwsh -File scripts/run-tests.ps1
@@ -85,11 +92,11 @@ Tests mock at module boundaries — no live API calls are made.
 
 - **Zero runtime dependencies.** Do not add non-stdlib runtime requirements.
 - **Dev-only packages must stay optional.** Tooling belongs in `[project.optional-dependencies].dev`.
-- **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes. Never set `dueAt` or any deadline field when creating or updating cards.
+- **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
 - **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
 
-See `CLAUDE.md` for full architecture details, API pitfalls, and known bug regressions.
+See `DEVELOPMENT.md` for full architecture details, module layout, and release process.
 
 ## AI-assisted development
 
