@@ -522,28 +522,45 @@ class TestCacheInvalidation:
         mock.create_card.return_value = {"id": "new"}
         with patch.object(_core, "_get_client", return_value=mock):
             _core._call("create_card", title="test")
-        assert _core._snapshot_cache is None
+        # Selective invalidation: cards_result, pm_focus, standup removed
+        assert _core._snapshot_cache is not None
+        assert "cards_result" not in _core._snapshot_cache
+        assert "pm_focus" not in _core._snapshot_cache
+        assert "standup" not in _core._snapshot_cache
+        # account and decks should survive
+        assert "account" in _core._snapshot_cache
 
     def test_update_cards_invalidates_cache(self):
         mock = self._setup_mock_call()
         mock.update_cards.return_value = {"updated": 1}
         with patch.object(_core, "_get_client", return_value=mock):
             _core._call("update_cards", card_ids=[], updates={})
-        assert _core._snapshot_cache is None
+        # Selective invalidation: cards_result, pm_focus, standup removed
+        assert _core._snapshot_cache is not None
+        assert "cards_result" not in _core._snapshot_cache
+        assert "account" in _core._snapshot_cache
 
     def test_mark_done_invalidates_cache(self):
         mock = self._setup_mock_call()
         mock.mark_done.return_value = {"ok": True}
         with patch.object(_core, "_get_client", return_value=mock):
             _core._call("mark_done", card_id="x")
-        assert _core._snapshot_cache is None
+        # Selective invalidation: cards_result, pm_focus, standup removed
+        assert _core._snapshot_cache is not None
+        assert "cards_result" not in _core._snapshot_cache
+        assert "account" in _core._snapshot_cache
 
     def test_add_to_hand_invalidates_cache(self):
         mock = self._setup_mock_call()
         mock.add_to_hand.return_value = {"ok": True}
         with patch.object(_core, "_get_client", return_value=mock):
             _core._call("add_to_hand", card_ids=[])
-        assert _core._snapshot_cache is None
+        # Selective invalidation: hand, pm_focus, standup removed
+        assert _core._snapshot_cache is not None
+        assert "hand" not in _core._snapshot_cache
+        assert "pm_focus" not in _core._snapshot_cache
+        # cards_result should survive (hand mutation doesn't affect card list)
+        assert "cards_result" in _core._snapshot_cache
 
     def test_read_does_not_invalidate_cache(self):
         mock = self._setup_mock_call()
@@ -592,3 +609,38 @@ class TestCachedCardFiltering:
         result = list_cards(deck="Code", status="not_started")
         assert result["total_count"] == 1
         assert "Card C" in result["cards"][0]["title"]
+
+
+# ---------------------------------------------------------------------------
+# Stale Warning Tests
+# ---------------------------------------------------------------------------
+
+
+class TestStaleWarning:
+    def test_metadata_includes_stale_warning_when_old(self):
+        """Cache age > 80% TTL should include stale_warning."""
+        from codecks_cli import config
+
+        _core._snapshot_cache = {"fetched_at": "2026-03-07T00:00:00Z"}
+        # Simulate cache loaded 250s ago (>80% of 300s TTL)
+        _core._cache_loaded_at = time.monotonic() - 250
+        meta = _core._get_cache_metadata()
+        assert meta["cached"] is True
+        assert meta["stale_warning"] is True
+        assert meta["cache_ttl_seconds"] == config.CACHE_TTL_SECONDS
+
+    def test_metadata_no_stale_warning_when_fresh(self):
+        """Cache age < 80% TTL should NOT include stale_warning."""
+        _core._snapshot_cache = {"fetched_at": "2026-03-07T00:00:00Z"}
+        # Simulate cache loaded 50s ago (<80% of 300s)
+        _core._cache_loaded_at = time.monotonic() - 50
+        meta = _core._get_cache_metadata()
+        assert meta["cached"] is True
+        assert "stale_warning" not in meta
+
+    def test_metadata_no_cache(self):
+        """No cache should return cached=False."""
+        _core._snapshot_cache = None
+        meta = _core._get_cache_metadata()
+        assert meta["cached"] is False
+        assert "stale_warning" not in meta

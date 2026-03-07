@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import time
+from datetime import datetime, timezone
 
 from codecks_cli import CliError, CodecksClient, SetupError
 from codecks_cli.config import (
@@ -68,15 +69,22 @@ def _get_snapshot() -> dict | None:
 
 
 def _get_cache_metadata() -> dict:
-    """Return cache staleness info for inclusion in tool responses."""
+    """Return cache staleness info for inclusion in tool responses.
+
+    Includes ``stale_warning: True`` when cache age exceeds 80% of TTL.
+    """
     if _snapshot_cache is None:
         return {"cached": False}
     age = time.monotonic() - _cache_loaded_at
-    return {
+    meta: dict = {
         "cached": True,
         "cache_age_seconds": round(age, 1),
         "cache_fetched_at": _snapshot_cache.get("fetched_at", ""),
     }
+    if CACHE_TTL_SECONDS > 0 and age > CACHE_TTL_SECONDS * 0.8:
+        meta["stale_warning"] = True
+        meta["cache_ttl_seconds"] = CACHE_TTL_SECONDS
+    return meta
 
 
 def _invalidate_cache() -> None:
@@ -93,7 +101,6 @@ def _warm_cache_impl() -> dict:
         Summary dict with card_count, hand_size, deck_count, fetched_at.
     """
     global _snapshot_cache, _cache_loaded_at
-    from datetime import datetime, timezone
 
     client = _get_client()
     now_ts = time.monotonic()
@@ -149,17 +156,117 @@ def _warm_cache_impl() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Agent session registry (in-memory, not persisted)
+# ---------------------------------------------------------------------------
+
+_agent_sessions: dict[str, dict] = {}
+
+
+def _register_agent(agent_name: str, card_id: str | None = None) -> None:
+    """Track an agent and optionally the card it is working on."""
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if agent_name not in _agent_sessions:
+        _agent_sessions[agent_name] = {
+            "active_cards": [],
+            "claimed_at": {},
+            "last_seen": now_iso,
+        }
+    _agent_sessions[agent_name]["last_seen"] = now_iso
+    if card_id and card_id not in _agent_sessions[agent_name]["active_cards"]:
+        _agent_sessions[agent_name]["active_cards"].append(card_id)
+        _agent_sessions[agent_name]["claimed_at"][card_id] = now_iso
+
+
+def _unregister_agent_card(agent_name: str, card_id: str) -> bool:
+    """Remove a card from an agent's active list. Returns True if removed."""
+    session = _agent_sessions.get(agent_name)
+    if not session:
+        return False
+    if card_id in session["active_cards"]:
+        session["active_cards"].remove(card_id)
+        session["claimed_at"].pop(card_id, None)
+        session["last_seen"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return True
+    return False
+
+
+def _get_agent_for_card(card_id: str) -> str | None:
+    """Return the agent name that has claimed a card, or None."""
+    for name, session in _agent_sessions.items():
+        if card_id in session.get("active_cards", []):
+            return name
+    return None
+
+
+def _get_all_sessions() -> dict[str, dict]:
+    """Return a copy of all agent sessions."""
+    return {name: dict(session) for name, session in _agent_sessions.items()}
+
+
+def _reset_sessions() -> None:
+    """Clear all agent sessions (for test isolation)."""
+    _agent_sessions.clear()
+
+
+# ---------------------------------------------------------------------------
+# Selective cache invalidation
+# ---------------------------------------------------------------------------
+
+_CACHE_INVALIDATION_MAP: dict[str, list[str]] = {
+    "add_to_hand": ["hand", "pm_focus", "standup"],
+    "remove_from_hand": ["hand", "pm_focus", "standup"],
+    "create_card": ["cards_result", "pm_focus", "standup"],
+    "update_cards": ["cards_result", "pm_focus", "standup"],
+    "mark_done": ["cards_result", "pm_focus", "standup"],
+    "mark_started": ["cards_result", "pm_focus", "standup"],
+    "archive_card": ["cards_result", "pm_focus", "standup"],
+    "unarchive_card": ["cards_result", "pm_focus", "standup"],
+    "delete_card": ["cards_result", "pm_focus", "standup"],
+    "scaffold_feature": ["cards_result", "pm_focus", "standup"],
+    "split_features": ["cards_result", "pm_focus", "standup"],
+    # Comment mutations don't affect card lists
+    "create_comment": [],
+    "reply_comment": [],
+    "close_comment": [],
+    "reopen_comment": [],
+}
+
+
+def _invalidate_cache_for(method_name: str) -> None:
+    """Selectively invalidate cache keys affected by a mutation.
+
+    Falls back to full invalidation for unknown methods.
+    """
+    if method_name not in _CACHE_INVALIDATION_MAP:
+        _invalidate_cache()
+        return
+    keys = _CACHE_INVALIDATION_MAP[method_name]
+    if not keys or _snapshot_cache is None:
+        return
+    for key in keys:
+        _snapshot_cache.pop(key, None)
+
+
+# ---------------------------------------------------------------------------
 # Response contract helpers
 # ---------------------------------------------------------------------------
 
 
-def _contract_error(message: str, error_type: str = "error") -> dict:
+def _contract_error(
+    message: str,
+    error_type: str = "error",
+    *,
+    retryable: bool = False,
+    error_code: str = "UNKNOWN",
+) -> dict:
     """Return a stable MCP error envelope with legacy compatibility fields."""
     return {
         "ok": False,
         "schema_version": CONTRACT_SCHEMA_VERSION,
         "type": error_type,  # legacy
         "error": message,  # legacy
+        "retryable": retryable,
+        "error_code": error_code,
         "error_detail": {
             "type": error_type,
             "message": message,
@@ -296,14 +403,20 @@ def _call(method_name: str, **kwargs):
         client = _get_client()
         result = getattr(client, method_name)(**kwargs)
         if method_name in _MUTATION_METHODS:
-            _invalidate_cache()
+            _invalidate_cache_for(method_name)
         return result
     except SetupError as e:
-        return _contract_error(str(e), "setup")
+        return _contract_error(str(e), "setup", retryable=False, error_code="SETUP_ERROR")
     except CliError as e:
-        return _contract_error(str(e), "error")
+        return _contract_error(str(e), "error", retryable=False, error_code="CLI_ERROR")
+    except (ConnectionError, TimeoutError, OSError) as e:
+        return _contract_error(
+            f"Network error: {e}", "error", retryable=True, error_code="NETWORK_ERROR"
+        )
     except Exception as e:
-        return _contract_error(f"Unexpected error: {e}", "error")
+        return _contract_error(
+            f"Unexpected error: {e}", "error", retryable=True, error_code="UNEXPECTED_ERROR"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1517,3 +1517,451 @@ class TestPlanningToolSmoke:
             assert result["ok"] is True
         finally:
             _tools_local._PLANNING_DIR = original
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Agent session registry
+# ---------------------------------------------------------------------------
+
+
+class TestAgentSessionRegistry:
+    def test_register_agent_creates_session(self):
+        _core._register_agent("code-agent")
+        sessions = _core._get_all_sessions()
+        assert "code-agent" in sessions
+        assert sessions["code-agent"]["active_cards"] == []
+        assert "last_seen" in sessions["code-agent"]
+
+    def test_register_agent_with_card(self):
+        _core._register_agent("code-agent", _C1)
+        sessions = _core._get_all_sessions()
+        assert _C1 in sessions["code-agent"]["active_cards"]
+        assert _C1 in sessions["code-agent"]["claimed_at"]
+
+    def test_register_agent_idempotent(self):
+        _core._register_agent("code-agent", _C1)
+        _core._register_agent("code-agent", _C1)
+        assert _core._agent_sessions["code-agent"]["active_cards"].count(_C1) == 1
+
+    def test_unregister_card(self):
+        _core._register_agent("code-agent", _C1)
+        assert _core._unregister_agent_card("code-agent", _C1) is True
+        assert _C1 not in _core._agent_sessions["code-agent"]["active_cards"]
+
+    def test_unregister_nonexistent_card(self):
+        _core._register_agent("code-agent")
+        assert _core._unregister_agent_card("code-agent", _C1) is False
+
+    def test_unregister_nonexistent_agent(self):
+        assert _core._unregister_agent_card("unknown", _C1) is False
+
+    def test_get_agent_for_card(self):
+        _core._register_agent("code-agent", _C1)
+        assert _core._get_agent_for_card(_C1) == "code-agent"
+        assert _core._get_agent_for_card(_C2) is None
+
+    def test_reset_sessions(self):
+        _core._register_agent("code-agent", _C1)
+        _core._reset_sessions()
+        assert _core._agent_sessions == {}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Team tools
+# ---------------------------------------------------------------------------
+
+_tools_team = importlib.import_module("codecks_cli.mcp_server._tools_team")
+
+
+class TestClaimCard:
+    def test_claim_card_success(self):
+        result = mcp_mod.claim_card(_C1, "code-agent", reason="Implementing feature")
+        assert result["ok"] is True
+        assert result["card_id"] == _C1
+        assert result["agent_name"] == "code-agent"
+        assert result["reason"] == "Implementing feature"
+        assert "claimed_at" in result
+
+    def test_claim_card_conflict(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.claim_card(_C1, "art-agent")
+        assert result["ok"] is False
+        assert result["conflict_agent"] == "code-agent"
+
+    def test_claim_card_same_agent_ok(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.claim_card(_C1, "code-agent")
+        assert result["ok"] is True
+
+    def test_claim_card_invalid_uuid(self):
+        result = mcp_mod.claim_card(_BAD, "code-agent")
+        assert result["ok"] is False
+
+    def test_claim_card_empty_agent_name(self):
+        result = mcp_mod.claim_card(_C1, "")
+        assert result["ok"] is False
+
+
+class TestReleaseCard:
+    def test_release_card_success(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.release_card(_C1, "code-agent", summary="Done")
+        assert result["ok"] is True
+        assert result["summary"] == "Done"
+        # Verify actually released
+        assert _core._get_agent_for_card(_C1) is None
+
+    def test_release_unclaimed_card(self):
+        result = mcp_mod.release_card(_C1, "code-agent")
+        assert result["ok"] is False
+
+    def test_release_card_invalid_uuid(self):
+        result = mcp_mod.release_card(_BAD, "code-agent")
+        assert result["ok"] is False
+
+
+class TestDelegateCard:
+    def test_delegate_success(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.delegate_card(_C1, "code-agent", "art-agent", message="Your turn")
+        assert result["ok"] is True
+        assert result["from_agent"] == "code-agent"
+        assert result["to_agent"] == "art-agent"
+        assert result["message"] == "Your turn"
+        # Verify transfer
+        assert _core._get_agent_for_card(_C1) == "art-agent"
+
+    def test_delegate_wrong_owner(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.delegate_card(_C1, "art-agent", "design-agent")
+        assert result["ok"] is False
+
+    def test_delegate_unclaimed(self):
+        result = mcp_mod.delegate_card(_C1, "code-agent", "art-agent")
+        assert result["ok"] is False
+
+    def test_delegate_invalid_uuid(self):
+        result = mcp_mod.delegate_card(_BAD, "code-agent", "art-agent")
+        assert result["ok"] is False
+
+
+class TestTeamStatus:
+    def test_empty_status(self):
+        result = mcp_mod.team_status()
+        assert result["ok"] is True
+        assert result["agents"] == []
+        assert result["agent_count"] == 0
+        assert result["total_claimed"] == 0
+
+    def test_status_with_agents(self):
+        mcp_mod.claim_card(_C1, "code-agent")
+        mcp_mod.claim_card(_C2, "art-agent")
+        result = mcp_mod.team_status()
+        assert result["agent_count"] == 2
+        assert result["total_claimed"] == 2
+        names = {a["name"] for a in result["agents"]}
+        assert names == {"code-agent", "art-agent"}
+
+
+class TestPartitionByLane:
+    def test_partition_groups_by_tag(self):
+        mock_client = MagicMock()
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "tags": ["code"], "title": "Code task"},
+                {"id": _C2, "status": "started", "tags": ["art"], "title": "Art task"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_lane()
+        assert result["ok"] is True
+        assert result["lanes"]["code"]["count"] == 1
+        assert result["lanes"]["art"]["count"] == 1
+
+    def test_partition_annotates_claims(self):
+        mock_client = MagicMock()
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "tags": ["code"], "title": "Code task"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.partition_by_lane()
+        assert result["lanes"]["code"]["claimed"] == 1
+        assert result["lanes"]["code"]["unclaimed"] == 0
+
+
+class TestPartitionByOwner:
+    def test_partition_groups_by_owner(self):
+        mock_client = MagicMock()
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "owner_name": "Thomas", "title": "T1"},
+                {"id": _C2, "status": "started", "owner_name": "Caroline", "title": "T2"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_owner()
+        assert result["ok"] is True
+        assert "Thomas" in result["owners"]
+        assert "Caroline" in result["owners"]
+
+    def test_unassigned_cards(self):
+        mock_client = MagicMock()
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "title": "No owner"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_owner()
+        assert result["unassigned"]["count"] == 1
+
+
+class TestTeamDashboard:
+    def test_dashboard_combines_data(self):
+        mock_client = MagicMock()
+        mock_client.pm_focus.return_value = {"blocked": [], "stale": []}
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "title": "In progress"},
+                {"id": _C2, "status": "started", "title": "Also in progress"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        mcp_mod.claim_card(_C1, "code-agent")
+        result = mcp_mod.team_dashboard()
+        assert result["ok"] is True
+        assert result["agent_count"] == 1
+        assert result["total_claimed"] == 1
+        assert result["unclaimed_in_progress_count"] == 1
+
+    def test_dashboard_empty_state(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-03-07T00:00:00Z",
+            "cards_result": {"cards": []},
+            "pm_focus": {"blocked": [], "stale": []},
+        }
+        _core._cache_loaded_at = __import__("time").monotonic()
+        result = mcp_mod.team_dashboard()
+        assert result["ok"] is True
+        assert result["unclaimed_in_progress_count"] == 0
+
+
+class TestGetTeamPlaybook:
+    def test_returns_team_section(self):
+        result = mcp_mod.get_team_playbook()
+        assert result["ok"] is True
+        assert "Agent Team Coordination" in result["content"]
+        assert "claim_card" in result["content"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Selective cache invalidation
+# ---------------------------------------------------------------------------
+
+
+class TestSelectiveCacheInvalidation:
+    def test_hand_mutation_preserves_account_and_decks(self):
+        _core._snapshot_cache = {
+            "account": {"name": "Test"},
+            "decks": [{"id": "d1"}],
+            "hand": [{"id": "h1"}],
+            "cards_result": {"cards": []},
+            "pm_focus": {"blocked": []},
+            "standup": {"done": []},
+        }
+        _core._invalidate_cache_for("add_to_hand")
+        # hand, pm_focus, standup should be gone
+        assert "hand" not in _core._snapshot_cache
+        assert "pm_focus" not in _core._snapshot_cache
+        assert "standup" not in _core._snapshot_cache
+        # account and decks should be preserved
+        assert _core._snapshot_cache["account"] == {"name": "Test"}
+        assert _core._snapshot_cache["decks"] == [{"id": "d1"}]
+
+    def test_comment_mutation_preserves_all(self):
+        _core._snapshot_cache = {
+            "account": {"name": "Test"},
+            "cards_result": {"cards": []},
+            "hand": [],
+        }
+        _core._invalidate_cache_for("create_comment")
+        # Comments don't invalidate anything
+        assert "account" in _core._snapshot_cache
+        assert "cards_result" in _core._snapshot_cache
+        assert "hand" in _core._snapshot_cache
+
+    def test_unknown_method_full_invalidation(self):
+        _core._snapshot_cache = {"account": {"name": "Test"}}
+        _core._invalidate_cache_for("some_unknown_method")
+        assert _core._snapshot_cache is None
+
+    def test_card_mutation_invalidates_cards(self):
+        _core._snapshot_cache = {
+            "account": {"name": "Test"},
+            "cards_result": {"cards": []},
+            "pm_focus": {},
+            "standup": {},
+        }
+        _core._invalidate_cache_for("update_cards")
+        assert "cards_result" not in _core._snapshot_cache
+        assert "account" in _core._snapshot_cache
+
+
+class TestWarmCacheSkip:
+    def test_warm_cache_skips_when_valid(self):
+        mock_client = MagicMock()
+        _core._client = mock_client
+        # Simulate a valid cache
+        _core._snapshot_cache = {
+            "fetched_at": "2026-03-07T00:00:00Z",
+            "account": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+            "pm_focus": {},
+            "standup": {},
+        }
+        _core._cache_loaded_at = __import__("time").monotonic()
+        result = mcp_mod.warm_cache()
+        assert result["ok"] is True
+        assert result.get("skipped") is True
+        # Client should NOT have been called
+        mock_client.list_cards.assert_not_called()
+
+    def test_warm_cache_force_refetches(self):
+        mock_client = MagicMock()
+        mock_client.get_account.return_value = {}
+        mock_client.list_cards.return_value = {"cards": []}
+        mock_client.list_hand.return_value = []
+        mock_client.list_decks.return_value = []
+        mock_client.pm_focus.return_value = {}
+        mock_client.standup.return_value = {}
+        _core._client = mock_client
+        _core._snapshot_cache = {
+            "fetched_at": "2026-03-07T00:00:00Z",
+            "account": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+            "pm_focus": {},
+            "standup": {},
+        }
+        _core._cache_loaded_at = __import__("time").monotonic()
+        result = mcp_mod.warm_cache(force=True)
+        assert result["ok"] is True
+        assert result.get("skipped") is not True
+        mock_client.list_cards.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Agent-scoped preferences
+# ---------------------------------------------------------------------------
+
+
+class TestAgentScopedPreferences:
+    def test_save_global_prefs(self, tmp_path):
+        original = _tools_local._PREFS_PATH
+        try:
+            _tools_local._PREFS_PATH = str(tmp_path / "prefs.json")
+            result = mcp_mod.save_workflow_preferences(["pref1"])
+            assert result.get("saved") == 1
+            assert result.get("scope") == "global"
+        finally:
+            _tools_local._PREFS_PATH = original
+
+    def test_save_agent_prefs(self, tmp_path):
+        original = _tools_local._PREFS_PATH
+        try:
+            _tools_local._PREFS_PATH = str(tmp_path / "prefs.json")
+            # Save global first
+            mcp_mod.save_workflow_preferences(["global-obs"])
+            # Save agent-specific
+            result = mcp_mod.save_workflow_preferences(["agent-obs"], agent_name="code-agent")
+            assert result.get("scope") == "agent:code-agent"
+            # Verify both are preserved
+            get_result = mcp_mod.get_workflow_preferences(agent_name="code-agent")
+            assert get_result.get("agent_preferences") == ["[USER_DATA]agent-obs[/USER_DATA]"]
+            assert get_result.get("global_preferences") == ["[USER_DATA]global-obs[/USER_DATA]"]
+        finally:
+            _tools_local._PREFS_PATH = original
+
+    def test_get_global_prefs_unchanged(self, tmp_path):
+        original = _tools_local._PREFS_PATH
+        try:
+            _tools_local._PREFS_PATH = str(tmp_path / "prefs.json")
+            mcp_mod.save_workflow_preferences(["global-obs"])
+            result = mcp_mod.get_workflow_preferences()
+            assert result["found"] is True
+            assert len(result["preferences"]) == 1
+            # No agent_preferences key in global mode
+            assert "agent_preferences" not in result
+        finally:
+            _tools_local._PREFS_PATH = original
+
+    def test_planning_update_with_agent_name(self, tmp_path):
+        original = _tools_local._PLANNING_DIR
+        try:
+            _tools_local._PLANNING_DIR = tmp_path
+            mcp_mod.planning_init()
+            # Start a phase to have in_progress
+            mcp_mod.planning_update("goal", text="Test goal")
+            mcp_mod.planning_update("advance")
+            mcp_mod.planning_update("log", text="Did something", agent_name="code-agent")
+            content = (tmp_path / "progress.md").read_text()
+            assert "[code-agent] Did something" in content
+        finally:
+            _tools_local._PLANNING_DIR = original
+
+
+# ---------------------------------------------------------------------------
+# Error contract (retryable + error_code)
+# ---------------------------------------------------------------------------
+
+
+class TestErrorContract:
+    def test_contract_error_has_retryable_and_error_code(self):
+        result = _core._contract_error("boom", "error", retryable=True, error_code="NETWORK_ERROR")
+        assert result["ok"] is False
+        assert result["retryable"] is True
+        assert result["error_code"] == "NETWORK_ERROR"
+        assert result["error"] == "boom"
+
+    def test_contract_error_defaults(self):
+        result = _core._contract_error("bad input")
+        assert result["retryable"] is False
+        assert result["error_code"] == "UNKNOWN"
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_call_setup_error_not_retryable(self, MockClient):
+        MockClient.return_value.get_account.side_effect = SetupError("no token")
+        _core._client = None
+        result = _core._call("get_account")
+        assert result["ok"] is False
+        assert result["retryable"] is False
+        assert result["error_code"] == "SETUP_ERROR"
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_call_unexpected_error_retryable(self, MockClient):
+        MockClient.return_value.get_account.side_effect = ConnectionError("timeout")
+        _core._client = None
+        result = _core._call("get_account")
+        assert result["ok"] is False
+        assert result["retryable"] is True
+        assert result["error_code"] == "NETWORK_ERROR"
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_call_cli_error_not_retryable(self, MockClient):
+        MockClient.return_value.get_account.side_effect = CliError("bad id")
+        _core._client = None
+        result = _core._call("get_account")
+        assert result["ok"] is False
+        assert result["retryable"] is False
+        assert result["error_code"] == "CLI_ERROR"
