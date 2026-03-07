@@ -528,6 +528,81 @@ class TestUpdateCards:
         assert result["per_card"][1]["ok"] is False
         assert "bad id" in result["per_card"][1]["error"]
 
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_content_without_title_preserves_existing_title(self, mock_get, mock_update):
+        """Content-only update should auto-prepend the existing card title."""
+        mock_get.return_value = {"card": {"c1": {"content": "Old Title\nOld body"}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], content="New body text")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "Old Title\nNew body text"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_content_with_existing_title_not_duplicated(self, mock_get, mock_update):
+        """Content that starts with the old title should not duplicate it."""
+        mock_get.return_value = {"card": {"c1": {"content": "My Title\nOld body"}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], content="My Title\nNew body text")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "My Title\nNew body text"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_content_with_title_and_blank_line_not_duplicated(self, mock_get, mock_update):
+        """Content with title + blank line separator should not duplicate."""
+        mock_get.return_value = {"card": {"c1": {"content": "My Title\n\nOld body"}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], content="My Title\n\nNew body text")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "My Title\n\nNew body text"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_content_with_windows_line_endings(self, mock_get, mock_update):
+        """Windows line endings should not break title detection."""
+        mock_get.return_value = {"card": {"c1": {"content": "Title\r\nOld body"}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], content="New body")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "Title\nNew body"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_content_empty_old_content(self, mock_get, mock_update):
+        """When old content is empty, content should pass through as-is."""
+        mock_get.return_value = {"card": {"c1": {"content": ""}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], content="New body")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "\nNew body"
+
+    @patch("codecks_cli.client.update_card")
+    def test_title_and_content_combined(self, mock_update):
+        """When both title and content are provided, prepend title to content."""
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], title="New Title", content="New body")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "New Title\nNew body"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.get_card")
+    def test_title_only_preserves_existing_body(self, mock_get, mock_update):
+        """Title-only update should replace first line but keep existing body."""
+        mock_get.return_value = {"card": {"c1": {"content": "Old Title\nExisting body"}}}
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], title="New Title")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "New Title\nExisting body"
+
 
 # ---------------------------------------------------------------------------
 # mark_done / mark_started

@@ -905,24 +905,45 @@ class CodecksClient:
         if deck is not None:
             update_kwargs["deckId"] = resolve_deck_id(deck)
 
-        if title is not None:
-            if len(card_ids) > 1:
-                raise CliError("[ERROR] --title can only be used with a single card.")
-            card_data = get_card(card_ids[0])
-            cards = card_data.get("card", {})
-            if not cards:
-                raise CliError(f"[ERROR] Card '{card_ids[0]}' not found.")
-            for _k, c in cards.items():
-                old_content = c.get("content") or ""
-                parts = old_content.split("\n", 1)
-                new_content = title + ("\n" + parts[1] if len(parts) > 1 else "")
-                update_kwargs["content"] = new_content
-                break
+        if title is not None or content is not None:
+            from codecks_cli._content import parse_content, serialize_content
 
-        if content is not None:
-            if len(card_ids) > 1:
+            if title is not None and len(card_ids) > 1:
+                raise CliError("[ERROR] --title can only be used with a single card.")
+            if content is not None and len(card_ids) > 1:
                 raise CliError("[ERROR] --content can only be used with a single card.")
-            update_kwargs["content"] = content
+
+            if title is not None and content is not None:
+                # Both provided: combine new title with new content
+                update_kwargs["content"] = serialize_content(title, content)
+            elif title is not None:
+                # Title only: replace first line, preserve existing body
+                card_data = get_card(card_ids[0])
+                cards = card_data.get("card", {})
+                if not cards:
+                    raise CliError(f"[ERROR] Card '{card_ids[0]}' not found.")
+                for _k, c in cards.items():
+                    old_content = c.get("content") or ""
+                    _, old_body = parse_content(old_content)
+                    update_kwargs["content"] = serialize_content(title, old_body)
+                    break
+            else:
+                # Content only (CLI backward compat): treat as body, preserve title
+                assert content is not None  # mypy: narrowed by elif chain
+                card_data = get_card(card_ids[0])
+                cards = card_data.get("card", {})
+                if not cards:
+                    raise CliError(f"[ERROR] Card '{card_ids[0]}' not found.")
+                for _k, c in cards.items():
+                    old_content = c.get("content") or ""
+                    old_title, _ = parse_content(old_content)
+                    if content.startswith(old_title + "\n") or content == old_title:
+                        # Content already includes the title — use as-is
+                        update_kwargs["content"] = content
+                    else:
+                        # Body-only content — prepend existing title
+                        update_kwargs["content"] = serialize_content(old_title, content)
+                    break
 
         if milestone is not None:
             if milestone.lower() == "none":
@@ -1071,6 +1092,10 @@ class CodecksClient:
         skip_audio: bool = False,
         description: str | None = None,
         owner: str | None = None,
+        code_owner: str | None = None,
+        design_owner: str | None = None,
+        art_owner: str | None = None,
+        audio_owner: str | None = None,
         priority: str | None = None,
         effort: int | None = None,
         allow_duplicate: bool = False,
@@ -1091,6 +1116,10 @@ class CodecksClient:
             skip_audio=skip_audio,
             description=description,
             owner=owner,
+            code_owner=code_owner,
+            design_owner=design_owner,
+            art_owner=art_owner,
+            audio_owner=audio_owner,
             priority=priority,
             effort=effort,
             allow_duplicate=allow_duplicate,
