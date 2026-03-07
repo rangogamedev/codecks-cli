@@ -1995,3 +1995,526 @@ class TestUpdateCardBody:
     def test_invalid_uuid(self):
         result = mcp_mod.update_card_body(card_id=_BAD, body="New body")
         assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# UUID short-ID hints (Task 1)
+# ---------------------------------------------------------------------------
+
+
+class TestUuidHints:
+    """UUID validation with short-ID hints from cache."""
+
+    def test_short_id_suggests_full_uuid(self):
+        """When cache has a matching card, error includes the full UUID."""
+        short = "abcd1234"
+        full_uuid = "abcd1234-5678-9abc-def0-123456789abc"
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": full_uuid, "title": "Test Card"}]},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        with pytest.raises(CliError, match=full_uuid):
+            _core._validate_uuid(short)
+
+    def test_short_id_no_match_no_hint(self):
+        """When cache has no matching card, no hint in error."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [{"id": "zzzzzzzz-0000-0000-0000-000000000000", "title": "X"}]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        with pytest.raises(CliError) as exc_info:
+            _core._validate_uuid("nomatch1")
+        assert "Did you mean" not in str(exc_info.value)
+
+    def test_short_id_no_cache(self):
+        """When no cache, no hint."""
+        _core._snapshot_cache = None
+        with pytest.raises(CliError) as exc_info:
+            _core._validate_uuid("short123")
+        assert "Did you mean" not in str(exc_info.value)
+
+    def test_find_uuid_hint_empty_cache(self):
+        """_find_uuid_hint returns empty string when cache is None."""
+        _core._snapshot_cache = None
+        assert _core._find_uuid_hint("abc") == ""
+
+    def test_find_uuid_hint_non_dict_cards(self):
+        """_find_uuid_hint handles non-dict cards_result."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": "not a dict",
+        }
+        assert _core._find_uuid_hint("abc") == ""
+
+    def test_find_uuid_hint_matches_without_dashes(self):
+        """_find_uuid_hint matches when dashes are stripped."""
+        full_uuid = "abcd1234-5678-9abc-def0-123456789abc"
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": full_uuid, "title": "Dashed Match"}]},
+        }
+        # dashless prefix
+        result = _core._find_uuid_hint("abcd12345678")
+        assert full_uuid in result
+        assert "Dashed Match" in result
+
+
+# ---------------------------------------------------------------------------
+# session_start composite tool (Task 3)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionStart:
+    """session_start() composite tool tests."""
+
+    @patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent_prefs.json")
+    def test_returns_all_sections(self):
+        """Response has account, standup, preferences, project_context."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {"name": "test", "id": "acc-1"},
+            "standup": {"recently_done": [], "in_progress": [], "blocked": [], "hand": []},
+            "cards_result": {"cards": [{"id": "c1", "title": "Card"}]},
+            "hand": [{"id": "c1"}],
+            "decks": [{"title": "Code", "id": "d1"}],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.session_start()
+        assert "account" in result
+        assert "standup" in result
+        assert "preferences" in result
+        assert "project_context" in result
+
+    @patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent_prefs.json")
+    def test_project_context_has_deck_names(self):
+        """project_context includes deck names from cache."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {"name": "test"},
+            "standup": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [{"title": "Code"}, {"title": "Design"}],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.session_start()
+        ctx = result["project_context"]
+        assert "Code" in ctx["deck_names"]
+        assert "Design" in ctx["deck_names"]
+
+    @patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent_prefs.json")
+    def test_project_context_has_tag_and_lane_names(self):
+        """project_context includes tag and lane names from registries."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {},
+            "standup": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.session_start()
+        ctx = result["project_context"]
+        assert isinstance(ctx["tag_names"], list)
+        assert isinstance(ctx["lane_names"], list)
+        assert len(ctx["tag_names"]) > 0
+        assert len(ctx["lane_names"]) > 0
+
+    def test_with_agent_name_registers(self):
+        """When agent_name is set, agent is registered in sessions."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {},
+            "standup": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        _core._agent_sessions.clear()
+        mcp_mod.session_start(agent_name="Decks")
+        assert "Decks" in _core._agent_sessions
+
+    def test_prefs_loaded_from_file(self, tmp_path):
+        """Preferences are loaded inline from the prefs file."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {},
+            "standup": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        prefs_file = tmp_path / "prefs.json"
+        prefs_file.write_text('{"observations": ["pref1", "pref2"]}')
+        with patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", str(prefs_file)):
+            result = mcp_mod.session_start()
+        assert result["preferences"]["found"] is True
+
+    def test_cache_miss_warms_cache(self):
+        """When no cache, session_start warms it."""
+        import time as _time
+
+        _core._snapshot_cache = None
+        _core._cache_loaded_at = 0.0
+
+        def _fake_warm():
+            """Simulate warm_cache_impl populating the in-memory cache."""
+            _core._snapshot_cache = {
+                "fetched_at": "now",
+                "fetched_ts": _time.monotonic(),
+                "account": {},
+                "standup": {},
+                "cards_result": {"cards": []},
+                "hand": [],
+                "decks": [],
+            }
+            _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+            return {"ok": True, "card_count": 0, "hand_size": 0, "deck_count": 0}
+
+        with patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent"):
+            with patch(
+                "codecks_cli.mcp_server._core._warm_cache_impl", side_effect=_fake_warm
+            ) as mock_warm:
+                result = mcp_mod.session_start()
+                mock_warm.assert_called_once()
+                assert "account" in result
+
+
+# ---------------------------------------------------------------------------
+# quick_overview tool (Task 4)
+# ---------------------------------------------------------------------------
+
+
+class TestQuickOverview:
+    """quick_overview() aggregate dashboard tests."""
+
+    def test_returns_counts(self):
+        """Response has by_status, by_priority, effort_stats."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "status": "started", "priority": "a", "effort": 5},
+                    {"id": "c2", "status": "not_started", "priority": "b", "effort": 3},
+                    {"id": "c3", "status": "done", "priority": "c", "effort": None},
+                ]
+            },
+            "hand": [{"id": "c1"}],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.quick_overview()
+        assert result["total_cards"] == 3
+        assert "by_status" in result
+        assert "by_priority" in result
+        assert "effort_stats" in result
+        assert result["hand_size"] == 1
+
+    def test_effort_stats_calculation(self):
+        """Effort stats include total, avg, unestimated."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "effort": 5},
+                    {"id": "c2", "effort": 3},
+                    {"id": "c3", "effort": None},
+                ]
+            },
+            "hand": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.quick_overview()
+        es = result["effort_stats"]
+        assert es["total"] == 8
+        assert es["avg"] == 4.0
+        assert es["unestimated"] == 1
+        assert es["estimated"] == 2
+
+    def test_empty_project(self):
+        """Zero cards returns zero counts."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": []},
+            "hand": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.quick_overview()
+        assert result["total_cards"] == 0
+
+    def test_deck_summary(self):
+        """Deck summary groups by deck name."""
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "deck": "Code", "status": "started"},
+                    {"id": "c2", "deck": "Code", "status": "done"},
+                    {"id": "c3", "deck": "Design", "status": "started"},
+                ]
+            },
+            "hand": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.quick_overview()
+        names = [d["name"] for d in result["deck_summary"]]
+        assert "Code" in names
+        assert "Design" in names
+
+
+# ---------------------------------------------------------------------------
+# Effort filters on list_cards (Task 4)
+# ---------------------------------------------------------------------------
+
+
+class TestEffortFilters:
+    """list_cards effort filter tests."""
+
+    def test_effort_min(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "effort": 5, "title": "Big"},
+                    {"id": "c2", "effort": 2, "title": "Small"},
+                    {"id": "c3", "effort": None, "title": "None"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.list_cards(effort_min=3)
+        assert result["total_count"] == 1  # only c1
+
+    def test_effort_max(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "effort": 5, "title": "Big"},
+                    {"id": "c2", "effort": 2, "title": "Small"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.list_cards(effort_max=3)
+        assert result["total_count"] == 1  # only c2
+
+    def test_has_effort_true(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "effort": 5, "title": "Has"},
+                    {"id": "c2", "effort": None, "title": "No"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.list_cards(has_effort=True)
+        assert result["total_count"] == 1
+
+    def test_has_effort_false(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": "c1", "effort": 5, "title": "Has"},
+                    {"id": "c2", "effort": None, "title": "No"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.list_cards(has_effort=False)
+        assert result["total_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Doc-card guardrail (Task 5)
+# ---------------------------------------------------------------------------
+
+
+class TestDocCardGuardrail:
+    """Doc-card field restriction guardrail in update_cards."""
+
+    def test_doc_card_status_blocked(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": _C1, "cardType": "doc", "title": "My Doc"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.update_cards(card_ids=[_C1], status="started")
+        assert result.get("ok") is False
+        assert "DOC_CARD_VIOLATION" in str(result.get("error_code", ""))
+
+    def test_doc_card_priority_blocked(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": _C1, "cardType": "doc"}]},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.update_cards(card_ids=[_C1], priority="a")
+        assert result.get("ok") is False
+
+    def test_doc_card_effort_blocked(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": _C1, "cardType": "doc"}]},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.update_cards(card_ids=[_C1], effort="5")
+        assert result.get("ok") is False
+
+    def test_doc_card_allows_owner(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": _C1, "cardType": "doc"}]},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        with patch("codecks_cli.mcp_server._core.CodecksClient") as MockClient:
+            client = _mock_client(update_cards={"ok": True, "updated_count": 1})
+            MockClient.return_value = client
+            result = mcp_mod.update_cards(card_ids=[_C1], owner="Alice")
+            assert result.get("ok") is True
+
+    def test_normal_card_allows_status(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": [{"id": _C1, "cardType": "default"}]},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        with patch("codecks_cli.mcp_server._core.CodecksClient") as MockClient:
+            client = _mock_client(update_cards={"ok": True, "updated_count": 1})
+            MockClient.return_value = client
+            result = mcp_mod.update_cards(card_ids=[_C1], status="started")
+            assert result.get("ok") is True
+
+
+# ---------------------------------------------------------------------------
+# find_and_update composite tool (Task 6)
+# ---------------------------------------------------------------------------
+
+
+class TestFindAndUpdate:
+    """find_and_update() two-phase search+update tool."""
+
+    def test_phase1_returns_matches(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": _C1, "title": "Inventory System", "status": "started", "deck": "Code"},
+                    {"id": _C2, "title": "Menu Design", "status": "not_started", "deck": "Design"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.find_and_update(search="Inventory", status="done")
+        assert result["phase"] == "confirm"
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["id"] == _C1
+
+    def test_phase2_updates_cards(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": []},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        with patch("codecks_cli.mcp_server._core.CodecksClient") as MockClient:
+            client = _mock_client(update_cards={"ok": True, "updated_count": 1})
+            MockClient.return_value = client
+            result = mcp_mod.find_and_update(search="anything", confirm_ids=[_C1], status="done")
+            assert result["phase"] == "applied"
+            assert result.get("ok") is True
+
+    def test_phase1_respects_max_results(self):
+        cards = [
+            {
+                "id": f"{'0' * 8}-{'0' * 4}-{'0' * 4}-{'0' * 4}-{i:012d}",
+                "title": f"Card {i}",
+                "status": "started",
+            }
+            for i in range(20)
+        ]
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {"cards": cards},
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.find_and_update(search="Card", max_results=5)
+        assert len(result["matches"]) == 5
+
+    def test_phase2_no_update_fields_error(self):
+        result = mcp_mod.find_and_update(search="x", confirm_ids=[_C1])
+        assert result.get("ok") is False
+        assert "No update fields" in result.get("error", "")
+
+    def test_phase2_validates_uuids(self):
+        result = mcp_mod.find_and_update(search="x", confirm_ids=["short"], status="done")
+        assert result.get("ok") is False
+
+    def test_phase1_filters_by_deck(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": _C1, "title": "Task A", "deck": "Code"},
+                    {"id": _C2, "title": "Task B", "deck": "Design"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.find_and_update(search="Task", search_deck="Code")
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["id"] == _C1
+
+    def test_phase1_filters_by_status(self):
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "cards_result": {
+                "cards": [
+                    {"id": _C1, "title": "Task A", "status": "started"},
+                    {"id": _C2, "title": "Task B", "status": "done"},
+                ]
+            },
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        result = mcp_mod.find_and_update(search="Task", search_status="started")
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["id"] == _C1

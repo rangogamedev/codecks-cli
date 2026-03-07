@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `session_start` MCP tool — one-call session initialization (replaces 5 startup calls: warm_cache + standup + get_account + get_workflow_preferences + project context)
+- `find_and_update` MCP tool — two-phase search+update (search cards, confirm matches, apply updates in 2 calls instead of 5+)
+- `quick_overview` MCP tool — aggregate project dashboard (counts by status/priority, effort stats, deck summary, no card details = minimal tokens)
+- Effort filters on `list_cards` MCP tool — `effort_min`, `effort_max`, `has_effort` params
+- Doc-card guardrail — `update_cards` rejects status/priority/effort on doc cards with clear error (DOC_CARD_VIOLATION)
+- UUID short-ID hints — validation error suggests full UUID from cache when agent sends 8-char short ID
+- Deck fuzzy matching — `resolve_deck_id` suggests closest match with "Did you mean 'X'?" on failure
 - `--parent <id>` flag on `create` command — nest new cards as sub-cards under a parent card
   - Also exposed via MCP `create_card` tool (`parent` parameter)
 - `split-features` command — batch-split feature cards into Code/Design/Art/Audio sub-cards
@@ -41,11 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - uv for dependency management (`uv.lock` committed)
 
 ### Changed
-- MCP server refactored from single file to package (7 sub-modules, 51 tools)
-  - `_core.py` — client caching, dispatcher, response contract, snapshot cache
+- MCP server refactored from single file to package (7 sub-modules, 55 tools)
+  - `_core.py` — client caching, dispatcher, response contract, snapshot cache, UUID hints
   - `_security.py` — injection detection, sanitization, validation
-  - `_tools_read.py` (10), `_tools_write.py` (13), `_tools_comments.py` (5)
-  - `_tools_local.py` (15), `_tools_team.py` (8)
+  - `_tools_read.py` (11), `_tools_write.py` (15), `_tools_comments.py` (5)
+  - `_tools_local.py` (16), `_tools_team.py` (8)
 - `scaffolding.py` extracted from `client.py` — scaffold/split logic isolated
 - `tags.py` — standalone tag registry (TagDefinition, TAGS, helpers)
 - `lanes.py` — standalone lane registry (LaneDefinition, LANES, helpers)
@@ -53,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `client.py` content handling refactored to use `_content.py` helpers
 - CI matrix expanded to Python 3.10, 3.12, 3.14
 - mypy targets centralized in `scripts/quality_gate.py`
-- Test suite grown from 588 to 863 tests
+- Test suite grown from 588 to 900 tests
 
 ### Fixed
 - Title duplication in `update_cards` when content already included the existing title

@@ -109,6 +109,29 @@ def update_cards(
             content = _validate_input(content, "content")
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    # Doc-card guardrail: reject status/priority/effort on doc cards
+    _doc_blocked = {"status": status, "priority": priority, "effort": effort}
+    blocked_fields = [k for k, v in _doc_blocked.items() if v is not None]
+    if blocked_fields:
+        from codecks_cli.mcp_server._tools_read import _try_cache as _read_cache
+
+        cached_cards = _read_cache("cards_result")
+        if isinstance(cached_cards, dict):
+            for cid in card_ids:
+                for card in cached_cards.get("cards", []):
+                    if isinstance(card, dict) and card.get("id") == cid:
+                        if card.get("cardType") == "doc" or card.get("is_doc"):
+                            return _finalize_tool_result(
+                                _contract_error(
+                                    f"Card '{cid}' is a doc card. Doc cards do not support: "
+                                    f"{', '.join(blocked_fields)}. "
+                                    "Only owner/tags/milestone/deck/title/content/hero can be set.",
+                                    "error",
+                                    error_code="DOC_CARD_VIOLATION",
+                                )
+                            )
+
     return _finalize_tool_result(
         _call(
             "update_cards",
@@ -385,6 +408,117 @@ def update_card_body(card_id: str, body: str) -> dict:
     return _finalize_tool_result(_call("update_cards", card_ids=[card_id], content=new_content))
 
 
+def find_and_update(
+    search: str,
+    status: Literal["not_started", "started", "done", "blocked", "in_review"] | None = None,
+    priority: Literal["a", "b", "c", "null"] | None = None,
+    effort: str | None = None,
+    deck: str | None = None,
+    milestone: str | None = None,
+    owner: str | None = None,
+    search_deck: str | None = None,
+    search_status: str | None = None,
+    max_results: int = 10,
+    confirm_ids: list[str] | None = None,
+) -> dict:
+    """Search cards then update in one tool. Two phases:
+
+    Phase 1 (no confirm_ids): Returns matching cards for review. Read-only.
+    Phase 2 (confirm_ids set): Applies updates to confirmed card IDs.
+
+    Args:
+        search: Text to match in card titles/content.
+        search_deck: Narrow search to this deck.
+        search_status: Narrow search to these statuses (comma-separated).
+        max_results: Max matches in phase 1 (default 10).
+        confirm_ids: Full 36-char UUIDs to update (from phase 1 results).
+        status/priority/effort/deck/milestone/owner: Fields to update.
+
+    Returns:
+        Phase 1: {phase: "confirm", matches: [...], match_count: int}
+        Phase 2: {phase: "applied", ok: bool, updated: int}
+    """
+    try:
+        search = _validate_input(search, "title")
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    # Phase 2: Apply updates
+    if confirm_ids is not None:
+        has_update = any(v is not None for v in [status, priority, effort, deck, milestone, owner])
+        if not has_update:
+            return _finalize_tool_result(
+                _contract_error(
+                    "No update fields provided. Set status, priority, effort, "
+                    "deck, milestone, or owner.",
+                    "error",
+                )
+            )
+        try:
+            _validate_uuid_list(confirm_ids)
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
+        result = _call(
+            "update_cards",
+            card_ids=confirm_ids,
+            status=status,
+            priority=priority,
+            effort=effort,
+            deck=deck,
+            milestone=milestone,
+            owner=owner,
+        )
+        if isinstance(result, dict):
+            result["phase"] = "applied"
+        return _finalize_tool_result(result)
+
+    # Phase 1: Search
+    from codecks_cli.mcp_server._tools_read import _filter_cached_cards, _try_cache
+
+    cached = _try_cache("cards_result")
+    if cached is not None and isinstance(cached, dict) and "cards" in cached:
+        cards = cached["cards"]
+    else:
+        api_result = _call("list_cards", search=search)
+        if isinstance(api_result, dict) and api_result.get("ok") is False:
+            return _finalize_tool_result(api_result)
+        cards = api_result.get("cards", []) if isinstance(api_result, dict) else []
+
+    filtered = _filter_cached_cards(
+        cards,
+        search=search,
+        deck=search_deck,
+        status=search_status,
+    )
+
+    matches = []
+    for card in filtered[:max_results]:
+        if isinstance(card, dict):
+            matches.append(
+                _sanitize_card(
+                    _slim_card(
+                        {
+                            "id": card.get("id"),
+                            "title": card.get("title"),
+                            "status": card.get("status"),
+                            "deck": card.get("deck") or card.get("deck_name"),
+                            "priority": card.get("priority"),
+                            "effort": card.get("effort"),
+                        }
+                    )
+                )
+            )
+
+    return _finalize_tool_result(
+        {
+            "phase": "confirm",
+            "matches": matches,
+            "match_count": len(filtered),
+            "showing": len(matches),
+        }
+    )
+
+
 def register(mcp):
     """Register all write tools with the FastMCP instance."""
     mcp.tool()(create_card)
@@ -400,3 +534,4 @@ def register(mcp):
     mcp.tool()(add_to_hand)
     mcp.tool()(remove_from_hand)
     mcp.tool()(update_card_body)
+    mcp.tool()(find_and_update)

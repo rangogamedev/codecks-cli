@@ -10,7 +10,7 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (863 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (900 tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
@@ -81,7 +81,7 @@ codecks_cli/
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- MCP server package: 51 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  mcp_server/            <- MCP server package: 55 tools wrapping CodecksClient (stdio, legacy/envelope modes)
     __init__.py          FastMCP init, register() calls, re-exports
     __main__.py          ``py -m codecks_cli.mcp_server`` entry point
     _core.py             Client caching, _call dispatcher, response contract, UUID validation, snapshot cache, agent session registry
@@ -167,7 +167,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- 51 tools exposed (28 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 3 feedback tools + 2 registry tools + 2 cache tools + 1 CLI cache command + 8 team coordination tools)
+- 55 tools exposed (28 CodecksClient wrappers + 3 PM session tools + 4 planning tools + 3 feedback tools + 2 registry tools + 2 cache tools + 1 CLI cache command + 8 team coordination tools + 4 acceleration tools: session_start, quick_overview, find_and_update, effort filters on list_cards)
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`

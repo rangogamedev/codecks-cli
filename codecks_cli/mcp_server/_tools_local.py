@@ -532,8 +532,91 @@ def cache_status() -> dict:
     return _finalize_tool_result(meta)
 
 
+def session_start(agent_name: str | None = None) -> dict:
+    """One-call session initialization. Replaces warm_cache + standup + get_account + get_workflow_preferences.
+
+    Call this FIRST in every session. Warms the cache, then assembles a complete
+    session context from cached data. Returns everything an agent needs to start working.
+
+    Args:
+        agent_name: If set, loads agent-specific prefs and registers the agent session.
+
+    Returns:
+        Dict with account, standup, preferences, project_context (deck_names, tag_names,
+        lane_names, card_count, hand_size), and cache metadata.
+    """
+    from codecks_cli.mcp_server import _core
+
+    # Step 1: Ensure cache is warm
+    try:
+        if not _core._is_cache_valid():
+            _core._warm_cache_impl()
+    except Exception as e:
+        return _finalize_tool_result(_contract_error(f"Session start failed (cache): {e}", "error"))
+
+    snapshot = _core._get_snapshot()
+    if snapshot is None:
+        return _finalize_tool_result(_contract_error("Cache unavailable after warming", "error"))
+
+    # Step 2: Extract account and standup from cache
+    account = snapshot.get("account", {})
+    standup_data = snapshot.get("standup", {})
+
+    # Step 3: Load preferences inline (no tool call)
+    prefs_result: dict = {"found": False, "preferences": []}
+    try:
+        with open(_PREFS_PATH, encoding="utf-8") as f:
+            pdata = json.load(f)
+        raw_prefs = pdata.get("observations", [])
+        prefs_result = {"found": True, "preferences": raw_prefs}
+        if agent_name:
+            agent_prefs = pdata.get("agent_prefs", {}).get(agent_name, [])
+            prefs_result["agent_preferences"] = agent_prefs
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+
+    # Step 4: Build project context from cache + registries
+    from codecks_cli.lanes import LANES
+    from codecks_cli.tags import TAGS
+
+    decks = snapshot.get("decks", [])
+    deck_names = []
+    if isinstance(decks, list):
+        for d in decks:
+            if isinstance(d, dict):
+                deck_names.append(d.get("title", ""))
+
+    cards_result = snapshot.get("cards_result", {})
+    card_count = len(cards_result.get("cards", []) if isinstance(cards_result, dict) else [])
+    hand = snapshot.get("hand", [])
+    hand_size = len(hand) if isinstance(hand, list) else 0
+
+    project_context = {
+        "deck_names": deck_names,
+        "tag_names": [t.name for t in TAGS],
+        "lane_names": [ln.name for ln in LANES],
+        "card_count": card_count,
+        "hand_size": hand_size,
+    }
+
+    # Step 5: Register agent if named
+    if agent_name:
+        _core._register_agent(agent_name)
+
+    result = {
+        "ok": True,
+        "account": account,
+        "standup": standup_data,
+        "preferences": prefs_result,
+        "project_context": project_context,
+    }
+    result.update(_core._get_cache_metadata())
+    return _finalize_tool_result(result)
+
+
 def register(mcp):
     """Register all local tools with the FastMCP instance."""
+    mcp.tool()(session_start)
     mcp.tool()(get_pm_playbook)
     mcp.tool()(get_workflow_preferences)
     mcp.tool()(save_workflow_preferences)

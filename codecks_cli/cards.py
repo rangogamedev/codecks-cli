@@ -727,8 +727,20 @@ def get_conversations(card_id):
 # ---------------------------------------------------------------------------
 
 
+def _find_closest(query: str, candidates: list[str]) -> str | None:
+    """Find closest matching string by prefix then substring."""
+    q = query.lower()
+    for c in candidates:
+        if c.lower().startswith(q):
+            return c
+    for c in candidates:
+        if q in c.lower():
+            return c
+    return None
+
+
 def resolve_deck_id(deck_name):
-    """Resolve deck name to ID."""
+    """Resolve deck name to ID with fuzzy match suggestions."""
     decks_result = list_decks()
     available = []
     for _key, deck in decks_result.get("deck", {}).items():
@@ -736,8 +748,10 @@ def resolve_deck_id(deck_name):
         if title.lower() == deck_name.lower():
             return deck.get("id")
         available.append(title)
-    hint = f" Available: {', '.join(available)}" if available else ""
-    raise CliError(f"[ERROR] Deck '{deck_name}' not found.{hint}")
+    closest = _find_closest(deck_name, available)
+    hint = f" Did you mean '{closest}'?" if closest else ""
+    avail_str = f" Available: {', '.join(sorted(available))}" if available else ""
+    raise CliError(f"[ERROR] Deck '{deck_name}' not found.{hint}{avail_str}")
 
 
 def resolve_milestone_id(milestone_name):

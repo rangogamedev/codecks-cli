@@ -57,7 +57,7 @@ py codecks_api.py --version        # show version
 py -m ruff check .                       # lint
 py -m ruff format --check .              # format
 py scripts/quality_gate.py --mypy-only   # type check
-pwsh -File scripts/run-tests.ps1         # 863 tests
+pwsh -File scripts/run-tests.ps1         # 900 tests
 
 # All at once
 py scripts/quality_gate.py               # lint + types + tests
@@ -90,7 +90,7 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/           <- 51 MCP tools (package)
+  mcp_server/           <- 55 MCP tools (package)
     __init__.py          <- FastMCP init, registration, re-exports
     __main__.py          <- py -m codecks_cli.mcp_server entry
     _core.py             <- Client cache, dispatcher, snapshot cache
@@ -123,7 +123,7 @@ MCP:  mcp_server/ -> _core._call() -> CodecksClient -> _core._finalize_tool_resu
 ### Running tests
 
 ```bash
-pwsh -File scripts/run-tests.ps1      # full suite (863 tests)
+pwsh -File scripts/run-tests.ps1      # full suite (900 tests)
 py -m pytest tests/test_client.py -x   # single file, stop on first failure
 py -m pytest -k "test_update" -x       # run tests matching pattern
 py -m pytest --tb=short                # shorter tracebacks
@@ -171,7 +171,7 @@ py -m codecks_cli.mcp_server
 codecks-mcp
 ```
 
-51 tools across 5 modules. Call `warm_cache()` at session start for instant reads.
+55 tools across 5 modules. Call `session_start()` at session start for fast reads and full context.
 
 ## Docker (optional)
 

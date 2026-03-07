@@ -1206,3 +1206,65 @@ class TestMutationReturnsNoData:
         client = _client()
         result = client.create_comment("c1", "Hello")
         assert "data" not in result
+
+
+# ---------------------------------------------------------------------------
+# Deck fuzzy matching (Task 2)
+# ---------------------------------------------------------------------------
+
+
+class TestDeckFuzzyMatch:
+    """Deck resolution with fuzzy matching suggestions."""
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_exact_case_insensitive(self, mock_decks):
+        from codecks_cli.cards import resolve_deck_id
+
+        mock_decks.return_value = {"deck": {"d1": {"title": "Code", "id": "uuid-1"}}}
+        assert resolve_deck_id("code") == "uuid-1"
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_prefix_suggestion(self, mock_decks):
+        from codecks_cli.cards import resolve_deck_id
+
+        mock_decks.return_value = {
+            "deck": {
+                "d1": {"title": "Code", "id": "uuid-1"},
+                "d2": {"title": "Design", "id": "uuid-2"},
+            }
+        }
+        with pytest.raises(CliError, match="Did you mean 'Code'"):
+            resolve_deck_id("Cod")
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_substring_suggestion(self, mock_decks):
+        from codecks_cli.cards import resolve_deck_id
+
+        mock_decks.return_value = {
+            "deck": {
+                "d1": {"title": "Feature Cards", "id": "uuid-1"},
+            }
+        }
+        with pytest.raises(CliError, match="Did you mean 'Feature Cards'"):
+            resolve_deck_id("feature")
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_no_match_lists_available(self, mock_decks):
+        from codecks_cli.cards import resolve_deck_id
+
+        mock_decks.return_value = {
+            "deck": {
+                "d1": {"title": "Code", "id": "uuid-1"},
+                "d2": {"title": "Design", "id": "uuid-2"},
+            }
+        }
+        with pytest.raises(CliError, match="Available: Code, Design"):
+            resolve_deck_id("nonexistent")
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_no_decks_no_hint(self, mock_decks):
+        from codecks_cli.cards import resolve_deck_id
+
+        mock_decks.return_value = {"deck": {}}
+        with pytest.raises(CliError, match="not found"):
+            resolve_deck_id("anything")

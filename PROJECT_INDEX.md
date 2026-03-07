@@ -25,7 +25,7 @@ Fast index for agents and maintainers.
 - Command handlers: `codecks_cli/commands.py`
 - Programmatic API: `codecks_cli/client.py`
 - Feature scaffolding: `codecks_cli/scaffolding.py`
-- MCP server: `codecks_cli/mcp_server/` (package with 7 sub-modules, 51 tools)
+- MCP server: `codecks_cli/mcp_server/` (package with 7 sub-modules, 55 tools)
 
 ## Core Modules
 - HTTP + retries + token checks: `codecks_cli/api.py`

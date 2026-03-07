@@ -380,10 +380,32 @@ _MUTATION_METHODS = {
 }
 
 
+def _find_uuid_hint(short_id: str) -> str:
+    """Search cache for a card whose ID starts with the given prefix."""
+    if _snapshot_cache is None:
+        return ""
+    cards_result = _snapshot_cache.get("cards_result")
+    if not isinstance(cards_result, dict):
+        return ""
+    for card in cards_result.get("cards", []):
+        if isinstance(card, dict):
+            full_id = card.get("id", "")
+            if full_id.startswith(short_id) or full_id.replace("-", "").startswith(short_id):
+                title = card.get("title", "")[:50]
+                return f" Did you mean '{full_id}' ({title})?"
+    return ""
+
+
 def _validate_uuid(value: str, field: str = "card_id") -> str:
     """Validate that a string is a 36-char UUID. Raises CliError if not."""
     if not isinstance(value, str) or len(value) != 36 or value.count("-") != 4:
-        raise CliError(f"[ERROR] {field} must be a full 36-char UUID, got: {value!r}")
+        hint = ""
+        if isinstance(value, str) and 4 <= len(value) <= 12:
+            hint = _find_uuid_hint(value)
+        raise CliError(
+            f"[ERROR] {field} must be a full 36-char UUID, got: {value!r}. "
+            f"Short IDs like 8-char codes do not work with the API.{hint}"
+        )
     return value
 
 

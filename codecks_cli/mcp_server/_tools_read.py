@@ -63,6 +63,9 @@ def list_cards(
     include_stats: bool = False,
     limit: int = 50,
     offset: int = 0,
+    effort_min: int | None = None,
+    effort_max: int | None = None,
+    has_effort: bool | None = None,
 ) -> dict:
     """List cards. Filters combine with AND.
 
@@ -72,6 +75,8 @@ def list_cards(
         owner: Owner name, or 'none' for unassigned.
         stale_days: Cards not updated in N days.
         updated_after/updated_before: YYYY-MM-DD date strings.
+        effort_min/effort_max: Filter by effort range (inclusive).
+        has_effort: True for estimated cards only, False for unestimated only.
         limit/offset: Pagination (default 50/0).
 
     Returns:
@@ -99,6 +104,9 @@ def list_cards(
                 stale_days=stale_days,
                 updated_after=updated_after,
                 updated_before=updated_before,
+                effort_min=effort_min,
+                effort_max=effort_max,
+                has_effort=has_effort,
             )
             if sort:
                 filtered = _sort_cards(filtered, sort)
@@ -172,6 +180,9 @@ def _filter_cached_cards(
     stale_days: int | None = None,
     updated_after: str | None = None,
     updated_before: str | None = None,
+    effort_min: int | None = None,
+    effort_max: int | None = None,
+    has_effort: bool | None = None,
 ) -> list[dict]:
     """Apply filters to cached card list. Mirrors CodecksClient.list_cards() filtering."""
     result = list(cards)
@@ -252,6 +263,17 @@ def _filter_cached_cards(
 
     # hero filter: not easily applicable in cache without additional data
     # Fall through to API for hero filter — but we still apply other filters above
+
+    if effort_min is not None:
+        result = [c for c in result if (c.get("effort") or 0) >= effort_min]
+
+    if effort_max is not None:
+        result = [c for c in result if (c.get("effort") or 0) <= effort_max]
+
+    if has_effort is True:
+        result = [c for c in result if c.get("effort") is not None]
+    elif has_effort is False:
+        result = [c for c in result if c.get("effort") is None]
 
     return result
 
@@ -458,6 +480,89 @@ def standup(days: int = 2, project: str | None = None, owner: str | None = None)
     return _finalize_tool_result(result)
 
 
+def quick_overview(project: str | None = None) -> dict:
+    """Compact project overview with aggregate counts only. No card details — minimal tokens.
+
+    Use for "how's the project?" checks. For card-level dashboards, use pm_focus() or standup().
+
+    Args:
+        project: Optional project name filter.
+
+    Returns:
+        Dict with total_cards, by_status, by_priority, effort_stats,
+        hand_size, stale_count, deck_summary.
+    """
+    cached = _try_cache("cards_result")
+    if cached is not None and isinstance(cached, dict) and "cards" in cached:
+        cards = cached["cards"]
+    else:
+        api_result = _call("list_cards")
+        if isinstance(api_result, dict) and api_result.get("ok") is False:
+            return _finalize_tool_result(api_result)
+        cards = api_result.get("cards", []) if isinstance(api_result, dict) else []
+
+    if project:
+        project_lower = project.lower()
+        cards = [c for c in cards if str(c.get("project", "")).lower() == project_lower]
+
+    # Aggregate counts
+    by_status: dict[str, int] = {}
+    by_priority: dict[str, int] = {}
+    deck_counts: dict[str, int] = {}
+    total_effort = 0
+    estimated_count = 0
+    stale_count = 0
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
+
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        s = card.get("status", "unknown")
+        by_status[s] = by_status.get(s, 0) + 1
+
+        p = card.get("priority") or "null"
+        by_priority[p] = by_priority.get(p, 0) + 1
+
+        d = card.get("deck", "") or card.get("deck_name", "") or "unassigned"
+        deck_counts[d] = deck_counts.get(d, 0) + 1
+
+        effort = card.get("effort")
+        if effort is not None:
+            total_effort += effort
+            estimated_count += 1
+
+        updated = card.get("updated_at") or card.get("updatedAt") or ""
+        if updated and updated < cutoff_str and s in ("started", "not_started", "blocked"):
+            stale_count += 1
+
+    avg_effort = round(total_effort / estimated_count, 1) if estimated_count else 0.0
+
+    hand_cached = _try_cache("hand")
+    hand_size = len(hand_cached) if isinstance(hand_cached, list) else 0
+
+    result = {
+        "ok": True,
+        "total_cards": len(cards),
+        "by_status": by_status,
+        "by_priority": by_priority,
+        "effort_stats": {
+            "total": total_effort,
+            "avg": avg_effort,
+            "estimated": estimated_count,
+            "unestimated": len(cards) - estimated_count,
+        },
+        "hand_size": hand_size,
+        "stale_count": stale_count,
+        "deck_summary": [{"name": k, "count": v} for k, v in sorted(deck_counts.items())],
+    }
+    result.update(_core._get_cache_metadata())
+    return _finalize_tool_result(result)
+
+
 def register(mcp):
     """Register all read tools with the FastMCP instance."""
     mcp.tool()(get_account)
@@ -470,3 +575,4 @@ def register(mcp):
     mcp.tool()(list_activity)
     mcp.tool()(pm_focus)
     mcp.tool()(standup)
+    mcp.tool()(quick_overview)
