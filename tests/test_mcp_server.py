@@ -2516,3 +2516,122 @@ class TestFindAndUpdate:
         result = mcp_mod.find_and_update(search="Task", search_status="started")
         assert len(result["matches"]) == 1
         assert result["matches"][0]["id"] == _C1
+
+
+class TestUndoMcpTool:
+    """Tests for the undo MCP tool."""
+
+    def test_undo_no_snapshot(self, tmp_path, monkeypatch):
+        """undo() returns error when no snapshot file exists."""
+        import codecks_cli._operations as ops
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(tmp_path / "nonexistent.json"))
+
+        mock_client = MagicMock()
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        result = mcp_mod.undo()
+        assert result["ok"] is False
+        assert "No undo snapshot" in result["error"]
+
+    def test_undo_restores_status(self, tmp_path, monkeypatch):
+        """undo() restores card status from snapshot."""
+        import codecks_cli._operations as ops
+        undo_file = tmp_path / ".pm_undo.json"
+        undo_file.write_text(json.dumps({
+            "timestamp": "2026-03-17T00:00:00Z",
+            "cards": {
+                _C1: {"status": "not_started", "priority": "b", "effort": None, "deck_name": "Code"}
+            }
+        }))
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
+
+        mock_client = MagicMock()
+        mock_client.update_cards.return_value = {"ok": True}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        result = mcp_mod.undo()
+        assert result["ok"] is True
+        assert result["reverted_count"] == 1
+        assert _C1 in result["reverted"]
+        mock_client.update_cards.assert_called_once_with(
+            [_C1], status="not_started", priority="b"
+        )
+
+    def test_undo_restores_effort(self, tmp_path, monkeypatch):
+        """undo() restores effort field (regression test for effort bug fix)."""
+        import codecks_cli._operations as ops
+        undo_file = tmp_path / ".pm_undo.json"
+        undo_file.write_text(json.dumps({
+            "timestamp": "2026-03-17T00:00:00Z",
+            "cards": {
+                _C1: {"status": "started", "priority": "a", "effort": 5, "deck_name": "Code"}
+            }
+        }))
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
+
+        mock_client = MagicMock()
+        mock_client.update_cards.return_value = {"ok": True}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        result = mcp_mod.undo()
+        assert result["ok"] is True
+        # Effort=5 should be included in the update call
+        mock_client.update_cards.assert_called_once_with(
+            [_C1], status="started", priority="a", effort=5
+        )
+
+    def test_undo_deletes_snapshot_after_use(self, tmp_path, monkeypatch):
+        """undo() removes the snapshot file after successful restoration."""
+        import codecks_cli._operations as ops
+        undo_file = tmp_path / ".pm_undo.json"
+        undo_file.write_text(json.dumps({
+            "timestamp": "2026-03-17T00:00:00Z",
+            "cards": {_C1: {"status": "done", "priority": None, "effort": None, "deck_name": "Code"}}
+        }))
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
+
+        mock_client = MagicMock()
+        mock_client.update_cards.return_value = {"ok": True}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        mcp_mod.undo()
+        assert not undo_file.exists()
+
+
+class TestSnapshotInCall:
+    """Tests that _call() creates undo snapshots for undoable methods."""
+
+    def test_update_cards_triggers_snapshot(self, monkeypatch):
+        """update_cards via _call() should call snapshot_before_mutation."""
+        mock_client = MagicMock()
+        mock_client.update_cards.return_value = {"ok": True, "updated": 1}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        snapshot_calls = []
+        def mock_snapshot(client, card_ids):
+            snapshot_calls.append(card_ids)
+
+        monkeypatch.setattr(
+            "codecks_cli._operations.snapshot_before_mutation", mock_snapshot
+        )
+
+        _core._call("update_cards", card_ids=[_C1], status="done")
+        assert len(snapshot_calls) == 1
+        assert snapshot_calls[0] == [_C1]
+
+    def test_create_card_skips_snapshot(self, monkeypatch):
+        """create_card via _call() should NOT snapshot (not undoable)."""
+        mock_client = MagicMock()
+        mock_client.create_card.return_value = {"ok": True, "card_id": _C1}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        snapshot_calls = []
+        def mock_snapshot(client, card_ids):
+            snapshot_calls.append(card_ids)
+
+        monkeypatch.setattr(
+            "codecks_cli._operations.snapshot_before_mutation", mock_snapshot
+        )
+
+        _core._call("create_card", title="Test")
+        assert len(snapshot_calls) == 0

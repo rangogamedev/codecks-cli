@@ -885,6 +885,27 @@ def find_and_update(
     )
 
 
+def undo() -> dict:
+    """Revert the last undoable mutation (update_cards, mark_done, mark_started).
+
+    Restores status, priority, and effort to their pre-mutation values.
+    Single-level undo — each new undoable mutation overwrites the previous snapshot.
+
+    Returns:
+        Dict with ok, reverted_count, reverted card IDs, and any errors.
+    """
+    try:
+        from codecks_cli._operations import undo_last_mutation
+        from codecks_cli.mcp_server._core import _get_client
+
+        result = undo_last_mutation(_get_client())
+        return _finalize_tool_result(result)
+    except Exception as e:
+        return _finalize_tool_result(
+            _contract_error(f"Undo failed: {e}", "error")
+        )
+
+
 def register(mcp):
     """Register all write tools with the FastMCP instance."""
     mcp.tool()(create_card)
@@ -904,3 +925,4 @@ def register(mcp):
     mcp.tool()(tick_checkboxes)
     mcp.tool()(tick_all_checkboxes)
     mcp.tool()(find_and_update)
+    mcp.tool()(undo)

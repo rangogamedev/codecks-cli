@@ -545,6 +545,8 @@ def undo_last_mutation(client: CodecksClient) -> dict:
                 updates["status"] = prev_state["status"]
             if prev_state.get("priority"):
                 updates["priority"] = prev_state["priority"]
+            if prev_state.get("effort") is not None:
+                updates["effort"] = prev_state["effort"]
             if updates:
                 client.update_cards([cid], **updates)
                 reverted.append(cid)

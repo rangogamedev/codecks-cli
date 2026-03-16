@@ -600,6 +600,9 @@ _MUTATION_METHODS = {
     "reopen_comment",
 }
 
+# Methods that save undo snapshots before executing
+_UNDOABLE_METHODS = {"update_cards", "mark_done", "mark_started"}
+
 
 def _find_uuid_hint(short_id: str) -> str:
     """Search cache for a card whose ID starts with the given prefix."""
@@ -639,11 +642,22 @@ def _call(method_name: str, **kwargs):
     """Call a CodecksClient method, converting exceptions to error dicts.
 
     Mutations automatically invalidate the snapshot cache on success.
+    Undoable mutations (update_cards, mark_done, mark_started) save an undo
+    snapshot before executing.
     """
     if method_name not in _ALLOWED_METHODS:
         return _contract_error(f"Unknown method: {method_name}", "error")
     try:
         client = _get_client()
+        # Save undo snapshot before undoable mutations
+        if method_name in _UNDOABLE_METHODS:
+            card_ids = kwargs.get("card_ids", [])
+            if card_ids:
+                try:
+                    from codecks_cli._operations import snapshot_before_mutation
+                    snapshot_before_mutation(client, card_ids)
+                except Exception:
+                    pass  # Best-effort snapshot
         result = getattr(client, method_name)(**kwargs)
         if method_name in _MUTATION_METHODS:
             _invalidate_cache_for(method_name)

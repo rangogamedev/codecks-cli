@@ -6,7 +6,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _core.py          — Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
   _security.py      — Injection detection, sanitization, input validation
   _tools_read.py    — 11 query/dashboard tools (cache-aware)
-  _tools_write.py   — 15 mutation/hand/scaffolding tools
+  _tools_write.py   — 18 mutation/hand/scaffolding/undo tools
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 16 local tools (PM session, feedback, planning, registry, cache)
   _tools_team.py    — 8 team coordination tools (claim, delegate, partition, dashboard)
@@ -169,6 +169,7 @@ from codecks_cli.mcp_server._tools_team import (  # noqa: E402, F401
 from codecks_cli.mcp_server._tools_write import (  # noqa: E402, F401
     add_to_hand,
     archive_card,
+    batch_update_bodies,
     create_card,
     delete_card,
     find_and_update,
@@ -178,7 +179,10 @@ from codecks_cli.mcp_server._tools_write import (  # noqa: E402, F401
     remove_from_hand,
     scaffold_feature,
     split_features,
+    tick_all_checkboxes,
+    tick_checkboxes,
     unarchive_card,
+    undo,
     update_card_body,
     update_cards,
 )
