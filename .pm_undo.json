@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-03-16T16:35:55.945725+00:00",
+  "timestamp": "2026-03-18T08:21:39.483174+00:00",
   "cards": {
-    "00000000-0000-0000-0000-000000000001": {
-      "status": null,
-      "priority": null,
+    "dde76af3-207a-11f1-aeb8-abc7f87bdbaa": {
+      "status": "not_started",
+      "priority": "b",
       "effort": null,
-      "deck_name": null
+      "deck_name": "Game Design"
     }
   }
 }

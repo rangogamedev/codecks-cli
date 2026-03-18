@@ -107,6 +107,10 @@ def _invalidate_cache() -> None:
     _snapshot_cache = None
     _cache_loaded_at = 0.0
     _repo.clear()
+    # Also clear the cards.py process-level cache so list_decks/list_cards
+    # re-query the API instead of returning stale data.
+    from codecks_cli import config
+    config._cache.clear()
 
 
 def _extract_hand_ids(hand: list) -> set[str]:

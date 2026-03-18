@@ -1,0 +1,37 @@
+{
+  "_comment": "UI selectors for Playwright admin operations. Update this file (not Python code) when Codecks UI changes.",
+  "base_url": "https://open.codecks.io",
+  "create_project": {
+    "settings_menu": "role=button[name=/settings/i]",
+    "new_project_button": "text=New project",
+    "project_name_input": "role=textbox",
+    "submit_button": "role=button[name=/create/i]"
+  },
+  "create_deck": {
+    "project_settings": "text=Project settings",
+    "decks_section": "text=Decks",
+    "new_deck_button": "text=New deck",
+    "deck_name_input": "role=textbox",
+    "submit_button": "role=button[name=/create/i]"
+  },
+  "create_milestone": {
+    "milestones_link": "text=Milestones",
+    "new_milestone_button": "text=New milestone",
+    "milestone_name_input": "role=textbox",
+    "date_input": "input[type=date]",
+    "submit_button": "role=button[name=/create/i]"
+  },
+  "create_tag": {
+    "settings_menu": "role=button[name=/settings/i]",
+    "tags_section": "text=Tags",
+    "new_tag_button": "text=New tag",
+    "tag_name_input": "role=textbox",
+    "color_input": "input[type=color]",
+    "submit_button": "role=button[name=/create/i]"
+  },
+  "archive_deck": {
+    "deck_menu": "role=button[name=/more/i]",
+    "archive_option": "text=Archive",
+    "confirm_button": "role=button[name=/confirm|archive/i]"
+  }
+}

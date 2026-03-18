@@ -1246,3 +1246,106 @@ class CodecksClient:
             createdAt), and 'user' (referenced users).
         """
         return get_conversations(card_id)  # type: ignore[no-any-return]
+
+    # ------------------------------------------------------------------
+    # Admin operations (Playwright-backed, with API cache)
+    # ------------------------------------------------------------------
+
+    def create_project(self, name: str) -> dict[str, Any]:
+        """Create a new Codecks project.
+
+        Args:
+            name: Project name.
+
+        Returns:
+            dict with ok, project_name, source.
+        """
+        from codecks_cli import admin
+
+        result = admin.create_project(name)
+        if result.get("ok"):
+            self._warm_after_admin()
+        return result
+
+    def create_deck(self, name: str, project: str | None = None) -> dict[str, Any]:
+        """Create a new deck in a project.
+
+        Args:
+            name: Deck name.
+            project: Project name (defaults to primary project).
+
+        Returns:
+            dict with ok, deck_name, project_name, source.
+        """
+        from codecks_cli import admin
+
+        result = admin.create_deck(name, project=project)
+        if result.get("ok"):
+            self._warm_after_admin()
+        return result
+
+    def create_milestone(
+        self, name: str, target_date: str | None = None
+    ) -> dict[str, Any]:
+        """Create a release milestone.
+
+        Args:
+            name: Milestone name.
+            target_date: Optional target date (YYYY-MM-DD or YYYY-MM).
+
+        Returns:
+            dict with ok, milestone_name, source.
+        """
+        from codecks_cli import admin
+
+        result = admin.create_milestone(name, target_date=target_date)
+        if result.get("ok"):
+            self._warm_after_admin()
+        return result
+
+    def create_tag(self, name: str, color: str | None = None) -> dict[str, Any]:
+        """Create a new project-level tag.
+
+        Args:
+            name: Tag name.
+            color: Optional hex color.
+
+        Returns:
+            dict with ok, tag_name, source.
+        """
+        from codecks_cli import admin
+
+        result = admin.create_tag(name, color=color)
+        if result.get("ok"):
+            self._warm_after_admin()
+            # Sync local tag registry
+            try:
+                from codecks_cli.tags import sync_from_api
+
+                sync_from_api()
+            except Exception:
+                pass
+        return result
+
+    def archive_deck_admin(self, deck: str) -> dict[str, Any]:
+        """Archive a deck (reversible, via Playwright admin).
+
+        Args:
+            deck: Deck name to archive.
+
+        Returns:
+            dict with ok, deck_name, source.
+        """
+        from codecks_cli import admin
+
+        result = admin.archive_deck(deck)
+        if result.get("ok"):
+            self._warm_after_admin()
+        return result
+
+    def _warm_after_admin(self) -> None:
+        """Refresh caches after an admin mutation."""
+        try:
+            config._cache.clear()
+        except Exception:
+            pass

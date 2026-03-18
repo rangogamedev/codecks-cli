@@ -31,9 +31,12 @@ dev = [
 mcp = [
   "mcp[cli]>=1.6.0",
 ]
+admin = [
+  "playwright>=1.40",
+]
 
 [tool.setuptools.package-data]
-codecks_cli = ["py.typed", "pm_playbook.md"]
+codecks_cli = ["py.typed", "pm_playbook.md", "playwright_selectors.json"]
 
 [tool.setuptools.packages.find]
 include = ["codecks_cli", "codecks_cli.*"]

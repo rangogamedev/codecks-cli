@@ -1,8 +1,11 @@
 """Tag registry — single source of truth for project tag definitions.
 
-Standalone module (no project imports). Adding a new tag means
-appending one TagDefinition to TAGS and optionally updating LANE_TAGS.
+Standalone module (no project imports except for sync_from_api).
+Adding a new tag means appending one TagDefinition to TAGS and
+optionally updating LANE_TAGS.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 
@@ -28,6 +31,11 @@ TAGS: tuple[TagDefinition, ...] = (
     TagDefinition("economy", "Economy", "discipline", "Economy and balance design"),
     TagDefinition("art", "Art", "discipline", "Visual art and assets"),
     TagDefinition("audio", "Audio", "discipline", "Sound and music"),
+    # Studio & publishing tags — non-game-dev disciplines
+    TagDefinition("legal", "Legal", "discipline", "Legal & contracts work"),
+    TagDefinition("publishing", "Publishing", "discipline", "Steam/publishing work"),
+    TagDefinition("marketing", "Marketing", "discipline", "Marketing & community work"),
+    TagDefinition("ops", "Ops", "discipline", "Operations & infrastructure"),
 )
 
 # -- Pre-built tag sets for common contexts --
@@ -69,3 +77,37 @@ def lane_tag_names(lane_name: str) -> tuple[str, ...]:
         return LANE_TAGS[lane_name]
     except KeyError:
         raise KeyError(f"No tags defined for lane: {lane_name!r}") from None
+
+
+def sync_from_api() -> int:
+    """Fetch live tags from the Codecks API and merge any new ones into TAGS.
+
+    New tags (not already in TAGS by name) are added as discipline tags.
+    Returns the count of newly added tags.
+    """
+    global TAGS
+
+    from codecks_cli.api import query, warn_if_empty
+
+    result = query({"_root": [{"masterTags": ["name", "color"]}]})
+    warn_if_empty(result, "masterTag")
+    api_tags = result.get("masterTag", {})
+    if not api_tags:
+        return 0
+
+    existing_names = {t.name for t in TAGS}
+    new_tags = []
+    for _id, tag_data in api_tags.items():
+        if not isinstance(tag_data, dict):
+            continue
+        tag_name = tag_data.get("name", "").lower().replace(" ", "-")
+        if tag_name and tag_name not in existing_names:
+            display = tag_data.get("name", tag_name)
+            new_tags.append(
+                TagDefinition(tag_name, display, "discipline", f"Auto-synced from Codecks")
+            )
+            existing_names.add(tag_name)
+
+    if new_tags:
+        TAGS = TAGS + tuple(new_tags)
+    return len(new_tags)

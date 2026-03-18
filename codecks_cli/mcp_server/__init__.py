@@ -10,6 +10,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 16 local tools (PM session, feedback, planning, registry, cache)
   _tools_team.py    — 8 team coordination tools (claim, delegate, partition, dashboard)
+  _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
@@ -20,6 +21,7 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli.mcp_server import (
+    _tools_admin,
     _tools_comments,
     _tools_local,
     _tools_read,
@@ -49,7 +51,7 @@ mcp = FastMCP(
     ),
 )
 
-for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team]:
+for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team, _tools_admin]:
     _mod.register(mcp)
 
 # ---------------------------------------------------------------------------
@@ -163,6 +165,15 @@ from codecks_cli.mcp_server._tools_team import (  # noqa: E402, F401
     release_card,
     team_dashboard,
     team_status,
+)
+
+# _tools_admin
+from codecks_cli.mcp_server._tools_admin import (  # noqa: E402, F401
+    archive_deck as archive_deck_admin,
+    create_deck as create_deck_admin,
+    create_milestone as create_milestone_admin,
+    create_project,
+    create_tag as create_tag_admin,
 )
 
 # _tools_write
