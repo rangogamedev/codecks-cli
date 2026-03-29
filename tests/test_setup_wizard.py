@@ -11,25 +11,25 @@ class TestSetupDiscoverProjects:
     def test_no_projects_saves_empty_mapping(self, mock_try_call, mock_save):
         mock_try_call.return_value = {"deck": {"d1": {"id": "d1", "title": "Inbox"}}}
         setup_wizard._setup_discover_projects()
-        mock_save.assert_called_once_with("CODECKS_PROJECTS", "")
+        Imock_save.assert_called_once_with("CODECKS_PROJECTS", "")
 
-    @patch("codecks_cli.setup_wizard._get_archived_project_ids")
+    @patch("codecks_cli.setup_wizard._get_active_project_ids")
     @patch("codecks_cli.setup_wizard.config.save_env_value")
     @patch("codecks_cli.setup_wizard._try_call")
     @patch("builtins.input", return_value="My Game")
-    def test_archived_projects_excluded_from_discovery(
-        self, mock_input, mock_try_call, mock_save, mock_archived
+    def test_non_active_projects_excluded_from_discovery(
+        self, mock_input, mock_try_call, mock_save, mock_active
     ):
         mock_try_call.return_value = {
             "deck": {
                 "dk1": {"id": "d1", "title": "Features", "projectId": "active-p"},
-                "dk2": {"id": "d2", "title": "OldDeck", "projectId": "archived-p"},
+                "dk2": {"id": "d2", "title": "OldDeck", "projectId": "deleted-p"},
             }
         }
-        mock_archived.return_value = {"archived-p"}
+        mock_active.return_value = {"active-p"}
         setup_wizard._setup_discover_projects()
         saved_value = mock_save.call_args[0][1]
-        assert "archived-p" not in saved_value
+        assert "deleted-p" not in saved_value
         assert "active-p" in saved_value
 
 
