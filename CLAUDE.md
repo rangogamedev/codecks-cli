@@ -85,7 +85,7 @@ Dockerfile pins Node.js 22 LTS via NodeSource. Non-root user with dropped capabi
 
 ## MCP Server
 - Run: `py -m codecks_cli.mcp_server` (stdio). Install: `py -m pip install .[mcp]`
-- ~35 tools (down from 55 in v0.4.0, consolidated in v0.5.0). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
+- 52 tools (down from 55 in v0.4.0, consolidated in v0.5.0). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
 - **Startup**: Call `session_start()` first — returns account, standup, preferences, project context (deck names, tag/lane registries), playbook rules, and `removed_tools` migration guide in one call.
 - **Token efficiency** (v0.5.0):
   - `list_cards` omits content by default (only fetched when `search` is set)

@@ -193,31 +193,37 @@ def check_test_counts() -> list[dict]:
 
 
 def check_mcp_counts() -> list[dict]:
-    """Check MCP tool counts in doc files."""
+    """Check MCP tool counts in doc files.
+
+    Only flags lines that claim to be the total tool count.
+    Skips sub-counts (category breakdowns, removed tools, historical notes).
+    """
     actual = _actual_mcp_tool_count()
     issues = []
 
     doc_files = ["CLAUDE.md", "HANDOFF.md", "README.md"]
-    pattern = r"(\d+)\s+tools"
+    pattern = r"(\d+)\s+(?:MCP\s+)?tools"
+    # Lines with these words are sub-counts or historical references, not total claims
+    skip_re = re.compile(r"removed|down from|tools —|tools \(|tool modules\)|category|^\s*\|", re.I)
 
     for fname in doc_files:
         path = ROOT / fname
         if not path.exists():
             continue
-        content = path.read_text(encoding="utf-8")
-        for m in re.finditer(pattern, content):
-            found = int(m.group(1))
-            if found != actual:
-                offset = m.start()
-                line_num = content[:offset].count("\n") + 1
-                issues.append(
-                    {
-                        "file": f"{fname}:{line_num}",
-                        "field": "mcp_tool_count",
-                        "expected": actual,
-                        "found": found,
-                    }
-                )
+        for line_num, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if skip_re.search(line):
+                continue
+            for m in re.finditer(pattern, line):
+                found = int(m.group(1))
+                if found != actual:
+                    issues.append(
+                        {
+                            "file": f"{fname}:{line_num}",
+                            "field": "mcp_tool_count",
+                            "expected": actual,
+                            "found": found,
+                        }
+                    )
     return issues
 
 
