@@ -1,13 +1,13 @@
 # CLAUDE.md — codecks-cli
 
-Python CLI + library for managing Codecks project cards. Zero runtime dependencies (stdlib only).
+Agent-first CLI + MCP for AI-powered Codecks project management.
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 Fast navigation map: `PROJECT_INDEX.md`.
 
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (900 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (960+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14) + Codecov coverage
@@ -15,18 +15,18 @@ Fast navigation map: `PROJECT_INDEX.md`.
 - **Lock file**: `uv.lock` — pinned dependency versions, committed to git
 - **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps + GitHub Actions
 - **Version**: `VERSION` in `codecks_cli/config.py` + `pyproject.toml` (keep in sync). See `DEVELOPMENT.md` for release process.
-- **Tags**: annotated git tags (`v0.1.0`..`v0.4.0`). Create with `git tag -a vX.Y.Z -m "..."`
+- **Tags**: annotated git tags (`v0.1.0`..`v0.5.0`). Create with `git tag -a vX.Y.Z -m "..."`
 
 ## Architecture
 
 ```
 codecks_api.py          <- entry point
 codecks_cli/
-  cli.py                <- argparse, dispatch
-  commands.py           <- cmd_*() wrappers
+  cli.py                <- argparse, dispatch, --json/--agent flags
+  commands.py           <- cmd_*() wrappers, --stdin batch support
   client.py             <- CodecksClient: 25 core methods
   scaffolding.py        <- scaffold_feature(), split_features() + helpers
-  cards.py              <- Card CRUD, hand, conversations
+  cards.py              <- Card CRUD, hand, conversations, field selection
   api.py                <- HTTP layer
   config.py             <- Env, tokens, constants
   exceptions.py         <- CliError, SetupError, HTTPError
@@ -36,11 +36,12 @@ codecks_cli/
   tags.py               <- Tag registry (standalone)
   lanes.py              <- Lane registry (imports tags.py)
   _content.py           <- Content title/body parse, serialize, replace
+  store.py              <- SQLite storage layer (.pm_store.db)
   formatters/           <- JSON/table/CSV output (7 sub-modules)
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- 55 MCP tools (package: _core, _security, _tools_*)
+  mcp_server/            <- ~49 MCP tools (package: _core, _security, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.
@@ -68,6 +69,13 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: `/api-ref` skill
 - `tags` lists project-level tags (masterTags).
 - `split-features` batch-splits feature cards (use `--dry-run` first).
 
+### Agent Mode (v0.5.0)
+- `--json` flag forces JSON output for all commands
+- `--agent` flag: JSON output + suppress warnings + strict envelope
+- `CODECKS_AGENT=1` env var auto-enables agent mode
+- `--stdin` on `done`/`start`/`hand`/`unhand`/`update`: read card IDs from stdin pipe
+- Pipe workflow: `cards -s started --json | jq '.cards[].id' | done --stdin`
+
 Use `/api-pitfalls` for API gotchas, known bugs, and paid-only restrictions.
 
 ## Docker (optional)
@@ -76,20 +84,35 @@ Quick: `./docker/build.sh` then `./docker/test.sh`, `./docker/quality.sh`, `./do
 
 ## MCP Server
 - Run: `py -m codecks_cli.mcp_server` (stdio). Install: `py -m pip install .[mcp]`
-- 55 tools (47 core + 8 team). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
-- Standalone wrapper repos archived (unnecessary — use `py -m codecks_cli.mcp_server` directly)
-- **Startup**: Call `session_start()` first — returns account, standup, preferences, and project context (deck names, tags, lanes) in one call. Replaces 5 sequential startup calls.
-- **Composite tools**: `find_and_update()` — search cards then update in 2 calls instead of 5+. `quick_overview()` — aggregate counts only (no card details, minimal tokens).
-- **Guardrails**: Doc-card guardrail blocks status/priority/effort on doc cards. UUID validation suggests full IDs from cache when agent sends short IDs. Deck name resolution does fuzzy matching with "Did you mean?" suggestions.
-- **Snapshot cache**: TTL: `CODECKS_CACHE_TTL_SECONDS` (default 300). Mutations use selective cache invalidation. Cache responses include `stale_warning` when age exceeds 80% TTL.
-- **Content helpers**: `_content.py` — deterministic title/body parsing. `update_card_body` tool for body-only edits.
+- ~49 tools (down from 55 in v0.4.0). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
+- **Startup**: Call `session_start()` first — returns account, standup, preferences, project context (deck names, tag/lane registries), playbook rules, and `removed_tools` migration guide in one call.
+- **Token efficiency** (v0.5.0):
+  - `list_cards` omits content by default (only fetched when `search` is set)
+  - `pm_focus(summary_only=True)` — counts + deck_health only (~2KB vs ~65KB)
+  - `standup(summary_only=True)` — counts only
+  - `quick_overview()` — aggregate counts (no card details)
+  - `_card_summary()` — 7-field compact card representation for dashboards
+- **Composite tools**: `find_and_update()` — search cards then update in 2 calls instead of 5+.
+- **Guardrails**: Doc-card guardrail blocks status/priority/effort on doc cards. UUID validation suggests full IDs from cache. Deck name resolution does fuzzy matching.
+- **Snapshot cache**: TTL: `CODECKS_CACHE_TTL_SECONDS` (default 300). Cache warming uses `include_content=False` for smaller payloads. Mutations use selective invalidation.
 - **Error contract**: Errors include `retryable` (bool) and `error_code` (str) for agent decision-making.
-- **Effort filters**: `list_cards()` supports `effort_min`, `effort_max`, `has_effort` params.
-- **Agent teams**: 8 tools for multi-agent coordination — claim/release/delegate cards, team status/dashboard, work partitioning by lane or owner, team playbook. In-memory claim registry prevents conflicts.
+- **Agent teams**: 6 tools — claim/release/delegate cards, team status/dashboard, `partition_cards(by='lane'|'owner')`.
+- **Checkboxes**: `tick_checkboxes(all=True)` ticks all checkboxes at once.
+
+### Removed Tools (v0.5.0)
+13 tools removed from MCP, data now in `session_start()` or CLI:
+`get_pm_playbook`, `get_team_playbook`, `get_tag_registry`, `get_lane_registry`, `planning_*` (4), `*_cli_feedback` (3), `warm_cache`, `cache_status`.
+Merged: `partition_by_lane`/`partition_by_owner` → `partition_cards(by=...)`. `tick_all_checkboxes` → `tick_checkboxes(all=True)`.
+
+## SQLite Store (v0.5.0)
+- File: `.pm_store.db` (gitignored). Config: `STORE_DB_PATH` in config.py.
+- Provides indexed persistence for cards, decks, claims, and metadata.
+- FTS5 full-text search on card title/content.
+- Additive layer — JSON cache still primary, SQLite is secondary persistence.
 
 ## CLI Feedback
 Read `.cli_feedback.json` at session start — PM agent reports bugs/improvements there.
-Via MCP: `get_cli_feedback()` / `get_cli_feedback(category="bug")` / `clear_cli_feedback()`
+Via CLI: `py codecks_api.py feedback list` / `py codecks_api.py feedback save`
 
 ## Skills (`.claude/commands/`)
 `/pm`, `/release`, `/api-ref`, `/codecks-docs <topic>`, `/quality`, `/mcp-validate`, `/troubleshoot`, `/split-features`, `/doc-update`, `/changelog`, `/docker`, `/registry`, `/architecture`, `/api-pitfalls`, `/maintenance`
@@ -109,7 +132,7 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 | mypy | `/websites/mypy_readthedocs_io_en` |
 
 ## MCP Servers (`.claude/settings.json`)
-- `codecks` — this project's own MCP server (55 tools, Codecks API access)
+- `codecks` — this project's own MCP server (~49 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 
@@ -124,10 +147,10 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 
 ## Git & Versioning
 - Commit style: short present tense ("Add X", "Fix Y")
-- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`
+- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`, `.pm_store.db`
 - `.claude/` is gitignored
 - Run security-reviewer agent before pushing (public repo)
-- **Semver**: version in `config.py` + `pyproject.toml`. Tags: `v0.1.0`..`v0.4.0`
+- **Semver**: version in `config.py` + `pyproject.toml`. Tags: `v0.1.0`..`v0.5.0`
 - **Release**: update version in both files, move CHANGELOG unreleased to versioned section, tag, push. Use `/release` skill.
 - **Dev docs**: `DEVELOPMENT.md` (setup, architecture, release process), `CONTRIBUTING.md` (contributor guide)
 

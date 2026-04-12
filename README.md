@@ -2,7 +2,7 @@
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
-![Tests: 627](https://img.shields.io/badge/Tests-627-brightgreen)
+![Tests: 900+](https://img.shields.io/badge/Tests-900%2B-brightgreen)
 
 A command-line tool and Python library for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Zero runtime dependencies. Works from a terminal, as a Python API, or as an MCP server for AI agents.
 
@@ -449,7 +449,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes 39 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes ~35 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -477,7 +477,7 @@ Add to your MCP settings:
 }
 ```
 
-### 39 tools
+### ~35 tools
 
 | Category | Tools |
 |----------|-------|
@@ -695,7 +695,7 @@ codecks-cli/
       _gdd.py                 format_gdd_table, format_sync_report
     gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
     setup_wizard.py           ← Interactive .env bootstrap
-    mcp_server.py             ← MCP server: 38 tools (stdio transport)
+    mcp_server.py             ← MCP server: ~35 tools (stdio transport)
     pm_playbook.md            ← Agent-agnostic PM methodology
     py.typed                  ← PEP 561 type marker
   tests/                      ← 627 pytest tests (no live API calls)

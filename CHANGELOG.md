@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-12
+
 ### Added
 - `session_start` MCP tool — one-call session initialization (replaces 5 startup calls: warm_cache + standup + get_account + get_workflow_preferences + project context)
 - `find_and_update` MCP tool — two-phase search+update (search cards, confirm matches, apply updates in 2 calls instead of 5+)
@@ -46,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tag and lane registry tools — introspect project taxonomy via MCP
 - CLI feedback system — `save_cli_feedback` / `get_cli_feedback` / `clear_cli_feedback`
 - uv for dependency management (`uv.lock` committed)
+- SQLite persistent store (`store.py`) — `CardStore` with FTS5 full-text search, indexed queries, thread-safe operations
+- `CardRepository` (`_repository.py`) — O(1) card lookups by ID, status, deck, owner
+- Token diet optimization — `_card_summary()` (7-field slim format), `_slim_card_list()`, `summary_only` on `pm_focus`/`standup`
+- Rate limiting — 40 req/5s Codecks API limit enforcement with headroom tracking
+- `batch_create_cards` MCP tool (max 20 per call, idempotent)
+- `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards` MCP tools
+- `batch_update_bodies` MCP tool
+- `include_content` parameter on `list_cards` (default False, True when searching)
+- Cross-process cache coherence via mtime checking
+- `.github/CODEOWNERS` for required maintainer review
+- GitHub Actions pinned to commit hashes (supply chain hardening)
 
 ### Changed
 - MCP server refactored from single file to package (7 sub-modules, 55 tools)
@@ -60,7 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `client.py` content handling refactored to use `_content.py` helpers
 - CI matrix expanded to Python 3.10, 3.12, 3.14
 - mypy targets centralized in `scripts/quality_gate.py`
-- Test suite grown from 588 to 900 tests
+- Test suite grown from 588 to 900+ tests
+- MCP tools consolidated from 55 to ~35 (13 removed — see Removed)
+- Cache TTL reduced from 300s to 60s
+- `session_start()` returns removed-tools migration guide + project context
+- Batch operations suppress disk writes until completion
+
+### Removed
+- 13 MCP tools (registry, playbook, planning, feedback, cache tools) — data now in `session_start()` or CLI
 
 ### Fixed
 - Title duplication in `update_cards` when content already included the existing title
@@ -182,7 +202,8 @@ Initial public release.
 - Deck lookup caching to minimize API calls
 - Card list output optimized for AI agent token efficiency
 
-[Unreleased]: https://github.com/rangogamedev/codecks-cli/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/rangogamedev/codecks-cli/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rangogamedev/codecks-cli/compare/v0.1.0...v0.2.0

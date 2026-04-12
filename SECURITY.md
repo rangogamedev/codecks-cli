@@ -20,6 +20,8 @@ We will acknowledge receipt within 48 hours and provide updates as the issue is 
 This tool handles Codecks API tokens. Please follow these practices:
 
 - **Never commit `.env` files.** The `.gitignore` already protects this, but double-check before pushing.
+- **Never commit `.pm_store.db*` files.** These contain cached card data and are excluded by `.gitignore`.
+- **Never commit PM state files** (`.pm_claims.json`, `.pm_last_result.json`, `.pm_undo.json`). These contain session state and are excluded by `.gitignore`.
 - **Rotate tokens regularly.** Session tokens expire naturally. Report tokens can be rotated with `py codecks_api.py generate-token`.
 - **If a token is exposed:** Rotate it immediately. Session tokens expire with your browser session. Report tokens can be regenerated. Access keys should be rotated from Codecks settings.
 - **Report token in URL params** is the official Codecks API design. Treat report tokens as rotatable credentials.
@@ -28,7 +30,8 @@ This tool handles Codecks API tokens. Please follow these practices:
 
 | Version | Supported |
 |---------|-----------|
-| 0.4.x   | Yes       |
+| 0.5.x   | Yes       |
+| 0.4.x   | No        |
 
 ## Scope
 
