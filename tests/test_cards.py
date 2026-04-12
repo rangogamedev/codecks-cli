@@ -778,3 +778,57 @@ class TestActiveProjectFiltering:
         list_decks()
         q_str = str(mock_query.call_args[0][0])
         assert "isDeleted" in q_str
+
+
+class TestListActivityTrimming:
+    """list_activity strips orphaned entities and account key after limit trim."""
+
+    @patch("codecks_cli.cards.query")
+    def test_trims_orphaned_entities(self, mock_query):
+        """Only entities referenced by kept activities should remain."""
+        from codecks_cli.cards import list_activity
+
+        mock_query.return_value = {
+            "account": {"acc1": {"name": "Test"}},
+            "activity": {
+                "a1": {"type": "card_update", "card": "c1", "changer": "u1", "deck": "d1"},
+                "a2": {"type": "card_update", "card": "c2", "changer": "u1", "deck": "d1"},
+                "a3": {"type": "card_update", "card": "c3", "changer": "u2", "deck": "d2"},
+                "a4": {"type": "card_update", "card": "c4", "changer": "u2", "deck": "d2"},
+                "a5": {"type": "card_update", "card": "c5", "changer": "u3", "deck": "d3"},
+            },
+            "card": {f"c{i}": {"title": f"Card {i}"} for i in range(1, 6)},
+            "user": {f"u{i}": {"name": f"User {i}"} for i in range(1, 4)},
+            "deck": {f"d{i}": {"title": f"Deck {i}"} for i in range(1, 4)},
+        }
+
+        result = list_activity(limit=2)
+        # Only 2 activities kept
+        assert len(result["activity"]) == 2
+        # Only entities referenced by those 2 activities
+        kept_act_ids = set(result["activity"].keys())
+        assert kept_act_ids == {"a1", "a2"}
+        # c1, c2 referenced; c3-c5 should be trimmed
+        assert "c1" in result["card"]
+        assert "c2" in result["card"]
+        assert "c3" not in result["card"]
+        # u1 referenced; u2, u3 should be trimmed
+        assert "u1" in result["user"]
+        assert "u2" not in result["user"]
+
+    @patch("codecks_cli.cards.query")
+    def test_strips_account_key(self, mock_query):
+        """The bulky account entity should be removed from the response."""
+        from codecks_cli.cards import list_activity
+
+        mock_query.return_value = {
+            "account": {"acc1": {"name": "Test", "large_field": "x" * 10000}},
+            "activity": {"a1": {"type": "update", "card": "c1", "changer": "u1"}},
+            "card": {"c1": {"title": "Card"}},
+            "user": {"u1": {"name": "User"}},
+        }
+
+        result = list_activity(limit=5)
+        assert "account" not in result
+        assert "activity" in result
+        assert "card" in result

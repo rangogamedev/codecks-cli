@@ -40,9 +40,12 @@ mcp = FastMCP(
         "STARTUP: Call session_start() first — returns account, standup, "
         "preferences, project context (deck names, tags, lane/tag registries), "
         "playbook rules, and removed_tools migration guide in one call.\n"
-        "TOKEN EFFICIENCY: Use summary_only=True on pm_focus/standup for "
-        "counts-only (~2KB vs ~65KB). list_cards omits content by default. "
-        "Use quick_overview() for aggregate counts (no card details).\n"
+        "TOKEN EFFICIENCY: Default to summary_only=True on pm_focus/standup/team_dashboard "
+        "unless you need card details (~2KB vs ~65KB). "
+        "get_card(include_content=False) for metadata checks. "
+        "list_cards omits content by default. "
+        "quick_overview() for aggregate counts (no card details). "
+        "partition_cards caps at 10 cards/group by default (set max_cards_per_group=0 for all).\n"
         "SEARCH+UPDATE: Use find_and_update() to search cards then apply "
         "updates without manually copying UUIDs.\n"
         "TEAMS: Use claim_card/release_card to coordinate multi-agent work. "
@@ -207,7 +210,6 @@ from codecks_cli.mcp_server._tools_write import (
     remove_from_hand,
     scaffold_feature,
     split_features,
-    tick_all_checkboxes,
     tick_checkboxes,
     unarchive_card,
     undo,

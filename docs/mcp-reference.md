@@ -75,6 +75,9 @@ Minimize token consumption with these patterns:
 | `standup(summary_only=True)` | Counts only |
 | `quick_overview()` | Aggregate counts, no card details |
 | `get_card(include_content=False)` | Metadata only |
+| `partition_cards(max_cards_per_group=10)` | ~8KB vs ~88KB (default cap, priority-sorted) |
+| `team_dashboard(summary_only=True)` | ~2KB vs ~45KB (counts only, no card arrays) |
+| `list_activity(limit=5)` | ~2.8KB (strips orphaned entity refs + account key) |
 | `_card_summary()` internal format | 7-field compact representation |
 
 ## Snapshot Cache
@@ -152,8 +155,8 @@ For multi-agent workflows where multiple AI agents work on the same Codecks boar
 | Tool | Purpose |
 |------|---------|
 | `team_status()` | All agents and their active cards |
-| `team_dashboard(project?)` | Combined health + agent workload + unclaimed in-progress |
-| `partition_cards(by='lane'\|'owner', project?)` | Divide work with claim annotations |
+| `team_dashboard(project?, summary_only?)` | Combined health + agent workload + unclaimed in-progress. `summary_only=True` for counts only. |
+| `partition_cards(by, project?, max_cards_per_group?)` | Divide work with claim annotations. Default cap 10 cards/group (0=unlimited). Priority-sorted. |
 
 ### Lead + Worker Pattern
 

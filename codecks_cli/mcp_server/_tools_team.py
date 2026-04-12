@@ -13,6 +13,7 @@ from codecks_cli import CliError
 from codecks_cli.mcp_server._core import (
     _agent_sessions,
     _call,
+    _card_summary,
     _contract_error,
     _finalize_tool_result,
     _get_agent_for_card,
@@ -259,6 +260,7 @@ def _annotate_claims(cards: list[dict]) -> list[dict]:
 def partition_cards(
     by: Literal["lane", "owner"] = "lane",
     project: str | None = None,
+    max_cards_per_group: int = 10,
 ) -> dict:
     """Group active cards by lane tag or Codecks owner for team work distribution.
 
@@ -266,17 +268,49 @@ def partition_cards(
         by: Partition strategy — "lane" groups by lane tags (code, design, art, audio),
             "owner" groups by Codecks card owner.
         project: Optional project name filter.
+        max_cards_per_group: Cap cards per group (default 10, 0=unlimited).
+            Groups sorted by priority then recency. Includes total_in_group count.
 
     Returns:
         When by="lane": {ok, lanes: {code: {cards, claimed, unclaimed}, ...}, untagged: {...}}.
         When by="owner": {ok, owners: {name: {cards, claimed, unclaimed}, ...}, unassigned: {...}}.
     """
+    cap = max_cards_per_group if max_cards_per_group > 0 else None
     if by == "owner":
-        return partition_by_owner(project=project)
-    return partition_by_lane(project=project)
+        return partition_by_owner(project=project, cap=cap)
+    return partition_by_lane(project=project, cap=cap)
 
 
-def partition_by_lane(project: str | None = None) -> dict:
+def _cap_and_summarize(
+    cards: list[dict], cap: int | None
+) -> tuple[list[dict], int, bool]:
+    """Sort by priority+recency, cap, and summarize cards for partition output.
+
+    Returns (summarized_cards, total_in_group, truncated).
+    """
+    _PRIORITY_ORDER = {"a": 0, "b": 1, "c": 2}
+    sorted_cards = sorted(
+        cards,
+        key=lambda c: (
+            _PRIORITY_ORDER.get(c.get("priority"), 3),
+            "",  # stable secondary sort
+        ),
+    )
+    total = len(sorted_cards)
+    truncated = cap is not None and total > cap
+    if cap is not None:
+        sorted_cards = sorted_cards[:cap]
+    annotated = _annotate_claims(sorted_cards)
+    summarized = []
+    for c in annotated:
+        s = _sanitize_card(_card_summary(c))
+        if "claimed_by" in c:
+            s["claimed_by"] = c["claimed_by"]
+        summarized.append(s)
+    return summarized, total, truncated
+
+
+def partition_by_lane(project: str | None = None, cap: int | None = None) -> dict:
     """Group active cards by lane tag for team work distribution.
 
     Groups cards by their lane tags (code, design, art, audio).
@@ -285,16 +319,16 @@ def partition_by_lane(project: str | None = None) -> dict:
 
     Args:
         project: Optional project name filter.
+        cap: Max cards per group (None=unlimited).
 
     Returns:
-        {ok, lanes: {code: {cards, claimed, unclaimed}, ...}, untagged: {...}}.
+        {ok, lanes: {code: {cards, claimed, unclaimed, total_in_group, truncated}, ...}}.
     """
     from codecks_cli.tags import LANE_TAGS
 
     lane_tag_names = set(LANE_TAGS.keys())
     cards = _get_active_cards()
 
-    # Filter to non-done, non-archived cards
     cards = [
         c
         for c in cards
@@ -319,30 +353,29 @@ def partition_by_lane(project: str | None = None) -> dict:
 
     result_lanes = {}
     for lane_name, lane_cards in lanes.items():
-        annotated = _annotate_claims(lane_cards)
-        slimmed = [_sanitize_card(_slim_card_list(c)) for c in annotated]
-        claimed_count = sum(1 for c in annotated if "claimed_by" in c)
+        summarized, total, truncated = _cap_and_summarize(lane_cards, cap)
+        claimed_count = sum(1 for c in summarized if "claimed_by" in c)
         result_lanes[lane_name] = {
-            "cards": slimmed,
-            "count": len(slimmed),
+            "cards": summarized,
+            "count": len(summarized),
+            "total_in_group": total,
+            "truncated": truncated,
             "claimed": claimed_count,
-            "unclaimed": len(slimmed) - claimed_count,
+            "unclaimed": len(summarized) - claimed_count,
         }
 
     return _finalize_tool_result({"ok": True, "lanes": result_lanes, **_get_cache_metadata()})
 
 
-def partition_by_owner(project: str | None = None) -> dict:
+def partition_by_owner(project: str | None = None, cap: int | None = None) -> dict:
     """Group active cards by Codecks owner for team work distribution.
-
-    Shows card counts per owner with claim annotations. Useful for
-    the team lead to assign agents to owner-based workstreams.
 
     Args:
         project: Optional project name filter.
+        cap: Max cards per group (None=unlimited).
 
     Returns:
-        {ok, owners: {name: {cards, claimed, unclaimed}, ...}, unassigned: {...}}.
+        {ok, owners: {name: {cards, claimed, unclaimed, total_in_group, truncated}, ...}}.
     """
     cards = _get_active_cards()
 
@@ -366,36 +399,41 @@ def partition_by_owner(project: str | None = None) -> dict:
 
     result_owners = {}
     for owner_name, owner_cards in owners.items():
-        annotated = _annotate_claims(owner_cards)
-        slimmed = [_sanitize_card(_slim_card_list(c)) for c in annotated]
-        claimed_count = sum(1 for c in annotated if "claimed_by" in c)
+        summarized, total, truncated = _cap_and_summarize(owner_cards, cap)
+        claimed_count = sum(1 for c in summarized if "claimed_by" in c)
         result_owners[owner_name] = {
-            "cards": slimmed,
-            "count": len(slimmed),
+            "cards": summarized,
+            "count": len(summarized),
+            "total_in_group": total,
+            "truncated": truncated,
             "claimed": claimed_count,
-            "unclaimed": len(slimmed) - claimed_count,
+            "unclaimed": len(summarized) - claimed_count,
         }
 
-    annotated_unassigned = _annotate_claims(unassigned)
-    slimmed_unassigned = [_sanitize_card(_slim_card_list(c)) for c in annotated_unassigned]
-    claimed_unassigned = sum(1 for c in annotated_unassigned if "claimed_by" in c)
+    summarized_ua, total_ua, trunc_ua = _cap_and_summarize(unassigned, cap)
+    claimed_ua = sum(1 for c in summarized_ua if "claimed_by" in c)
 
     return _finalize_tool_result(
         {
             "ok": True,
             "owners": result_owners,
             "unassigned": {
-                "cards": slimmed_unassigned,
-                "count": len(slimmed_unassigned),
-                "claimed": claimed_unassigned,
-                "unclaimed": len(slimmed_unassigned) - claimed_unassigned,
+                "cards": summarized_ua,
+                "count": len(summarized_ua),
+                "total_in_group": total_ua,
+                "truncated": trunc_ua,
+                "claimed": claimed_ua,
+                "unclaimed": len(summarized_ua) - claimed_ua,
             },
             **_get_cache_metadata(),
         }
     )
 
 
-def team_dashboard(project: str | None = None) -> dict:
+def team_dashboard(
+    project: str | None = None,
+    summary_only: bool = False,
+) -> dict:
     """Combined team dashboard: health data + agent workload + claim map.
 
     Designed for the team lead to get a single-call overview of project
@@ -406,9 +444,11 @@ def team_dashboard(project: str | None = None) -> dict:
 
     Args:
         project: Optional project name filter.
+        summary_only: If True, return counts only — no card arrays (~2KB vs ~45KB).
 
     Returns:
         {ok, health, agents, unclaimed_in_progress, lane_distribution}.
+        With summary_only=True: counts only, no card arrays.
     """
     # Get pm_focus data for health metrics
     focus_kwargs: dict = {}
@@ -417,6 +457,12 @@ def team_dashboard(project: str | None = None) -> dict:
     health = _call("pm_focus", **focus_kwargs)
     if isinstance(health, dict) and health.get("ok") is False:
         health = {"error": "pm_focus unavailable"}
+    elif summary_only and isinstance(health, dict):
+        # Strip card arrays, keep only counts + deck_health
+        health = {
+            "counts": health.get("counts", {}),
+            "deck_health": health.get("deck_health", {}),
+        }
 
     # Agent sessions
     sessions = _get_all_sessions()
@@ -425,37 +471,41 @@ def team_dashboard(project: str | None = None) -> dict:
     for name, session in sessions.items():
         active = session.get("active_cards", [])
         all_claimed_ids.update(active)
-        agents.append(
-            {
-                "name": name,
-                "card_count": len(active),
-                "active_cards": active,
-                "last_seen": session.get("last_seen", ""),
-            }
-        )
+        agent_info: dict = {
+            "name": name,
+            "card_count": len(active),
+            "last_seen": session.get("last_seen", ""),
+        }
+        if not summary_only:
+            agent_info["active_cards"] = active
+        agents.append(agent_info)
 
     # Find unclaimed in-progress cards
     cards = _get_active_cards()
     if project:
         cards = [c for c in cards if (c.get("project_name", "").lower() == project.lower())]
+    unclaimed_count = 0
     unclaimed_in_progress = []
     for card in cards:
         if card.get("status") == "started" and card.get("id") not in all_claimed_ids:
-            slimmed = _sanitize_card(_slim_card_list(card))
-            unclaimed_in_progress.append(slimmed)
+            unclaimed_count += 1
+            if not summary_only:
+                unclaimed_in_progress.append(_sanitize_card(_card_summary(card)))
 
-    return _finalize_tool_result(
-        {
-            "ok": True,
-            "health": health,
-            "agents": agents,
-            "agent_count": len(agents),
-            "total_claimed": len(all_claimed_ids),
-            "unclaimed_in_progress": unclaimed_in_progress,
-            "unclaimed_in_progress_count": len(unclaimed_in_progress),
-            **_get_cache_metadata(),
-        }
-    )
+    result: dict = {
+        "ok": True,
+        "health": health,
+        "agents": agents,
+        "agent_count": len(agents),
+        "total_claimed": len(all_claimed_ids),
+        "unclaimed_in_progress_count": unclaimed_count,
+        **_get_cache_metadata(),
+    }
+    if not summary_only:
+        result["unclaimed_in_progress"] = unclaimed_in_progress
+    if summary_only:
+        result["summary_only"] = True
+    return _finalize_tool_result(result)
 
 
 # ---------------------------------------------------------------------------

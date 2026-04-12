@@ -467,6 +467,26 @@ def list_activity(limit=20):
     activities = result.get("activity", {})
     if len(activities) > limit:
         result["activity"] = dict(list(activities.items())[:limit])
+
+    # Strip the bulky account entity and orphaned entity refs.
+    # The API returns the full account object (~100K) plus entity refs for
+    # ALL activities. After trimming to `limit`, strip everything that isn't
+    # directly referenced by the kept activities.
+    result.pop("account", None)
+    kept_activities = result.get("activity", {})
+    if kept_activities:
+        referenced_ids: set[str] = set()
+        for act in kept_activities.values():
+            for ref_key in ("card", "changer", "deck"):
+                ref = act.get(ref_key)
+                if isinstance(ref, str):
+                    referenced_ids.add(ref)
+        for entity_key in ("card", "user", "deck"):
+            if entity_key in result:
+                result[entity_key] = {
+                    k: v for k, v in result[entity_key].items()
+                    if k in referenced_ids
+                }
     return result
 
 
@@ -843,7 +863,7 @@ def resolve_deck_id(deck_name, project=None):
     available = []
     for _key, deck in decks_result.get("deck", {}).items():
         # Skip decks outside the target project when scoped
-        if project_id is not None and deck.get("projectId") != project_id:
+        if project_id is not None and _get_field(deck, "project_id", "projectId") != project_id:
             continue
         title = deck.get("title", "")
         if title.lower() == deck_name.lower():

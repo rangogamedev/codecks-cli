@@ -809,6 +809,23 @@ class CodecksClient:
         """
         warnings = _guard_duplicate_title(title, allow_duplicate=allow_duplicate, context="card")
 
+        # Resolve deck/project BEFORE creating the card to avoid orphaned cards
+        placed_in = None
+        pre_resolved = {}
+        if deck:
+            pre_resolved["deckId"] = resolve_deck_id(deck, project=project)
+            placed_in = deck
+        elif project:
+            decks_result = list_decks()
+            project_deck_ids = get_project_deck_ids(decks_result, project)
+            if project_deck_ids:
+                pre_resolved["deckId"] = next(iter(project_deck_ids))
+                placed_in = project
+            else:
+                available = list(load_project_names().values())
+                hint = f" Available: {', '.join(available)}" if available else ""
+                raise CliError(f"[ERROR] Project '{project}' not found.{hint}")
+
         result = create_card(title, content, severity)
         card_id = result.get("cardId", "")
         if not card_id:
@@ -817,21 +834,7 @@ class CodecksClient:
                 f"'cardId'. Response: {str(result)[:200]}"
             )
 
-        placed_in = None
-        post_update = {}
-        if deck:
-            post_update["deckId"] = resolve_deck_id(deck, project=project)
-            placed_in = deck
-        elif project:
-            decks_result = list_decks()
-            project_deck_ids = get_project_deck_ids(decks_result, project)
-            if project_deck_ids:
-                post_update["deckId"] = next(iter(project_deck_ids))
-                placed_in = project
-            else:
-                available = list(load_project_names().values())
-                hint = f" Available: {', '.join(available)}" if available else ""
-                raise CliError(f"[ERROR] Project '{project}' not found.{hint}")
+        post_update = dict(pre_resolved)
         if doc:
             post_update["isDoc"] = True
         if parent:
