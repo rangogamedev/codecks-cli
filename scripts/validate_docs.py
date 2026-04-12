@@ -195,35 +195,40 @@ def check_test_counts() -> list[dict]:
 def check_mcp_counts() -> list[dict]:
     """Check MCP tool counts in doc files.
 
-    Only flags lines that claim to be the total tool count.
-    Skips sub-counts (category breakdowns, removed tools, historical notes).
+    Validates all "N tools" or "N MCP tools" references against the actual count.
+    Only skips lines that are clearly historical or sub-count descriptions:
+    - "N tools removed" — historical removal notes
+    - "N tools —" with N < 20 — inline sub-count descriptions (e.g., "6 tools — claim/release...")
     """
     actual = _actual_mcp_tool_count()
     issues = []
 
     doc_files = ["CLAUDE.md", "HANDOFF.md", "README.md"]
     pattern = r"(\d+)\s+(?:MCP\s+)?tools"
-    # Lines with these words are sub-counts or historical references, not total claims
-    skip_re = re.compile(r"removed|down from|tools —|tools \(|tool modules\)|category|^\s*\|", re.I)
 
     for fname in doc_files:
         path = ROOT / fname
         if not path.exists():
             continue
         for line_num, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if skip_re.search(line):
-                continue
             for m in re.finditer(pattern, line):
                 found = int(m.group(1))
-                if found != actual:
-                    issues.append(
-                        {
-                            "file": f"{fname}:{line_num}",
-                            "field": "mcp_tool_count",
-                            "expected": actual,
-                            "found": found,
-                        }
-                    )
+                if found == actual:
+                    continue
+                # Skip "N tools removed" — historical notes about past removals
+                if "removed" in line.lower():
+                    continue
+                # Skip small sub-counts in inline descriptions ("6 tools — ...")
+                if found < 20 and "—" in line:
+                    continue
+                issues.append(
+                    {
+                        "file": f"{fname}:{line_num}",
+                        "field": "mcp_tool_count",
+                        "expected": actual,
+                        "found": found,
+                    }
+                )
     return issues
 
 

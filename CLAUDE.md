@@ -24,7 +24,7 @@ codecks_api.py          <- entry point
 codecks_cli/
   cli.py                <- argparse, dispatch, --json/--agent flags
   commands.py           <- cmd_*() wrappers, --stdin batch support
-  client.py             <- CodecksClient: 25 core methods
+  client.py             <- CodecksClient: 33 public methods
   scaffolding.py        <- scaffold_feature(), split_features() + helpers
   cards.py              <- Card CRUD, hand, conversations, field selection
   api.py                <- HTTP layer
@@ -36,12 +36,16 @@ codecks_cli/
   tags.py               <- Tag registry (standalone)
   lanes.py              <- Lane registry (imports tags.py)
   _content.py           <- Content title/body parse, serialize, replace
+  _operations.py        <- Shared operations (CLI + MCP business logic)
+  _last_result.py       <- Last result caching
+  admin.py              <- Admin commands (project/deck/milestone/tag CRUD)
+  endpoint_cache.py     <- API endpoint discovery cache
   store.py              <- SQLite storage layer (.pm_store.db)
   formatters/           <- JSON/table/CSV output (7 sub-modules)
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- 52 MCP tools (package: _core, _security, _tools_*)
+  mcp_server/           <- 52 MCP tools (package: _core, _security, _repository, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.
