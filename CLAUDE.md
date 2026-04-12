@@ -7,13 +7,13 @@ Fast navigation map: `PROJECT_INDEX.md`.
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (960+ tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (1013+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
-- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14) + Codecov coverage
-- **Deps**: `uv sync --extra dev` (uv manages lock file). Fallback: `py -m pip install .[dev]`
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14) + Codecov + Docker smoke. All Actions pinned to commit hashes (Node.js 24).
+- **Deps**: `uv sync --extra dev --extra mcp` (uv manages lock file; mcp extra required for test collection). Fallback: `py -m pip install .[dev,mcp]`
 - **Lock file**: `uv.lock` — pinned dependency versions, committed to git
-- **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps + GitHub Actions
+- **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps, GitHub Actions, and Docker
 - **Version**: `VERSION` in `codecks_cli/config.py` + `pyproject.toml` (keep in sync). See `DEVELOPMENT.md` for release process.
 - **Tags**: annotated git tags (`v0.1.0`..`v0.5.0`). Create with `git tag -a vX.Y.Z -m "..."`
 
@@ -41,7 +41,7 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- ~49 MCP tools (package: _core, _security, _tools_*)
+  mcp_server/            <- ~35 MCP tools (package: _core, _security, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.
@@ -81,10 +81,11 @@ Use `/api-pitfalls` for API gotchas, known bugs, and paid-only restrictions.
 ## Docker (optional)
 Use `/docker` skill for commands, architecture, and troubleshooting.
 Quick: `./docker/build.sh` then `./docker/test.sh`, `./docker/quality.sh`, `./docker/cli.sh <cmd>`.
+Dockerfile pins Node.js 22 LTS via NodeSource. Non-root user with dropped capabilities.
 
 ## MCP Server
 - Run: `py -m codecks_cli.mcp_server` (stdio). Install: `py -m pip install .[mcp]`
-- ~49 tools (down from 55 in v0.4.0). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
+- ~35 tools (down from 55 in v0.4.0, consolidated in v0.5.0). Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope`
 - **Startup**: Call `session_start()` first — returns account, standup, preferences, project context (deck names, tag/lane registries), playbook rules, and `removed_tools` migration guide in one call.
 - **Token efficiency** (v0.5.0):
   - `list_cards` omits content by default (only fetched when `search` is set)
@@ -94,7 +95,7 @@ Quick: `./docker/build.sh` then `./docker/test.sh`, `./docker/quality.sh`, `./do
   - `_card_summary()` — 7-field compact card representation for dashboards
 - **Composite tools**: `find_and_update()` — search cards then update in 2 calls instead of 5+.
 - **Guardrails**: Doc-card guardrail blocks status/priority/effort on doc cards. UUID validation suggests full IDs from cache. Deck name resolution does fuzzy matching.
-- **Snapshot cache**: TTL: `CODECKS_CACHE_TTL_SECONDS` (default 300). Cache warming uses `include_content=False` for smaller payloads. Mutations use selective invalidation.
+- **Snapshot cache**: TTL: `CODECKS_CACHE_TTL_SECONDS` (default 60). Cache warming uses `include_content=False` for smaller payloads. Mutations use selective invalidation. Cross-process coherence via mtime checking.
 - **Error contract**: Errors include `retryable` (bool) and `error_code` (str) for agent decision-making.
 - **Agent teams**: 6 tools — claim/release/delegate cards, team status/dashboard, `partition_cards(by='lane'|'owner')`.
 - **Checkboxes**: `tick_checkboxes(all=True)` ticks all checkboxes at once.
@@ -132,7 +133,7 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 | mypy | `/websites/mypy_readthedocs_io_en` |
 
 ## MCP Servers (`.claude/settings.json`)
-- `codecks` — this project's own MCP server (~49 tools, Codecks API access)
+- `codecks` — this project's own MCP server (~35 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 
@@ -147,12 +148,22 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 
 ## Git & Versioning
 - Commit style: short present tense ("Add X", "Fix Y")
-- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`, `.pm_store.db`
+- Never commit `.env`, `.gdd_tokens.json`, `.gdd_cache.md`, `.pm_store.db*`, `.pm_claims.json`, `.pm_last_result.json`, `.pm_undo.json`
 - `.claude/` is gitignored
 - Run security-reviewer agent before pushing (public repo)
 - **Semver**: version in `config.py` + `pyproject.toml`. Tags: `v0.1.0`..`v0.5.0`
 - **Release**: update version in both files, move CHANGELOG unreleased to versioned section, tag, push. Use `/release` skill.
 - **Dev docs**: `DEVELOPMENT.md` (setup, architecture, release process), `CONTRIBUTING.md` (contributor guide)
+- **Branch protection**: PRs required for main, 1 reviewer, status checks must pass, stale reviews dismissed
+- **CODEOWNERS**: `@rangogamedev` required for all file changes
+- **Open source**: `CODE_OF_CONDUCT.md`, `.editorconfig`, CI/coverage badges in README
+
+## Security
+- **GitHub**: Secret scanning + push protection enabled. Dependabot security updates enabled.
+- **Supply chain**: All GitHub Actions pinned to commit hashes with version comments. CODEOWNERS requires maintainer review.
+- **Secrets**: `.env`, `.gdd_tokens.json`, `.pm_store.db*`, state files all in `.gitignore`. PR template includes "no secrets" checklist item.
+- **Docker**: Non-root user, `no-new-privileges`, all capabilities dropped, PID limit, tmpfs.
+- **Tokens**: Session tokens expire. Report tokens rotatable. See `SECURITY.md` for disclosure policy.
 
 ## Maintenance
 Use `/maintenance` skill for the full checklist. Key points:
@@ -160,3 +171,7 @@ Use `/maintenance` skill for the full checklist. Key points:
 - Keep `AGENTS.md` in sync when architecture changes
 - Add bug patterns to `/api-pitfalls` "Known Bugs Fixed"
 - Update project memory at `C:\Users\USER\.claude\projects\C--Users-USER-GitHubDirectory-codecks-cli\memory\MEMORY.md`
+- Keep GitHub Actions pinned hashes current — Dependabot auto-PRs when new versions are available
+- Keep Node.js version in Dockerfile current (22 LTS via NodeSource, review annually)
+- Keep `VERSION` in `config.py` and `pyproject.toml` in sync on every release
+- Run `uv lock --upgrade` periodically to refresh transitive dependency versions
