@@ -437,14 +437,15 @@ client.update_cards(card_ids=["abc-123"], status="done", priority="a")
 report = client.standup(days=3, project="My Project")
 ```
 
-### 27 methods
+### 33 methods
 
 | Category | Methods |
 |----------|---------|
-| **Read** | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_activity`, `pm_focus`, `standup` |
+| **Read** | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `prefetch_snapshot` |
 | **Hand** | `list_hand`, `add_to_hand`, `remove_from_hand` |
-| **Mutations** | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature` |
+| **Mutations** | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
+| **Admin** | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck_admin` |
 | **Raw API** | `raw_query`, `raw_dispatch` |
 
 All methods use keyword-only arguments and return flat `dict[str, Any]` for easy consumption by AI agents and scripts.
@@ -479,26 +480,32 @@ Add to your MCP settings:
 }
 ```
 
-### ~35 tools
+### 52 tools
 
-| Category | Tools |
-|----------|-------|
-| **Read** (10) | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup` |
-| **Hand** (3) | `list_hand`, `add_to_hand`, `remove_from_hand` |
-| **Mutations** (9) | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
-| **Comments** (5) | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
-| **PM Session** (3) | `get_pm_playbook`, `get_workflow_preferences`, `save_workflow_preferences` |
-| **Planning** (4) | `planning_init`, `planning_status`, `planning_update`, `planning_measure` |
-| **Feedback** (3) | `get_cli_feedback`, `save_cli_feedback`, `clear_cli_feedback` |
-| **Registry** (2) | `get_tag_registry`, `get_lane_registry` |
+| Category | Count | Tools |
+|----------|-------|-------|
+| **Read** | 11 | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
+| **Write** | 12 | `create_card`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
+| **Batch** | 5 | `batch_create_cards`, `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards`, `batch_update_bodies` |
+| **Hand** | 3 | `list_hand`, `add_to_hand`, `remove_from_hand` |
+| **Comments** | 5 | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
+| **Session** | 4 | `session_start`, `get_workflow_preferences`, `save_workflow_preferences`, `clear_workflow_preferences` |
+| **Team** | 6 | `claim_card`, `release_card`, `delegate_card`, `team_status`, `team_dashboard`, `partition_cards` |
+| **Admin** | 5 | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck` |
+| **Other** | 1 | `undo` |
 
 ### Features
 
-- **Cached client** — single `CodecksClient` instance reused across tool calls
+- **One-call startup** — `session_start()` returns account, standup, preferences, and project context in a single call
+- **Snapshot cache** — in-memory + disk cache with selective invalidation and stale warnings at 80% TTL
+- **Token diet** — `summary_only` mode on dashboards, content omitted from card lists by default
+- **Batch operations** — create, archive, delete, or update up to 20 cards per call
+- **Team coordination** — claim/release/delegate cards across multiple AI agents
+- **Rate limiting** — 40 req/5s Codecks API limit enforcement with headroom tracking
+- **Guardrails** — doc-card protection, UUID short-ID hints, deck fuzzy matching
+- **SQLite persistence** — `CardStore` with FTS5 full-text search for offline queries
 - **Literal types** — enum parameters (status, priority, sort) use Literal types for validation
-- **Pagination** — `list_cards` supports limit/offset (default 50 cards per page)
 - **Agent-friendly docstrings** — "when to use" hints, return shapes, and gotchas in every tool
-- **Token-efficient responses** — card lists omit descriptions, API metadata is stripped
 
 ## GDD Sync (Game Design Document)
 
@@ -678,7 +685,7 @@ codecks-cli/
   codecks_cli/
     cli.py                    ← argparse, build_parser(), main() dispatch
     commands.py               ← cmd_*() wrappers: argparse → CodecksClient → formatters
-    client.py                 ← CodecksClient: 27 public methods (the API surface)
+    client.py                 ← CodecksClient: 33 public methods (the API surface)
     cards.py                  ← Card CRUD, hand ops, conversations, enrichment
     api.py                    ← HTTP layer: query(), dispatch(), retries, token check
     config.py                 ← Env vars, tokens, constants, runtime state
