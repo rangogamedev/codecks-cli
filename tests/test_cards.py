@@ -8,6 +8,7 @@ from codecks_cli import config
 from codecks_cli.cards import (
     _build_project_map,
     _filter_cards,
+    _get_active_project_ids,
     _get_field,
     _load_env_mapping,
     _parse_date,
@@ -667,3 +668,100 @@ class TestGetCardMinimal:
         q_str = str(q_arg)
         # Normal should include checkboxStats
         assert "checkboxStats" in q_str
+
+
+# ---------------------------------------------------------------------------
+# _get_active_project_ids / list_decks filtering
+# ---------------------------------------------------------------------------
+
+
+class TestActiveProjectFiltering:
+    def setup_method(self):
+        config._cache.clear()
+
+    @patch("codecks_cli.cards._try_call")
+    def test_get_active_project_ids_returns_set(self, mock_try_call):
+        mock_try_call.return_value = {
+            "project": {
+                "pk1": {"id": "active-p1"},
+                "pk2": {"id": "active-p2"},
+            }
+        }
+        ids = _get_active_project_ids()
+        assert ids == {"active-p1", "active-p2"}
+
+    @patch("codecks_cli.cards._try_call")
+    def test_get_active_project_ids_cached(self, mock_try_call):
+        mock_try_call.return_value = {"project": {"pk1": {"id": "active-p1"}}}
+        _get_active_project_ids()
+        _get_active_project_ids()
+        assert mock_try_call.call_count == 1
+
+    @patch("codecks_cli.cards._try_call")
+    def test_get_active_project_ids_empty_response(self, mock_try_call):
+        mock_try_call.return_value = {}
+        ids = _get_active_project_ids()
+        assert ids == set()
+
+    @patch("codecks_cli.cards._try_call")
+    def test_get_active_project_ids_api_failure(self, mock_try_call):
+        mock_try_call.return_value = None
+        ids = _get_active_project_ids()
+        assert ids == set()
+
+    @patch("codecks_cli.cards._get_active_project_ids")
+    @patch("codecks_cli.cards.query")
+    def test_list_decks_filters_deleted_decks(self, mock_query, mock_active):
+        mock_active.return_value = {"p1"}
+        mock_query.return_value = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Active", "projectId": "p1", "isDeleted": False},
+                "dk2": {"id": "d2", "title": "Deleted", "projectId": "p1", "isDeleted": True},
+            }
+        }
+        from codecks_cli.cards import list_decks
+
+        result = list_decks()
+        assert set(result["deck"].keys()) == {"dk1"}
+
+    @patch("codecks_cli.cards._get_active_project_ids")
+    @patch("codecks_cli.cards.query")
+    def test_list_decks_filters_non_active_project_decks(self, mock_query, mock_active):
+        mock_active.return_value = {"live-proj"}
+        mock_query.return_value = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Active", "projectId": "live-proj", "isDeleted": False},
+                "dk2": {"id": "d2", "title": "DeletedProjDeck", "projectId": "deleted-proj", "isDeleted": False},
+            }
+        }
+        from codecks_cli.cards import list_decks
+
+        result = list_decks()
+        assert set(result["deck"].keys()) == {"dk1"}
+
+    @patch("codecks_cli.cards._get_active_project_ids")
+    @patch("codecks_cli.cards.query")
+    def test_list_decks_includes_all_when_active_pids_empty(self, mock_query, mock_active):
+        # If active project query fails, fall back to returning all non-deleted decks
+        mock_active.return_value = set()
+        mock_query.return_value = {
+            "deck": {
+                "dk1": {"id": "d1", "title": "Active", "projectId": "p1", "isDeleted": False},
+                "dk2": {"id": "d2", "title": "Also Active", "projectId": "p2", "isDeleted": False},
+            }
+        }
+        from codecks_cli.cards import list_decks
+
+        result = list_decks()
+        assert set(result["deck"].keys()) == {"dk1", "dk2"}
+
+    @patch("codecks_cli.cards._get_active_project_ids")
+    @patch("codecks_cli.cards.query")
+    def test_list_decks_includes_isDeleted_field_in_query(self, mock_query, mock_active):
+        mock_active.return_value = set()
+        mock_query.return_value = {"deck": {}}
+        from codecks_cli.cards import list_decks
+
+        list_decks()
+        q_str = str(mock_query.call_args[0][0])
+        assert "isDeleted" in q_str

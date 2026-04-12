@@ -76,12 +76,41 @@ def get_account():
     return query(q)
 
 
+def _get_active_project_ids():
+    """Return a set of project IDs that are currently active (cached per invocation).
+    Uses account.projects (active only) as a whitelist — excludes archived and deleted projects."""
+    if "active_project_ids" in config._cache:
+        return config._cache["active_project_ids"]
+    result = _try_call(
+        query, {"_root": [{"account": [{"projects": ["id"]}]}]}
+    )
+    ids: set[str] = set()
+    if result:
+        for _key, proj in result.get("project", {}).items():
+            pid = proj.get("id")
+            if pid:
+                ids.add(pid)
+    config._cache["active_project_ids"] = ids
+    return ids
+
+
 def list_decks():
     if "decks" in config._cache:
         return config._cache["decks"]
-    q = {"_root": [{"account": [{"decks": ["title", "id", "projectId"]}]}]}
+    q = {"_root": [{"account": [{"decks": ["title", "id", "projectId", "isDeleted"]}]}]}
     result = query(q)
     warn_if_empty(result, "deck")
+
+    # Whitelist: only keep decks from active projects (excludes archived and deleted projects).
+    # Falls back gracefully if the projects query fails — returns all non-deleted decks.
+    active_pids = _get_active_project_ids()
+    result["deck"] = {
+        k: v
+        for k, v in result.get("deck", {}).items()
+        if not v.get("isDeleted")
+        and (not active_pids or _get_field(v, "project_id", "projectId") in active_pids)
+    }
+
     config._cache["decks"] = result
     return result
 

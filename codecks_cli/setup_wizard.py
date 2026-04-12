@@ -7,6 +7,7 @@ from codecks_cli import config
 from codecks_cli._utils import _get_field
 from codecks_cli.api import _mask_token, _try_call, generate_report_token, query
 from codecks_cli.cards import (
+    _get_active_project_ids,
     get_account,
     list_cards,
     list_decks,
@@ -34,6 +35,11 @@ def _setup_discover_projects():
             if pid not in project_decks:
                 project_decks[pid] = []
             project_decks[pid].append(deck.get("title", ""))
+
+    # Only include active projects (excludes deleted and archived projects)
+    active = _get_active_project_ids()
+    if active:
+        project_decks = {pid: titles for pid, titles in project_decks.items() if pid in active}
 
     if not project_decks:
         print("  No projects found.")
