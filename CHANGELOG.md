@@ -7,15 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-12
+
 ### Added
 - `partition_cards` `max_cards_per_group` parameter (default 10, 0=unlimited) — caps cards per partition group, priority-sorted, with `total_in_group` and `truncated` metadata
 - `team_dashboard` `summary_only` parameter — returns counts only (~2KB vs ~45KB)
-- 25 new tests: batch operations (create/delete/archive/unarchive), `tick_checkboxes` both checkbox formats, `find_and_update` dry_run, partition field assertions, team_dashboard summary_only, list_activity entity trimming
+- 25 new tests: batch operations, `tick_checkboxes` both checkbox formats, `find_and_update` dry_run, partition fields, team_dashboard summary_only, list_activity entity trimming
 - `validate_docs.py --fix` flag auto-repairs stale counts in doc files
-- `validate_docs.py` now scans ALL `.md` files (not just hardcoded subset) for count mismatches
-- New checks in `validate_docs.py`: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
+- `validate_docs.py` scans ALL `.md` files for count mismatches — 8 checks total (up from 6)
 - `docs/cli-reference.md` — full CLI command reference (extracted from README)
-- `docs/mcp-reference.md` — full MCP tool inventory and agent patterns (consolidated from README, AGENTS.md, CLAUDE.md)
+- `docs/mcp-reference.md` — full MCP tool inventory and agent patterns
 
 ### Changed
 - `tick_checkboxes` MCP tool delegates to `_operations.py` (removed 180 lines of duplicated regex logic)
@@ -23,36 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `list_activity` strips orphaned entity references and account key after limit trim (224KB → 2.8KB for limit=5)
 - `create_card` resolves deck/project BEFORE creating card (prevents orphaned cards on resolution failure)
 - MCP server instructions expanded with token efficiency defaults for `partition_cards`, `team_dashboard`, `get_card`
-- Documentation restructured: each fact now lives in one canonical location
-  - Architecture/file tree → DEVELOPMENT.md only
-  - Token architecture, API pitfalls, known bugs → AGENTS.md only
-  - Full CLI reference → docs/cli-reference.md
-  - Full MCP reference → docs/mcp-reference.md
-  - Claude-specific config → CLAUDE.md only
-- README.md condensed from ~740 lines to ~140 lines (landing page, not reference manual)
-- CLAUDE.md trimmed to Claude-only content with cross-references
-- AGENTS.md: Known Bugs reformatted as scannable table, API Pitfalls reorganized with sub-headers
+- Documentation restructured: each fact in one canonical location (README condensed to ~140 lines, references split to docs/)
+- Minimum Python version raised from 3.10 to 3.12; CI matrix reduced to 2 versions (3.12, 3.14)
+- `from __future__ import annotations` removed from all files (no longer needed with 3.12+ floor)
+- Dependency versions bumped: pytest >=9.0.3, pytest-cov >=7.1.0, ruff >=0.15.10, mcp >=1.27.0, setuptools >=82.0.1
+- mypy expanded to all 41 source modules (up from 15)
+- Return type annotations added to core MCP dispatcher; parameter types to config helpers
+
+### Fixed
+- `resolve_deck_id` project filter: used `deck.get("projectId")` but API returns `project_id` (snake_case) — deck resolution with `project=` always failed
+- `find_and_update` Phase 2 passed `dry_run` to `CodecksClient.update_cards()` which doesn't accept it — now handles dry_run locally
+- Checkbox regex in 5 locations: `\[\]` only matched `- []`, not `- [ ]` (standard Markdown) — changed to `\[ ?\]`
+- `tick_checkboxes` shadowing builtin `all()` with parameter name (latent bug)
+- `CardRepository.update_card` null status handling in status index
+- `rich` transitive dependency updated 14.3.4 → 15.0.0
 
 ### Removed
 - `HANDOFF.md` — stale session handoff doc, redundant with DEVELOPMENT.md + CHANGELOG
 - `PROJECT_INDEX.md` — navigation map, redundant with CLAUDE.md architecture section
-
-### Changed
-- Minimum Python version raised from 3.10 to 3.12
-- CI matrix reduced from 3 versions (3.10, 3.12, 3.14) to 2 (3.12, 3.14)
-- Remove `from __future__ import annotations` from all files (no longer needed with 3.12+ floor)
-- Bump minimum dependency versions: pytest >=9.0.3, pytest-cov >=7.1.0, ruff >=0.15.10, mcp >=1.27.0, setuptools >=82.0.1
-- Expand mypy type checking to all source modules (41 files, up from 15) — covers MCP server, config, CLI, store, GDD, admin, operations
-- Add return type annotations to core MCP dispatcher (`_call`, `_contract_error`, `_ensure_contract_dict`, `_finalize_tool_result`)
-- Add parameter type annotations to config helpers (`_env_int`, `_env_float`, `_env_bool`)
-- Fix `tick_checkboxes` shadowing builtin `all()` with parameter name (latent bug)
-- Fix `CardRepository.update_card` null status handling in status index
-
-### Fixed
-- `resolve_deck_id` project filter: used `deck.get("projectId")` but API returns `project_id` (snake_case). Deck resolution with `project=` always failed.
-- `find_and_update` Phase 2 passed `dry_run` to `CodecksClient.update_cards()` which doesn't accept it. Now handles dry_run locally.
-- Checkbox regex in 5 locations: `\[\]` only matched `- []`, not `- [ ]` (standard Markdown). Changed to `\[ ?\]`.
-- Updated `rich` transitive dependency 14.3.4 → 15.0.0
 
 ## [0.5.0] - 2026-04-12
 
