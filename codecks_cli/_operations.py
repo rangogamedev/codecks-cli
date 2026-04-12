@@ -311,7 +311,8 @@ def _load_claims() -> dict:
     claims_path = os.path.join(_PROJECT_ROOT, ".pm_claims.json")
     try:
         with open(claims_path, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        return dict(data) if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 

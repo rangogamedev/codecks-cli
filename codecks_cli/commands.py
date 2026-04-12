@@ -170,7 +170,7 @@ def cmd_cards(ns):
         # Save card IDs for @last reference
         from codecks_cli._last_result import save_last_result
 
-        card_ids = [c.get("id") for c in paged_cards if isinstance(c, dict) and c.get("id")]
+        card_ids = [str(c["id"]) for c in paged_cards if isinstance(c, dict) and c.get("id")]
         save_last_result(card_ids)
 
         # --ids-only: output UUIDs only, one per line (pipe-friendly for xargs)

@@ -35,7 +35,7 @@ def _get_account_id() -> str:
     """Get the account UUID via the Codecks query API."""
     result = api.query({"_root": [{"account": ["id"]}]})
     for _key, acc in result.get("account", {}).items():
-        return acc["id"]
+        return str(acc["id"])
     raise CliError("[ERROR] Could not resolve account ID.")
 
 
@@ -44,7 +44,7 @@ def _get_user_id() -> str:
     result = api.query({"_root": [{"account": [{"roles": ["userId", {"user": ["id", "name"]}]}]}]})
     # Return first user (account owner / primary user)
     for _key, user in result.get("user", {}).items():
-        return user["id"]
+        return str(user["id"])
     raise CliError("[ERROR] Could not resolve user ID.")
 
 
@@ -60,7 +60,7 @@ def _get_primary_project_id() -> str:
         raise CliError("[ERROR] No projects found. Cannot resolve project ID.")
 
     best_pid = max(projects, key=lambda pid: projects[pid].get("deck_count", 0))
-    return best_pid
+    return str(best_pid)
 
 
 def _resolve_project_id(project_name: str | None = None) -> str:
@@ -80,14 +80,14 @@ def _resolve_project_id(project_name: str | None = None) -> str:
     projects = list_projects()
     for pid, info in projects.items():
         if info.get("name", "").lower() == project_name.lower():
-            return pid
+            return str(pid)
 
     # Fallback: check .env mapping directly (handles zero-deck projects
     # that may not appear in list_projects if cache is stale)
     project_names = load_project_names()
     for pid, pname in project_names.items():
         if pname.lower() == project_name.lower():
-            return pid
+            return str(pid)
 
     raise CliError(
         f"[ERROR] Project '{project_name}' not found. "
@@ -104,7 +104,7 @@ def _resolve_deck_id(deck_name: str, project: str | None = None) -> str:
     """
     from codecks_cli.cards import resolve_deck_id
 
-    return resolve_deck_id(deck_name, project=project)
+    return str(resolve_deck_id(deck_name, project=project))
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ def create_deck(name: str, project: str | None = None) -> dict[str, Any]:
         # Seed the deck into cache so immediate resolve_deck_id() calls find it
         # without waiting for the API to be consistent
         cached = config._cache.get("decks")
-        if cached and isinstance(cached.get("deck"), dict):
+        if isinstance(cached, dict) and isinstance(cached.get("deck"), dict):
             cached["deck"][deck_id] = {
                 "id": deck_id,
                 "title": name,

@@ -25,7 +25,7 @@ def load_last_result() -> list[str]:
     try:
         with open(_LAST_RESULT_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("card_ids", [])
+        return list(data.get("card_ids", []))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return []
 

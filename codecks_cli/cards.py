@@ -159,7 +159,7 @@ def list_cards(
             card_fields = list(_FIELDS_FULL)
         else:
             card_fields = list(_FIELDS_LIST)
-    card_query = {"visibility": "archived" if archived else "default"}
+    card_query: dict[str, object] = {"visibility": "archived" if archived else "default"}
     # NOTE: Codecks GraphQL API does not support server-side limit/offset
     # on card queries. All pagination is client-side. Tested 2026-03.
 
