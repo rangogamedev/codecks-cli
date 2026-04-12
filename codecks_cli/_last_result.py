@@ -1,7 +1,5 @@
 """Persistence for @last reference — saves card IDs from the most recent command result."""
 
-from __future__ import annotations
-
 import json
 import os
 

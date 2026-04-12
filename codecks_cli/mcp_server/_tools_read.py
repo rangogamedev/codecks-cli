@@ -1,7 +1,6 @@
 """Read tools: queries and dashboards (10 tools). Cache-aware."""
 
-from __future__ import annotations
-
+from datetime import UTC
 from typing import Literal
 
 from codecks_cli import CliError
@@ -252,9 +251,9 @@ def _filter_cached_cards(
             result = [c for c in result if c.get("id") in hand_ids]
 
     if stale_days is not None:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+        cutoff = datetime.now(UTC) - timedelta(days=stale_days)
         cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
         result = [
             c for c in result if (c.get("updated_at") or c.get("updatedAt") or "") < cutoff_str
@@ -654,9 +653,9 @@ def quick_overview(project: str | None = None) -> dict:
     estimated_count = 0
     stale_count = 0
 
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    cutoff = datetime.now(UTC) - timedelta(days=14)
     cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
 
     for card in cards:

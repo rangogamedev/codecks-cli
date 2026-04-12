@@ -6,14 +6,12 @@ Usage:
     py scripts/project_meta.py --field tests.count  # single value
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -157,7 +155,7 @@ def collect_meta() -> dict:
         "source": _source_info(),
         "skills": _skills_info(),
         "agents": _agents_info(),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }
 
 

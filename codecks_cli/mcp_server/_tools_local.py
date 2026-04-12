@@ -1,11 +1,9 @@
 """Local tools: PM session, feedback, planning, registry, cache (15 tools, no API calls)."""
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -103,7 +101,7 @@ def save_workflow_preferences(observations: list[str], agent_name: str | None = 
         # Global: replace observations, keep agent_prefs intact
         existing["observations"] = observations
 
-    existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+    existing["updated_at"] = datetime.now(UTC).isoformat()
 
     try:
         fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_PREFS_PATH), suffix=".tmp")
@@ -168,7 +166,7 @@ def save_cli_feedback(
 
     # Build the feedback item
     item: dict = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "category": category,
         "message": message,
     }
@@ -195,7 +193,7 @@ def save_cli_feedback(
     # Atomic write
     out_data = {
         "items": items,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
     try:
         fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_FEEDBACK_PATH), suffix=".tmp")
@@ -282,7 +280,7 @@ def clear_cli_feedback(
     # Atomic write
     out_data = {
         "items": remaining,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
     try:
         fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(_FEEDBACK_PATH), suffix=".tmp")

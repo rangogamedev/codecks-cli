@@ -9,8 +9,6 @@ Public functions receive a CodecksClient instance where needed (split_features)
 to avoid circular imports. scaffold_feature uses cards-layer functions directly.
 """
 
-from __future__ import annotations
-
 from difflib import SequenceMatcher
 from typing import Any
 

@@ -4,12 +4,10 @@ Replaces JSON-file persistence (.pm_cache.json, .pm_claims.json) with indexed
 SQLite for faster queries, FTS search, and persistence across restarts.
 """
 
-from __future__ import annotations
-
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class CardStore:
@@ -133,7 +131,7 @@ class CardStore:
         """Bulk upsert cards using INSERT OR REPLACE."""
         if not cards:
             return
-        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         rows = []
         for c in cards:
             tags_val = c.get("tags")
@@ -278,7 +276,7 @@ class CardStore:
 
     def set_meta(self, key: str, value: str) -> None:
         """Upsert a key-value pair into the meta table."""
-        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value, updated_at) VALUES (?, ?, ?)",
@@ -298,7 +296,7 @@ class CardStore:
 
     def upsert_claim(self, card_id: str, agent_name: str, reason: str = "") -> None:
         """Upsert a card claim for an agent."""
-        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO claims (card_id, agent_name, claimed_at, reason) "

@@ -94,7 +94,7 @@ Tests mock at module boundaries — no live API calls are made.
 - **Dev-only packages must stay optional.** Tooling belongs in `[project.optional-dependencies].dev`.
 - **Paid-only features (do NOT use):** Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beast Cards, Vision Board Smart Nodes.
 - **Doc cards** cannot have `--status`, `--priority`, or `--effort` set (API returns 400).
-- **Python command:** Always use `py` (never `python` or `python3`). Requires 3.10+.
+- **Python command:** Always use `py` (never `python` or `python3`). Requires 3.12+.
 
 See `DEVELOPMENT.md` for full architecture details, module layout, and release process.
 

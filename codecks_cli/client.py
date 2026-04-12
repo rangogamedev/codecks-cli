@@ -7,10 +7,8 @@ Single entry point for programmatic use and future MCP server integration.
 All methods return flat dicts suitable for JSON serialization.
 """
 
-from __future__ import annotations
-
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # TypedDict return types live in codecks_cli.types for documentation.
 # Method signatures use plain dict[str, Any] for mypy compatibility.
@@ -565,7 +563,7 @@ class CodecksClient:
         cards = enrich_cards(result.get("card", {}), result.get("user"))
         hand_ids = extract_hand_card_ids(list_hand())
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+        cutoff = datetime.now(UTC) - timedelta(days=stale_days)
 
         started = []
         blocked = []
@@ -660,7 +658,7 @@ class CodecksClient:
         Returns:
             dict with recently_done, in_progress, blocked, hand.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         result = list_cards(project_filter=project, owner_filter=owner)
         cards = enrich_cards(result.get("card", {}), result.get("user"))

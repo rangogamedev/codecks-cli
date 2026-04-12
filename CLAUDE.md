@@ -5,12 +5,12 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 Fast navigation map: `PROJECT_INDEX.md`.
 
 ## Environment
-- **Python**: `py` (never `python`/`python3`). Requires 3.10+.
+- **Python**: `py` (never `python`/`python3`). Requires 3.12+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
 - **Test**: `pwsh -File scripts/run-tests.ps1` (1013+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
-- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14) + Codecov + Docker smoke. All Actions pinned to commit hashes (Node.js 24).
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.12, 3.14) + Codecov + Docker smoke. All Actions pinned to commit hashes (Node.js 24).
 - **Deps**: `uv sync --extra dev --extra mcp` (uv manages lock file; mcp extra required for test collection). Fallback: `py -m pip install .[dev,mcp]`
 - **Lock file**: `uv.lock` — pinned dependency versions, committed to git
 - **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps, GitHub Actions, and Docker

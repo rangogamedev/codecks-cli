@@ -7,8 +7,6 @@ and cache them for future direct API use.
 Requires: pip install playwright && playwright install chromium
 """
 
-from __future__ import annotations
-
 import json
 import os
 from typing import Any

@@ -5,8 +5,6 @@ Usage:
     py scripts/validate_docs.py --fix-list   # show what needs fixing
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re

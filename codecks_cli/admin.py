@@ -19,8 +19,6 @@ Discovered endpoints and their field names:
   - cards/update:       {id, ...}  (NOTE: uses 'id', not 'cardId')
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from codecks_cli import api, config

@@ -5,7 +5,7 @@ These helpers have no business logic and no side effects.
 They are used across cards.py, client.py, formatters.py, and setup_wizard.py.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from codecks_cli.exceptions import CliError
 
@@ -37,7 +37,7 @@ def _parse_multi_value(raw, valid_set, field_name):
 def _parse_date(date_str):
     """Parse a YYYY-MM-DD date string into a datetime. Raises CliError on bad format."""
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
     except ValueError as e:
         raise CliError(f"[ERROR] Invalid date '{date_str}'. Use YYYY-MM-DD format.") from e
 

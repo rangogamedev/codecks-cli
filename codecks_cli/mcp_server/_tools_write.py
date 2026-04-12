@@ -1,7 +1,5 @@
 """Write tools: mutations, hand, and scaffolding (12 tools)."""
 
-from __future__ import annotations
-
 import builtins
 from typing import Literal
 

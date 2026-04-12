@@ -8,8 +8,6 @@ All public functions accept a target_dir Path and return dicts compatible
 with _finalize_tool_result in the MCP server.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from datetime import date, datetime

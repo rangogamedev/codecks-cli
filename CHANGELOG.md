@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Minimum Python version raised from 3.10 to 3.12
+- CI matrix reduced from 3 versions (3.10, 3.12, 3.14) to 2 (3.12, 3.14)
+- Remove `from __future__ import annotations` from all files (no longer needed with 3.12+ floor)
 - Bump minimum dependency versions: pytest >=9.0.3, pytest-cov >=7.1.0, ruff >=0.15.10, mcp >=1.27.0, setuptools >=82.0.1
 - Expand mypy type checking to all source modules (41 files, up from 15) — covers MCP server, config, CLI, store, GDD, admin, operations
 - Add return type annotations to core MCP dispatcher (`_call`, `_contract_error`, `_ensure_contract_dict`, `_finalize_tool_result`)

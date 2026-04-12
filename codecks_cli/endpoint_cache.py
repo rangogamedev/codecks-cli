@@ -4,11 +4,9 @@ Stores discovered endpoints in ~/.codecks/dispatch_cache.json so that
 subsequent calls can skip Playwright and use direct HTTP dispatch.
 """
 
-from __future__ import annotations
-
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def cache_path() -> str:
@@ -73,7 +71,7 @@ def save_endpoint(
 ) -> None:
     """Save or update a discovered endpoint in the cache."""
     cache = _load_cache()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     existing = cache.get(operation, {})
     verify_count = existing.get("verify_count", 0) if isinstance(existing, dict) else 0
     cache[operation] = {
@@ -94,7 +92,7 @@ def touch(operation: str) -> None:
     entry = cache.get(operation)
     if not isinstance(entry, dict):
         return
-    entry["last_verified"] = datetime.now(timezone.utc).isoformat()
+    entry["last_verified"] = datetime.now(UTC).isoformat()
     entry["verify_count"] = entry.get("verify_count", 0) + 1
     _save_cache(cache)
 

@@ -3,8 +3,6 @@ Google Docs integration for codecks-cli.
 OAuth2 flow, GDD fetch/parse, and sync to Codecks cards.
 """
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import http.server

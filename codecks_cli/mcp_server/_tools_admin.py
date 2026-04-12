@@ -4,8 +4,6 @@ Uses direct Codecks dispatch API endpoints. All calls are offloaded to a worker
 thread via asyncio.to_thread() since the MCP server runs in an asyncio event loop.
 """
 
-from __future__ import annotations
-
 import asyncio
 
 from codecks_cli import CliError

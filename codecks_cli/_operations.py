@@ -6,13 +6,11 @@ and mcp_server/_tools_*.py tools should call these instead of
 duplicating logic.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from codecks_cli.client import CodecksClient
 from codecks_cli.config import _PROJECT_ROOT
@@ -177,7 +175,7 @@ def quick_overview(client: CodecksClient, *, project: str | None = None) -> dict
     estimated_count = 0
     stale_count = 0
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    cutoff = datetime.now(UTC) - timedelta(days=14)
     cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
 
     for card in cards:
@@ -358,7 +356,7 @@ def claim_card(card_id: str, agent_name: str, *, reason: str | None = None) -> d
 
     claims[card_id] = {
         "agent": agent_name,
-        "claimed_at": datetime.now(timezone.utc).isoformat(),
+        "claimed_at": datetime.now(UTC).isoformat(),
         "reason": reason,
     }
     _save_claims(claims)
@@ -394,7 +392,7 @@ def release_card(card_id: str, agent_name: str, *, summary: str | None = None) -
         "ok": True,
         "card_id": card_id,
         "agent_name": agent_name,
-        "released_at": datetime.now(timezone.utc).isoformat(),
+        "released_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -464,7 +462,7 @@ def save_feedback(
         pass
 
     item: dict = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "category": category,
         "message": message,
     }
@@ -477,7 +475,7 @@ def save_feedback(
     if len(items) > 200:
         items = items[-200:]
 
-    out_data = {"items": items, "updated_at": datetime.now(timezone.utc).isoformat()}
+    out_data = {"items": items, "updated_at": datetime.now(UTC).isoformat()}
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(feedback_path), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -519,7 +517,7 @@ def snapshot_before_mutation(client: CodecksClient, card_ids: list[str]) -> None
     if not cards:
         return
     data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "cards": cards,
     }
     try:

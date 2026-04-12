@@ -8,12 +8,12 @@ Python CLI + library for managing Codecks project cards. Zero runtime dependenci
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 
 ## Environment
-- **Python**: `py` (never `python`/`python3`). Requires 3.10+.
+- **Python**: `py` (never `python`/`python3`). Requires 3.12+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
 - **Test**: `pwsh -File scripts/run-tests.ps1` (1000+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
-- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
+- **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
 - **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.5.0)

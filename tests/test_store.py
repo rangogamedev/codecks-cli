@@ -3,8 +3,6 @@
 All tests use :memory: SQLite — no disk I/O.
 """
 
-from __future__ import annotations
-
 import threading
 
 import pytest

@@ -19,8 +19,6 @@ Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
 """
 
-from __future__ import annotations
-
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli.mcp_server import (

@@ -1,7 +1,5 @@
 """Tests for MCP server snapshot cache (warm_cache, cache_status, cached reads, invalidation)."""
 
-from __future__ import annotations
-
 import json
 import time
 from unittest.mock import MagicMock, patch

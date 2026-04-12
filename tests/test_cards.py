@@ -1,6 +1,6 @@
 """Tests for cards.py — env mappings, filters, enrichment, stats, resolvers."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -249,9 +249,7 @@ class TestDateFiltering:
     def test_stale_days_filter(self, mock_query):
         """--stale 30 should find cards not updated in 30 days."""
         # Use a dynamic "recent" date that is always within the last 30 days
-        recent_date = (datetime.now(timezone.utc) - timedelta(days=5)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        recent_date = (datetime.now(UTC) - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
         mock_query.return_value = {
             "card": {
                 "old": {"status": "started", "lastUpdatedAt": "2025-01-01T00:00:00Z"},

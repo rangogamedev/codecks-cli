@@ -10,7 +10,7 @@ handle argparse → keyword args, format selection, and formatter dispatch.
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from codecks_cli import config
 from codecks_cli.api import _mask_token, _safe_json_parse, dispatch, generate_report_token, query
@@ -498,7 +498,7 @@ def cmd_cache(ns):
     # Default: fetch fresh data and write cache file
     client = _get_client()
     snapshot = client.prefetch_snapshot()
-    snapshot["fetched_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    snapshot["fetched_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Atomic write (same pattern as save_env_value)
     tmp = config.CACHE_PATH + ".tmp"

@@ -5,8 +5,6 @@ Adding a new tag means appending one TagDefinition to TAGS and
 optionally updating LANE_TAGS.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 

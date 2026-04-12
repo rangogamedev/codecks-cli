@@ -6,7 +6,7 @@ for codecks-cli.
 import json
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from codecks_cli import config
 from codecks_cli._utils import (  # noqa: F401 — re-exported for existing consumers
@@ -277,7 +277,7 @@ def list_cards(
     # Client-side date filters
     # Cards with missing timestamps are excluded from all date-filtered results.
     if stale_days is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+        cutoff = datetime.now(UTC) - timedelta(days=stale_days)
 
         def _stale_pred(k, c):
             ts = _parse_iso_timestamp(_get_field(c, "last_updated_at", "lastUpdatedAt"))

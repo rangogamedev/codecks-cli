@@ -1,6 +1,6 @@
 # codecks-cli
 
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
 ![Tests: 1000+](https://img.shields.io/badge/Tests-1000%2B-brightgreen)
 ![CI](https://github.com/rangogamedev/codecks-cli/actions/workflows/test.yml/badge.svg)
@@ -43,7 +43,7 @@ You can also run directly without installing: `py codecks_api.py <command>`
 
 ### Requirements
 
-- **Python 3.10+** (tested with 3.14)
+- **Python 3.12+** (tested with 3.14)
 - A [Codecks](https://codecks.io) account (free tier works)
 - Zero runtime dependencies (stdlib only)
 

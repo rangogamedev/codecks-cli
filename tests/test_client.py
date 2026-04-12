@@ -2,6 +2,7 @@
 Mocks at cards.*/api.* boundary. Asserts on returned dicts, not stdout.
 """
 
+from datetime import UTC
 from unittest.mock import patch
 
 import pytest
@@ -702,7 +703,7 @@ class TestPMFocus:
     @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
     @patch("codecks_cli.client.list_cards")
     def test_deck_health_aggregation(self, mock_list, mock_enrich, mock_hand, mock_extract):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         mock_list.return_value = {
             "card": {
@@ -724,7 +725,7 @@ class TestPMFocus:
                     "status": "started",
                     "deck_name": "Code",
                     "owner_name": None,
-                    "lastUpdatedAt": datetime.now(timezone.utc).isoformat(),
+                    "lastUpdatedAt": datetime.now(UTC).isoformat(),
                 },
             },
             "user": {},
@@ -763,11 +764,9 @@ class TestStandup:
     @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
     @patch("codecks_cli.client.list_cards")
     def test_categorizes_cards(self, mock_list, mock_enrich, mock_hand, mock_extract):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        yesterday = (datetime.now(timezone.utc) - timedelta(hours=12)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        yesterday = (datetime.now(UTC) - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
         mock_list.return_value = {
             "card": {
                 "c1": {

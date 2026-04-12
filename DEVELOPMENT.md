@@ -4,7 +4,7 @@ Everything you need to set up, build, test, and release codecks-cli.
 
 ## Prerequisites
 
-- **Python 3.10+** — use `py` command (never `python` or `python3`)
+- **Python 3.12+** — use `py` command (never `python` or `python3`)
 - **uv** (recommended) — fast Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
 - **PowerShell** — for the test runner script (Windows: built-in, Linux/Mac: `pwsh`)
 - **A Codecks account** — free tier works for testing ([codecks.io](https://codecks.io))
@@ -258,7 +258,7 @@ The `/release` and `/changelog` Claude Code skills automate steps 1-8.
 
 GitHub Actions (`.github/workflows/test.yml`):
 - **Quality checks** — ruff lint, ruff format, mypy, pytest
-- **Matrix** — Python 3.10, 3.12, 3.14
+- **Matrix** — Python 3.12, 3.14
 - **Coverage** — uploaded to Codecov
 - **Docker smoke test** — builds and runs tests in container
 

@@ -1,7 +1,5 @@
 """Tests for CardRepository — indexed card data access layer."""
 
-from __future__ import annotations
-
 from codecks_cli.mcp_server._repository import CardRepository
 
 SAMPLE_CARDS = [

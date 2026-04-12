@@ -5,10 +5,8 @@ Coordination state is persisted to .pm_claims.json — survives server restarts.
 Codecks card fields (status, owner, comments) remain the authoritative source.
 """
 
-from __future__ import annotations
-
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from codecks_cli import CliError
@@ -76,7 +74,7 @@ def claim_card(card_id: str, agent_name: str, reason: str | None = None) -> dict
         )
 
     _register_agent(agent_name, card_id)
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     result: dict = {
         "ok": True,
         "card_id": card_id,
@@ -119,7 +117,7 @@ def release_card(card_id: str, agent_name: str, summary: str | None = None) -> d
             )
         )
 
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     result: dict = {
         "ok": True,
         "card_id": card_id,
@@ -173,7 +171,7 @@ def delegate_card(card_id: str, from_agent: str, to_agent: str, message: str | N
     _unregister_agent_card(from_agent, card_id)
     _register_agent(to_agent, card_id)
 
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     result: dict = {
         "ok": True,
         "card_id": card_id,

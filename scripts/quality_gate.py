@@ -7,8 +7,6 @@ Usage:
     py scripts/quality_gate.py --mypy-only  # run just mypy (raw output)
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re

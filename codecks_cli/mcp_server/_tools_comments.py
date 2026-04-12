@@ -1,7 +1,5 @@
 """Comment tools: comment CRUD (5 tools)."""
 
-from __future__ import annotations
-
 from codecks_cli import CliError
 from codecks_cli.mcp_server._core import (
     _call,

@@ -1,13 +1,11 @@
 """Core helpers: client caching, _call dispatcher, response contract, UUID validation, snapshot cache."""
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from codecks_cli import CliError, CodecksClient, SetupError
@@ -198,7 +196,7 @@ def _compute_pm_focus(
 
     from codecks_cli._utils import _parse_iso_timestamp
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+    cutoff = datetime.now(UTC) - timedelta(days=stale_days)
 
     started = []
     blocked = []
@@ -297,7 +295,7 @@ def _compute_standup(cards: list[dict], hand_ids: set[str], *, days: int = 2) ->
 
     from codecks_cli._utils import _parse_iso_timestamp
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
 
     recently_done = []
     in_progress = []
@@ -345,7 +343,7 @@ def _warm_cache_impl() -> dict:
 
     client = _get_client()
     now_ts = time.monotonic()
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # 4 API round-trips in parallel (account, cards, hand, decks)
     # Cache warming uses include_content=False — content only fetched on-demand
@@ -501,7 +499,7 @@ def _load_claims() -> None:
 
 def _register_agent(agent_name: str, card_id: str | None = None) -> None:
     """Track an agent and optionally the card it is working on."""
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if agent_name not in _agent_sessions:
         _agent_sessions[agent_name] = {
             "active_cards": [],
@@ -523,7 +521,7 @@ def _unregister_agent_card(agent_name: str, card_id: str) -> bool:
     if card_id in session["active_cards"]:
         session["active_cards"].remove(card_id)
         session["claimed_at"].pop(card_id, None)
-        session["last_seen"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        session["last_seen"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         _save_claims()
         return True
     return False
@@ -610,7 +608,7 @@ def _persist_cache_to_disk() -> None:
         return
     try:
         disk_data = {k: v for k, v in _snapshot_cache.items() if k != "fetched_ts"}
-        disk_data["fetched_at"] = datetime.now(timezone.utc).isoformat()
+        disk_data["fetched_at"] = datetime.now(UTC).isoformat()
         cache_dir = os.path.dirname(CACHE_PATH) or "."
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
         try:

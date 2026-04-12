@@ -1,7 +1,5 @@
 """Security: injection detection, output tagging, input validation."""
 
-from __future__ import annotations
-
 import re
 
 from codecks_cli import CliError

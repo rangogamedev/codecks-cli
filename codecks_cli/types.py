@@ -4,8 +4,6 @@ These TypedDicts document the shape of dicts returned by public API methods.
 They are optional — runtime behavior is unchanged (plain dicts).
 """
 
-from __future__ import annotations
-
 from typing import TypedDict
 
 # ---------------------------------------------------------------------------
@@ -32,6 +30,18 @@ class CardRow(TypedDict, total=False):
     is_doc: bool | None
     created_at: str | None
     last_updated_at: str | None
+
+
+class CardStats(TypedDict):
+    """Aggregate stats returned by list_cards(include_stats=True)."""
+
+    total: int
+    total_effort: int | float
+    avg_effort: float
+    by_status: dict[str, int]
+    by_priority: dict[str, int]
+    by_deck: dict[str, int]
+    by_owner: dict[str, int]
 
 
 class CardListResult(TypedDict):
@@ -85,23 +95,6 @@ class CardDetail(TypedDict, total=False):
     parent_card_id: str | None
     sub_cards: list[SubCard]
     conversations: list[Conversation]
-
-
-# ---------------------------------------------------------------------------
-# Stats
-# ---------------------------------------------------------------------------
-
-
-class CardStats(TypedDict):
-    """Aggregate stats returned by list_cards(include_stats=True)."""
-
-    total: int
-    total_effort: int | float
-    avg_effort: float
-    by_status: dict[str, int]
-    by_priority: dict[str, int]
-    by_deck: dict[str, int]
-    by_owner: dict[str, int]
 
 
 # ---------------------------------------------------------------------------

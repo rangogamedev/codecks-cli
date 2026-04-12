@@ -4,8 +4,6 @@ Single Responsibility: owns card data indexing and lookup.
 Does NOT own cache lifecycle (TTL, disk persistence) — that stays in _core.py.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -183,12 +181,12 @@ class CardRepository:
     # SQLite persistence bridge
     # ------------------------------------------------------------------
 
-    def persist_to_store(self, store: CardStore) -> None:
+    def persist_to_store(self, store: "CardStore") -> None:
         """Write current in-memory data to SQLite store."""
 
         store.upsert_cards(self._cards)
 
-    def load_from_store(self, store: CardStore) -> bool:
+    def load_from_store(self, store: "CardStore") -> bool:
         """Load cards from SQLite store into in-memory indexes.
 
         Returns True if data was loaded, False if the store was empty.

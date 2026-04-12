@@ -5,8 +5,6 @@ Codecks stores card title as the first line of the ``content`` field:
 parsing and serialization so title/body logic has a single source of truth.
 """
 
-from __future__ import annotations
-
 
 def parse_content(content: str | None) -> tuple[str, str]:
     """Split content into (title, body).
