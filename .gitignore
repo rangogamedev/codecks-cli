@@ -6,6 +6,10 @@
 .pm_preferences.json
 .cli_feedback.json
 .pm_cache.json
+.pm_store.db*
+.pm_claims.json
+.pm_last_result.json
+.pm_undo.json
 .mcp.json
 task_plan.md
 findings.md
