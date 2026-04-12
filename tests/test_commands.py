@@ -10,7 +10,9 @@ import pytest
 
 from codecks_cli import config
 from codecks_cli.commands import (
+    cmd_account,
     cmd_activity,
+    cmd_archive,
     cmd_card,
     cmd_cards,
     cmd_comment,
@@ -22,9 +24,12 @@ from codecks_cli.commands import (
     cmd_feature,
     cmd_gdd_sync,
     cmd_hand,
+    cmd_overview,
     cmd_pm_focus,
+    cmd_projects,
     cmd_split_features,
     cmd_standup,
+    cmd_unarchive,
     cmd_update,
 )
 from codecks_cli.exceptions import CliError, SetupError
@@ -1566,3 +1571,83 @@ class TestCmdSplitFeatures:
         out = capsys.readouterr().out
         assert "Features processed: 1" in out
         assert "Sub-cards created: 2" in out
+
+
+# ---------------------------------------------------------------------------
+# Additional command coverage
+# ---------------------------------------------------------------------------
+
+
+class TestCmdAccount:
+    @patch("codecks_cli.commands._get_client")
+    def test_account_json(self, mock_get, capsys):
+        mock_get.return_value.get_account.return_value = {"name": "Hafu", "id": "acc1"}
+        ns = argparse.Namespace(format="json")
+        cmd_account(ns)
+        out = capsys.readouterr().out
+        assert "Hafu" in out
+
+
+class TestCmdProjects:
+    @patch("codecks_cli.commands._get_client")
+    def test_projects_json(self, mock_get, capsys):
+        mock_get.return_value.list_projects.return_value = [
+            {"name": "Tea Shop", "deck_count": 5}
+        ]
+        ns = argparse.Namespace(format="json")
+        cmd_projects(ns)
+        out = capsys.readouterr().out
+        assert "Tea Shop" in out
+
+
+class TestCmdOverview:
+    @patch("codecks_cli.commands._get_client")
+    def test_overview_json(self, mock_get, capsys):
+        mock_get.return_value.list_cards.return_value = {"cards": []}
+        ns = argparse.Namespace(format="json", project=None)
+        cmd_overview(ns)
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["ok"] is True
+        assert "total_cards" in data
+
+
+class TestCmdArchive:
+    @patch("codecks_cli.commands._get_client")
+    def test_archive_card(self, mock_get, capsys):
+        mock_get.return_value.archive_card.return_value = {"ok": True}
+        ns = argparse.Namespace(
+            card_ids=["00000000-0000-0000-0000-000000000001"],
+            dry_run=False,
+            format="json",
+        )
+        cmd_archive(ns)
+        out = capsys.readouterr().out
+        assert "ok" in out or "Archived" in out
+
+
+class TestCmdUnarchive:
+    @patch("codecks_cli.commands._get_client")
+    def test_unarchive_card(self, mock_get, capsys):
+        mock_get.return_value.unarchive_card.return_value = {"ok": True}
+        ns = argparse.Namespace(
+            card_ids=["00000000-0000-0000-0000-000000000001"],
+            dry_run=False,
+            format="json",
+        )
+        cmd_unarchive(ns)
+        out = capsys.readouterr().out
+        assert "ok" in out or "Unarchived" in out
+
+
+class TestCmdDelete:
+    @patch("codecks_cli.commands._get_client")
+    def test_delete_card(self, mock_get, capsys):
+        mock_get.return_value.delete_card.return_value = {"ok": True}
+        ns = argparse.Namespace(
+            card_id="00000000-0000-0000-0000-000000000001",
+            dry_run=False,
+            format="json",
+        )
+        cmd_delete(ns)
+        mock_get.return_value.delete_card.assert_called_once()

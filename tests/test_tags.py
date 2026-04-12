@@ -113,3 +113,66 @@ class TestLaneTags:
         assert "feel" in result
         assert "economy" in result
         assert "feature" in result
+
+    def test_art_lane_tags(self):
+        result = lane_tag_names("art")
+        assert "art" in result
+        assert "feature" in result
+
+    def test_audio_lane_tags(self):
+        result = lane_tag_names("audio")
+        assert "audio" in result
+        assert "feature" in result
+
+
+class TestSyncFromApi:
+    def test_sync_adds_new_tags(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with patch("codecks_cli.api.query") as mock_query, \
+                 patch("codecks_cli.api.warn_if_empty"):
+                mock_query.return_value = {
+                    "masterTag": {
+                        "t1": {"name": "new-tag", "color": "#ff0000"},
+                    }
+                }
+                count = tags.sync_from_api()
+                assert count == 1
+                names = [t.name for t in tags.TAGS]
+                assert "new-tag" in names
+        finally:
+            tags.TAGS = original
+
+    def test_sync_skips_existing(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with patch("codecks_cli.api.query") as mock_query, \
+                 patch("codecks_cli.api.warn_if_empty"):
+                mock_query.return_value = {
+                    "masterTag": {
+                        "t1": {"name": "code", "color": "#000"},  # already exists
+                    }
+                }
+                count = tags.sync_from_api()
+                assert count == 0
+        finally:
+            tags.TAGS = original
+
+    def test_sync_empty_api_response(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        with patch("codecks_cli.api.query") as mock_query, \
+             patch("codecks_cli.api.warn_if_empty"):
+            mock_query.return_value = {"masterTag": {}}
+            count = tags.sync_from_api()
+            assert count == 0

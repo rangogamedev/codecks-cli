@@ -3168,3 +3168,43 @@ class TestTickCheckboxes:
         result = mcp_mod.tick_checkboxes(card_id=_BAD)
         assert result.get("ok") is False
         assert "UUID" in result.get("error", "")
+
+
+# ---------------------------------------------------------------------------
+# Admin tools
+# ---------------------------------------------------------------------------
+
+
+# Admin tools are async (Playwright-backed) — skipped from unit tests.
+# They require browser automation and are tested via live MCP tool calls.
+
+
+# ---------------------------------------------------------------------------
+# Comment tools — error paths
+# ---------------------------------------------------------------------------
+
+
+class TestCommentErrorPaths:
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_reply_comment_error(self, MockClient):
+        client = MagicMock()
+        client.reply_comment.side_effect = CliError("[ERROR] Thread not found")
+        MockClient.return_value = client
+        result = mcp_mod.reply_comment(thread_id=_C1, message="test")
+        assert result.get("ok") is False
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_close_comment_error(self, MockClient):
+        client = MagicMock()
+        client.close_comment.side_effect = CliError("[ERROR] Not found")
+        MockClient.return_value = client
+        result = mcp_mod.close_comment(thread_id=_C1, card_id=_C2)
+        assert result.get("ok") is False
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_reopen_comment_error(self, MockClient):
+        client = MagicMock()
+        client.reopen_comment.side_effect = CliError("[ERROR] Not found")
+        MockClient.return_value = client
+        result = mcp_mod.reopen_comment(thread_id=_C1, card_id=_C2)
+        assert result.get("ok") is False
