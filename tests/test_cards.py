@@ -832,3 +832,96 @@ class TestListActivityTrimming:
         assert "account" not in result
         assert "activity" in result
         assert "card" in result
+
+
+class TestResolveDecIdFuzzy:
+    """Fuzzy matching and error hints in resolve_deck_id."""
+
+    @patch("codecks_cli.cards.load_project_names")
+    @patch("codecks_cli.cards.list_decks")
+    def test_fuzzy_hint_on_typo(self, mock_decks, mock_projects):
+        from codecks_cli.cards import resolve_deck_id
+        from codecks_cli.exceptions import CliError
+
+        mock_projects.return_value = {}
+        mock_decks.return_value = {
+            "deck": {
+                "d1": {"title": "Coding", "id": "d1", "project_id": "p1"},
+            }
+        }
+        with pytest.raises(CliError, match="Did you mean 'Coding'"):
+            resolve_deck_id("Codin")
+
+    @patch("codecks_cli.cards.load_project_names")
+    @patch("codecks_cli.cards.list_decks")
+    def test_project_not_found(self, mock_decks, mock_projects):
+        from codecks_cli.cards import resolve_deck_id
+        from codecks_cli.exceptions import CliError
+
+        mock_projects.return_value = {"p1": "Tea Shop"}
+        mock_decks.return_value = {"deck": {}}
+        with pytest.raises(CliError, match="not found for deck resolution"):
+            resolve_deck_id("X", project="Nonexistent")
+
+
+class TestResolveMilestoneId:
+    """resolve_milestone_id env lookup and API fallback."""
+
+    @patch("codecks_cli.cards.load_milestone_names")
+    def test_env_lookup(self, mock_milestones):
+        from codecks_cli.cards import resolve_milestone_id
+
+        mock_milestones.return_value = {"m1": "Alpha", "m2": "Beta"}
+        assert resolve_milestone_id("Alpha") == "m1"
+        assert resolve_milestone_id("alpha") == "m1"  # case-insensitive
+
+    @patch("codecks_cli.cards.query")
+    @patch("codecks_cli.cards.load_milestone_names")
+    def test_api_fallback(self, mock_milestones, mock_query):
+        from codecks_cli.cards import resolve_milestone_id
+
+        mock_milestones.return_value = {}  # not in .env
+        mock_query.return_value = {
+            "milestone": {"m1": {"id": "m1", "name": "Gamma"}}
+        }
+        with patch("codecks_cli.config.save_env_value"):
+            assert resolve_milestone_id("Gamma") == "m1"
+
+    @patch("codecks_cli.cards.load_milestone_names")
+    def test_not_found_error(self, mock_milestones):
+        from codecks_cli.cards import resolve_milestone_id
+        from codecks_cli.exceptions import CliError
+
+        mock_milestones.return_value = {"m1": "Alpha"}
+        with patch("codecks_cli.cards.query", side_effect=CliError("fail")):
+            with pytest.raises(CliError, match="not found.*Available: Alpha"):
+                resolve_milestone_id("Nonexistent")
+
+
+class TestMutationHelpers:
+    """Low-level card mutation dispatch functions."""
+
+    @patch("codecks_cli.cards.report_request")
+    def test_create_card_dispatch(self, mock_request):
+        from codecks_cli.cards import create_card
+
+        mock_request.return_value = {"cardId": "new-1"}
+        result = create_card("Test Card", "Body content", None)
+        assert result["cardId"] == "new-1"
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_dispatch(self, mock_request):
+        from codecks_cli.cards import update_card
+
+        mock_request.return_value = {}
+        update_card("card-1", status="done")
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_delete_card_dispatch(self, mock_request):
+        from codecks_cli.cards import delete_card
+
+        mock_request.return_value = {}
+        delete_card("card-1")
+        assert mock_request.call_count == 2  # archive then delete
