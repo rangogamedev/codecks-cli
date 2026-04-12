@@ -593,14 +593,12 @@ def session_start(agent_name: str | None = None) -> dict:
 
     # Tag registry (replaces get_tag_registry tool)
     tag_registry = [
-        {"name": t.name, "display_name": t.display_name, "category": t.category}
-        for t in TAGS
+        {"name": t.name, "display_name": t.display_name, "category": t.category} for t in TAGS
     ]
 
     # Lane registry (replaces get_lane_registry tool)
     lane_registry = [
-        {"name": ln.name, "display_name": ln.display_name, "required": ln.required}
-        for ln in LANES
+        {"name": ln.name, "display_name": ln.display_name, "required": ln.required} for ln in LANES
     ]
 
     project_context = {
@@ -648,7 +646,6 @@ def session_start(agent_name: str | None = None) -> dict:
         "cache_status": "CLI: py codecks_api.py cache status",
         "partition_by_lane": "Use partition_cards(by='lane')",
         "partition_by_owner": "Use partition_cards(by='owner')",
-        "get_team_playbook": "Rules injected in session_start().playbook_rules",
         "tick_all_checkboxes": "Use tick_checkboxes(all=True)",
     }
 

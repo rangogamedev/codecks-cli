@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from codecks_cli.mcp_server._repository import CardRepository
 
 SAMPLE_CARDS = [
@@ -146,7 +144,9 @@ class TestClear:
         repo.load(SAMPLE_CARDS)
         assert repo.count == 4
 
-        new_cards = [{"id": "new-id-000", "title": "New", "status": "done", "deck": "X", "owner": "Z"}]
+        new_cards = [
+            {"id": "new-id-000", "title": "New", "status": "done", "deck": "X", "owner": "Z"}
+        ]
         repo.load(new_cards)
         assert repo.count == 1
         assert repo.get("aaaabbbb-cccc-dddd-eeee-ffffffffffff") is None

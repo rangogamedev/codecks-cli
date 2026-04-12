@@ -278,7 +278,9 @@ def scaffold_feature(
     lane_deck_ids: dict[str, str | None] = {}
     for lane_def in LANES:
         deck_val = spec.lane_decks.get(lane_def.name)
-        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val, project=spec.project) if deck_val else None
+        lane_deck_ids[lane_def.name] = (
+            resolve_deck_id(deck_val, project=spec.project) if deck_val else None
+        )
 
     hero_owner_id = _resolve_owner_id(spec.owner) if spec.owner else None
     pri = None if spec.priority == "null" else spec.priority
@@ -321,9 +323,7 @@ def scaffold_feature(
             sub_title = f"[{lane_def_inner.display_name}] {spec.title}"
             # Use per-lane description if provided, otherwise fall back to boilerplate
             custom_desc = (
-                spec.lane_descriptions.get(lane_def_inner.name)
-                if spec.lane_descriptions
-                else None
+                spec.lane_descriptions.get(lane_def_inner.name) if spec.lane_descriptions else None
             )
             if custom_desc:
                 sub_body = custom_desc
@@ -451,7 +451,9 @@ def split_features(
     lane_deck_ids: dict[str, str | None] = {}
     for lane_def in LANES:
         deck_val = spec.lane_decks.get(lane_def.name)
-        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val, project=spec.project) if deck_val else None
+        lane_deck_ids[lane_def.name] = (
+            resolve_deck_id(deck_val, project=spec.project) if deck_val else None
+        )
 
     # Build active lane config from registry
     active_lanes = []

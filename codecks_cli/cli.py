@@ -384,8 +384,12 @@ def build_parser():
     p.add_argument("--stats", action="store_true")
     p.add_argument("--hand", action="store_true")
     p.add_argument("--archived", action="store_true")
-    p.add_argument("--ids-only", action="store_true", dest="ids_only",
-                   help="Output only card UUIDs, one per line (pipe-friendly)")
+    p.add_argument(
+        "--ids-only",
+        action="store_true",
+        dest="ids_only",
+        help="Output only card UUIDs, one per line (pipe-friendly)",
+    )
     p.set_defaults(func=cmd_cards)
 
     # --- card ---
@@ -644,7 +648,11 @@ def build_parser():
     # --- feedback ---
     p = sub.add_parser("feedback")
     p.add_argument("message")
-    p.add_argument("--category", choices=["missing_feature", "bug", "error", "improvement", "usability"], default="improvement")
+    p.add_argument(
+        "--category",
+        choices=["missing_feature", "bug", "error", "improvement", "usability"],
+        default="improvement",
+    )
     p.add_argument("--tool", help="Which tool/command this relates to")
     p.add_argument("--context", help="Brief session context")
     p.set_defaults(func=cmd_feedback)
@@ -670,7 +678,18 @@ def build_parser():
 # Command dispatch
 # ---------------------------------------------------------------------------
 
-NO_TOKEN_COMMANDS = {"setup", "gdd-auth", "gdd-revoke", "generate-token", "version", "completion", "team-status", "feedback", "claim", "release"}
+NO_TOKEN_COMMANDS = {
+    "setup",
+    "gdd-auth",
+    "gdd-revoke",
+    "generate-token",
+    "version",
+    "completion",
+    "team-status",
+    "feedback",
+    "claim",
+    "release",
+}
 
 
 def _error_type_from_message(message):

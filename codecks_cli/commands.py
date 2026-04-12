@@ -815,7 +815,6 @@ def cmd_feedback(ns):
 
 def cmd_commands(ns):
     """Output structured JSON of all commands for agent self-discovery."""
-    import json
 
     from codecks_cli.cli import build_parser
 
@@ -843,12 +842,14 @@ def cmd_commands(ns):
                         arg_info["description"] = act.help
                     cmd_info["args"].append(arg_info)
                 elif act.dest not in ("help", "command", "show_help"):
-                    cmd_info["args"].append({
-                        "name": act.dest,
-                        "positional": True,
-                        "type": act.type.__name__ if act.type else "string",
-                        "required": act.nargs not in ("?", "*"),
-                    })
+                    cmd_info["args"].append(
+                        {
+                            "name": act.dest,
+                            "positional": True,
+                            "type": act.type.__name__ if act.type else "string",
+                            "required": act.nargs not in ("?", "*"),
+                        }
+                    )
             commands.append(cmd_info)
 
     result = {"ok": True, "commands": commands, "count": len(commands)}

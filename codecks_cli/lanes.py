@@ -179,7 +179,11 @@ def _load_lane_config() -> dict[str, list[str]]:
         return {}
     overrides: dict[str, list[str]] = {}
     for key, value in data.items():
-        if isinstance(key, str) and isinstance(value, list) and all(isinstance(v, str) for v in value):
+        if (
+            isinstance(key, str)
+            and isinstance(value, list)
+            and all(isinstance(v, str) for v in value)
+        ):
             overrides[key] = value
     return overrides
 

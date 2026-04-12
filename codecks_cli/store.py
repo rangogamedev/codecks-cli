@@ -317,7 +317,9 @@ class CardStore:
     def get_claim(self, card_id: str) -> dict | None:
         """Get the claim for a card. Returns None if not claimed."""
         with self._lock:
-            row = self._conn.execute("SELECT * FROM claims WHERE card_id = ?", (card_id,)).fetchone()
+            row = self._conn.execute(
+                "SELECT * FROM claims WHERE card_id = ?", (card_id,)
+            ).fetchone()
         if row is None:
             return None
         return {

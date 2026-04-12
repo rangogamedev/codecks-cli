@@ -14,10 +14,10 @@ from codecks_cli.config import (
     CACHE_PATH,
     CACHE_TTL_SECONDS,
     CONTRACT_SCHEMA_VERSION,
-    HTTP_TIMEOUT_SECONDS,
     MCP_RESPONSE_MODE,
 )
 from codecks_cli.mcp_server._repository import CardRepository
+from codecks_cli.store import CardStore
 
 _client: CodecksClient | None = None
 
@@ -33,8 +33,6 @@ def _get_client() -> CodecksClient:
 # ---------------------------------------------------------------------------
 # SQLite store (lazy-initialized)
 # ---------------------------------------------------------------------------
-
-from codecks_cli.store import CardStore
 
 _store: CardStore | None = None
 
@@ -178,6 +176,7 @@ def _invalidate_cache() -> None:
     # Also clear the cards.py process-level cache so list_decks/list_cards
     # re-query the API instead of returning stale data.
     from codecks_cli import config
+
     config._cache.clear()
 
 
@@ -615,7 +614,9 @@ def _persist_cache_to_disk() -> None:
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(disk_data, f, default=str)  # default=str prevents TypeError on non-serializable
+                json.dump(
+                    disk_data, f, default=str
+                )  # default=str prevents TypeError on non-serializable
             os.replace(tmp, CACHE_PATH)
             # Update our mtime so we don't reload our own write
             _disk_cache_mtime = os.path.getmtime(CACHE_PATH)
@@ -709,8 +710,7 @@ def _write_through_cache(method_name: str, result, **kwargs) -> None:
         elif method_name == "remove_from_hand":
             removed_ids = set(kwargs.get("card_ids", []))
             _snapshot_cache["hand"] = [
-                c for c in _snapshot_cache.get("hand", [])
-                if c.get("id") not in removed_ids
+                c for c in _snapshot_cache.get("hand", []) if c.get("id") not in removed_ids
             ]
             _recompute_derived()
 
@@ -937,6 +937,7 @@ def _call(method_name: str, **kwargs):
             if card_ids:
                 try:
                     from codecks_cli._operations import snapshot_before_mutation
+
                     snapshot_before_mutation(client, card_ids)
                 except Exception:
                     pass  # Best-effort snapshot
@@ -957,12 +958,16 @@ def _call(method_name: str, **kwargs):
         return _contract_error(
             f"Network error calling {method_name}: {e}. "
             f"The operation may have partially completed — check state before retrying.",
-            "error", retryable=True, error_code="NETWORK_ERROR",
+            "error",
+            retryable=True,
+            error_code="NETWORK_ERROR",
         )
     except Exception as e:
         return _contract_error(
             f"Unexpected error in {method_name}: {e}",
-            "error", retryable=True, error_code="UNEXPECTED_ERROR",
+            "error",
+            retryable=True,
+            error_code="UNEXPECTED_ERROR",
         )
 
 
@@ -1024,7 +1029,17 @@ _SLIM_LIST_DROP = _SLIM_DROP | {
 }
 
 # Minimal fields for _card_summary — 7-field ultra-compact representation (~200 bytes)
-_SUMMARY_FIELDS = {"id", "title", "status", "priority", "effort", "deck", "deck_name", "owner", "owner_name"}
+_SUMMARY_FIELDS = {
+    "id",
+    "title",
+    "status",
+    "priority",
+    "effort",
+    "deck",
+    "deck_name",
+    "owner",
+    "owner_name",
+}
 
 
 def _slim_card(card: dict) -> dict:

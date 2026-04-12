@@ -9,11 +9,13 @@ duplicating logic.
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from datetime import datetime, timedelta, timezone
 
 from codecks_cli.client import CodecksClient
-
+from codecks_cli.config import _PROJECT_ROOT
 
 # ---------------------------------------------------------------------------
 # Checkbox operations
@@ -246,10 +248,9 @@ def partition_cards(
     # Filter
     statuses = set((status or "not_started,started").split(","))
     cards = [
-        c for c in cards
-        if isinstance(c, dict)
-        and c.get("status") in statuses
-        and not c.get("is_archived")
+        c
+        for c in cards
+        if isinstance(c, dict) and c.get("status") in statuses and not c.get("is_archived")
     ]
     if project:
         project_lower = project.lower()
@@ -275,7 +276,11 @@ def partition_cards(
             owner = card.get("owner_name") or card.get("owner") or "unassigned"
             buckets.setdefault(owner, []).append(card.get("id", ""))
     else:
-        return {"ok": False, "error": f"Unknown partition strategy: {by}", "error_code": "INVALID_INPUT"}
+        return {
+            "ok": False,
+            "error": f"Unknown partition strategy: {by}",
+            "error_code": "INVALID_INPUT",
+        }
 
     batches = [
         {"key": key, "card_ids": ids, "count": len(ids)}
@@ -300,6 +305,7 @@ def partition_cards(
 def _load_claims() -> dict:
     """Load claims from .pm_claims.json."""
     import os
+
     from codecks_cli.config import _PROJECT_ROOT
 
     claims_path = os.path.join(_PROJECT_ROOT, ".pm_claims.json")
@@ -314,6 +320,7 @@ def _save_claims(claims: dict) -> None:
     """Save claims to .pm_claims.json atomically."""
     import os
     import tempfile
+
     from codecks_cli.config import _PROJECT_ROOT
 
     claims_path = os.path.join(_PROJECT_ROOT, ".pm_claims.json")
@@ -355,7 +362,12 @@ def claim_card(card_id: str, agent_name: str, *, reason: str | None = None) -> d
     }
     _save_claims(claims)
 
-    return {"ok": True, "card_id": card_id, "agent_name": agent_name, "claimed_at": claims[card_id]["claimed_at"]}
+    return {
+        "ok": True,
+        "card_id": card_id,
+        "agent_name": agent_name,
+        "claimed_at": claims[card_id]["claimed_at"],
+    }
 
 
 def release_card(card_id: str, agent_name: str, *, summary: str | None = None) -> dict:
@@ -430,11 +442,15 @@ def save_feedback(
     """
     import os
     import tempfile
+
     from codecks_cli.config import _PROJECT_ROOT
 
     valid_categories = {"missing_feature", "bug", "error", "improvement", "usability"}
     if category not in valid_categories:
-        return {"ok": False, "error": f"Invalid category: {category}. Must be one of: {', '.join(sorted(valid_categories))}"}
+        return {
+            "ok": False,
+            "error": f"Invalid category: {category}. Must be one of: {', '.join(sorted(valid_categories))}",
+        }
 
     feedback_path = os.path.join(_PROJECT_ROOT, ".cli_feedback.json")
     items: list[dict] = []
@@ -476,11 +492,6 @@ def save_feedback(
 # ---------------------------------------------------------------------------
 # Undo / mutation snapshot
 # ---------------------------------------------------------------------------
-
-import os
-import tempfile
-
-from codecks_cli.config import _PROJECT_ROOT
 
 _UNDO_FILE = ".pm_undo.json"
 _UNDO_PATH = os.path.join(_PROJECT_ROOT, _UNDO_FILE)
@@ -530,7 +541,10 @@ def undo_last_mutation(client: CodecksClient) -> dict:
         with open(_UNDO_PATH, encoding="utf-8") as f:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {"ok": False, "error": "No undo snapshot found. Mutations save snapshots automatically."}
+        return {
+            "ok": False,
+            "error": "No undo snapshot found. Mutations save snapshots automatically.",
+        }
 
     cards = data.get("cards", {})
     if not cards:

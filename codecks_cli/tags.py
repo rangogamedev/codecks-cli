@@ -104,7 +104,7 @@ def sync_from_api() -> int:
         if tag_name and tag_name not in existing_names:
             display = tag_data.get("name", tag_name)
             new_tags.append(
-                TagDefinition(tag_name, display, "discipline", f"Auto-synced from Codecks")
+                TagDefinition(tag_name, display, "discipline", "Auto-synced from Codecks")
             )
             existing_names.add(tag_name)
 

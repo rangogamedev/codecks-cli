@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from codecks_cli import CliError
+from codecks_cli.mcp_server import _core
 from codecks_cli.mcp_server._core import (
     _call,
     _contract_error,
@@ -150,23 +151,32 @@ def update_cards(
     if dry_run:
         changes = {}
         for k, v in {
-            "status": status, "priority": priority, "effort": effort,
-            "deck": deck, "title": title, "milestone": milestone,
-            "hero": hero, "owner": owner, "tags": tags, "doc": doc,
+            "status": status,
+            "priority": priority,
+            "effort": effort,
+            "deck": deck,
+            "title": title,
+            "milestone": milestone,
+            "hero": hero,
+            "owner": owner,
+            "tags": tags,
+            "doc": doc,
         }.items():
             if v is not None:
                 changes[k] = v
         if content is not None:
             changes["content"] = f"({len(content)} chars)"
-        return _finalize_tool_result({
-            "ok": True,
-            "dry_run": True,
-            "action": "update_cards",
-            "card_count": len(card_ids),
-            "card_ids": card_ids,
-            "changes": changes,
-            "message": f"Would update {len(card_ids)} card(s) with: {', '.join(changes.keys())}",
-        })
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "action": "update_cards",
+                "card_count": len(card_ids),
+                "card_ids": card_ids,
+                "changes": changes,
+                "message": f"Would update {len(card_ids)} card(s) with: {', '.join(changes.keys())}",
+            }
+        )
 
     return _finalize_tool_result(
         _call(
@@ -204,14 +214,16 @@ def mark_done(card_ids: list[str], dry_run: bool = False) -> dict:
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
     if dry_run:
-        return _finalize_tool_result({
-            "ok": True,
-            "dry_run": True,
-            "action": "mark_done",
-            "card_count": len(card_ids),
-            "card_ids": card_ids,
-            "message": f"Would mark {len(card_ids)} card(s) as done",
-        })
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "action": "mark_done",
+                "card_count": len(card_ids),
+                "card_ids": card_ids,
+                "message": f"Would mark {len(card_ids)} card(s) as done",
+            }
+        )
     return _finalize_tool_result(_call("mark_done", card_ids=card_ids))
 
 
@@ -230,14 +242,16 @@ def mark_started(card_ids: list[str], dry_run: bool = False) -> dict:
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
     if dry_run:
-        return _finalize_tool_result({
-            "ok": True,
-            "dry_run": True,
-            "action": "mark_started",
-            "card_count": len(card_ids),
-            "card_ids": card_ids,
-            "message": f"Would mark {len(card_ids)} card(s) as started",
-        })
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "action": "mark_started",
+                "card_count": len(card_ids),
+                "card_ids": card_ids,
+                "message": f"Would mark {len(card_ids)} card(s) as started",
+            }
+        )
     return _finalize_tool_result(_call("mark_started", card_ids=card_ids))
 
 
@@ -572,7 +586,13 @@ def batch_update_bodies(
         # Read existing card to get current content (same as update_card_body)
         card_result = _call("get_card", card_id=card_id)
         if isinstance(card_result, dict) and card_result.get("ok") is False:
-            errors.append({"index": i, "card_id": card_id, "error": card_result.get("error", "Failed to read card.")})
+            errors.append(
+                {
+                    "index": i,
+                    "card_id": card_id,
+                    "error": card_result.get("error", "Failed to read card."),
+                }
+            )
             continue
 
         old_content = ""
@@ -583,7 +603,13 @@ def batch_update_bodies(
         update_result = _call("update_cards", card_ids=[card_id], content=new_content)
 
         if isinstance(update_result, dict) and update_result.get("ok") is False:
-            errors.append({"index": i, "card_id": card_id, "error": update_result.get("error", "Update failed.")})
+            errors.append(
+                {
+                    "index": i,
+                    "card_id": card_id,
+                    "error": update_result.get("error", "Update failed."),
+                }
+            )
             continue
 
         results.append({"card_id": card_id, "ok": True})
@@ -923,7 +949,9 @@ def batch_create_cards(
     try:
         for i, item in enumerate(parsed):
             if not isinstance(item, dict):
-                errors.append({"index": i, "error": "Item must be a card object with at least 'title'."})
+                errors.append(
+                    {"index": i, "error": "Item must be a card object with at least 'title'."}
+                )
                 continue
 
             title = item.get("title", "")
@@ -943,10 +971,14 @@ def batch_create_cards(
             # Fast cache-based duplicate check (avoids API search)
             normalized = title.strip().lower()
             if _cache_has_data and normalized in _existing_titles:
-                results.append({
-                    "index": i, "title": title, "status": "skipped",
-                    "existing_id": _existing_titles[normalized],
-                })
+                results.append(
+                    {
+                        "index": i,
+                        "title": title,
+                        "status": "skipped",
+                        "existing_id": _existing_titles[normalized],
+                    }
+                )
                 skipped += 1
                 continue
 
@@ -971,22 +1003,29 @@ def batch_create_cards(
                 # Treat as "skipped" (idempotent) rather than error.
                 if "Duplicate" in error_msg and "title" in error_msg:
                     import re
+
                     id_match = re.search(
                         r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
                         error_msg,
                     )
                     existing_id = id_match.group(1) if id_match else ""
-                    results.append({
-                        "index": i, "title": title, "status": "skipped",
-                        "existing_id": existing_id,
-                    })
+                    results.append(
+                        {
+                            "index": i,
+                            "title": title,
+                            "status": "skipped",
+                            "existing_id": existing_id,
+                        }
+                    )
                     skipped += 1
                     continue
-                errors.append({
-                    "index": i,
-                    "title": title,
-                    "error": error_msg or "Create failed.",
-                })
+                errors.append(
+                    {
+                        "index": i,
+                        "title": title,
+                        "error": error_msg or "Create failed.",
+                    }
+                )
                 continue
 
             card_id = ""
@@ -1044,18 +1083,24 @@ def batch_delete_cards(
                 results.append({"card_id": card_id, "status": "deleted"})
                 deleted += 1
             else:
-                error_msg = del_result.get("error", "Delete failed.") if isinstance(del_result, dict) else "Delete failed."
+                error_msg = (
+                    del_result.get("error", "Delete failed.")
+                    if isinstance(del_result, dict)
+                    else "Delete failed."
+                )
                 results.append({"card_id": card_id, "status": "error", "error": error_msg})
     finally:
         _core._batch_in_progress = False
         _core._persist_cache_to_disk()
 
-    return _finalize_tool_result({
-        "ok": True,
-        "deleted": deleted,
-        "total": len(ids),
-        "results": results,
-    })
+    return _finalize_tool_result(
+        {
+            "ok": True,
+            "deleted": deleted,
+            "total": len(ids),
+            "results": results,
+        }
+    )
 
 
 def batch_archive_cards(
@@ -1090,18 +1135,24 @@ def batch_archive_cards(
                 results.append({"card_id": card_id, "status": "archived"})
                 archived += 1
             else:
-                error_msg = arch_result.get("error", "Archive failed.") if isinstance(arch_result, dict) else "Archive failed."
+                error_msg = (
+                    arch_result.get("error", "Archive failed.")
+                    if isinstance(arch_result, dict)
+                    else "Archive failed."
+                )
                 results.append({"card_id": card_id, "status": "error", "error": error_msg})
     finally:
         _core._batch_in_progress = False
         _core._persist_cache_to_disk()
 
-    return _finalize_tool_result({
-        "ok": True,
-        "archived": archived,
-        "total": len(ids),
-        "results": results,
-    })
+    return _finalize_tool_result(
+        {
+            "ok": True,
+            "archived": archived,
+            "total": len(ids),
+            "results": results,
+        }
+    )
 
 
 def batch_unarchive_cards(
@@ -1135,18 +1186,24 @@ def batch_unarchive_cards(
                 results.append({"card_id": card_id, "status": "unarchived"})
                 unarchived += 1
             else:
-                error_msg = result.get("error", "Unarchive failed.") if isinstance(result, dict) else "Unarchive failed."
+                error_msg = (
+                    result.get("error", "Unarchive failed.")
+                    if isinstance(result, dict)
+                    else "Unarchive failed."
+                )
                 results.append({"card_id": card_id, "status": "error", "error": error_msg})
     finally:
         _core._batch_in_progress = False
         _core._persist_cache_to_disk()
 
-    return _finalize_tool_result({
-        "ok": True,
-        "unarchived": unarchived,
-        "total": len(ids),
-        "results": results,
-    })
+    return _finalize_tool_result(
+        {
+            "ok": True,
+            "unarchived": unarchived,
+            "total": len(ids),
+            "results": results,
+        }
+    )
 
 
 def find_and_update(
@@ -1282,9 +1339,7 @@ def undo() -> dict:
         result = undo_last_mutation(_get_client())
         return _finalize_tool_result(result)
     except Exception as e:
-        return _finalize_tool_result(
-            _contract_error(f"Undo failed: {e}", "error")
-        )
+        return _finalize_tool_result(_contract_error(f"Undo failed: {e}", "error"))
 
 
 def register(mcp):

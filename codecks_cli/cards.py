@@ -81,9 +81,7 @@ def _get_active_project_ids():
     Uses account.projects (active only) as a whitelist — excludes archived and deleted projects."""
     if "active_project_ids" in config._cache:
         return config._cache["active_project_ids"]
-    result = _try_call(
-        query, {"_root": [{"account": [{"projects": ["id"]}]}]}
-    )
+    result = _try_call(query, {"_root": [{"account": [{"projects": ["id"]}]}]})
     ids: set[str] = set()
     if result:
         for _key, proj in result.get("project", {}).items():

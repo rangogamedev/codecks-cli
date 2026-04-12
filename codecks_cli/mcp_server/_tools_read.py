@@ -337,7 +337,8 @@ def _append_hand_suggestions(result: dict) -> dict:
     # Find cards matching lane preference not in hand
     lane_tag = f"[{lane_pref.title()}]"
     candidates = [
-        c for c in all_cards
+        c
+        for c in all_cards
         if isinstance(c, dict)
         and c.get("status") not in ("done",)
         and not c.get("archived")

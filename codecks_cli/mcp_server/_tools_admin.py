@@ -124,9 +124,7 @@ async def create_milestone(
     )
 
 
-async def create_tag(
-    name: str, color: str | None = None, project: str | None = None
-) -> dict:
+async def create_tag(name: str, color: str | None = None, project: str | None = None) -> dict:
     """Create a new project-level tag.
 
     Uses direct Codecks dispatch API.
@@ -150,9 +148,7 @@ async def create_tag(
 
     from codecks_cli import admin
 
-    return await asyncio.to_thread(
-        _run_admin, admin.create_tag, name, color=color, project=project
-    )
+    return await asyncio.to_thread(_run_admin, admin.create_tag, name, color=color, project=project)
 
 
 async def archive_deck(deck: str) -> dict:

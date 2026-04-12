@@ -730,8 +730,18 @@ class TestActiveProjectFiltering:
         mock_active.return_value = {"live-proj"}
         mock_query.return_value = {
             "deck": {
-                "dk1": {"id": "d1", "title": "Active", "projectId": "live-proj", "isDeleted": False},
-                "dk2": {"id": "d2", "title": "DeletedProjDeck", "projectId": "deleted-proj", "isDeleted": False},
+                "dk1": {
+                    "id": "d1",
+                    "title": "Active",
+                    "projectId": "live-proj",
+                    "isDeleted": False,
+                },
+                "dk2": {
+                    "id": "d2",
+                    "title": "DeletedProjDeck",
+                    "projectId": "deleted-proj",
+                    "isDeleted": False,
+                },
             }
         }
         from codecks_cli.cards import list_decks

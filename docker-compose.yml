@@ -27,7 +27,7 @@ services:
   # Run tests: docker compose run --rm test
   test:
     <<: *common
-    command: ["pytest", "tests/", "-v", "--basetemp", ".tmp/pytest-docker"]
+    command: ["sh", "-c", "mkdir -p .tmp && pytest tests/ -v --basetemp .tmp/pytest-docker"]
 
   # Full quality gate: docker compose run --rm quality
   quality:
@@ -39,7 +39,7 @@ services:
         echo "=== Ruff lint ===" && ruff check . &&
         echo "=== Ruff format ===" && ruff format --check . &&
         echo "=== Mypy ===" && python scripts/quality_gate.py --mypy-only &&
-        echo "=== Pytest ===" && pytest tests/ -v --basetemp .tmp/pytest-docker &&
+        echo "=== Pytest ===" && mkdir -p .tmp && pytest tests/ -v --basetemp .tmp/pytest-docker &&
         echo "=== All checks passed ==="
 
   # Lint only: docker compose run --rm lint

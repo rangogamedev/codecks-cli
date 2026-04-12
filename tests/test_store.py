@@ -122,32 +122,38 @@ class TestCards:
 class TestQuery:
     def test_query_cards_by_status(self, store: CardStore):
         """Filter cards by status."""
-        store.upsert_cards([
-            _make_card(card_id=_C1, status="started"),
-            _make_card(card_id=_C2, status="done"),
-            _make_card(card_id=_C3, status="started"),
-        ])
+        store.upsert_cards(
+            [
+                _make_card(card_id=_C1, status="started"),
+                _make_card(card_id=_C2, status="done"),
+                _make_card(card_id=_C3, status="started"),
+            ]
+        )
         results = store.query_cards(status="started")
         assert len(results) == 2
         assert all(r["status"] == "started" for r in results)
 
     def test_query_cards_by_deck(self, store: CardStore):
         """Filter cards by deck (case insensitive)."""
-        store.upsert_cards([
-            _make_card(card_id=_C1, deck="Gameplay"),
-            _make_card(card_id=_C2, deck="Audio"),
-            _make_card(card_id=_C3, deck="gameplay"),  # different case
-        ])
+        store.upsert_cards(
+            [
+                _make_card(card_id=_C1, deck="Gameplay"),
+                _make_card(card_id=_C2, deck="Audio"),
+                _make_card(card_id=_C3, deck="gameplay"),  # different case
+            ]
+        )
         results = store.query_cards(deck="gameplay")
         assert len(results) == 2
 
     def test_query_cards_by_owner(self, store: CardStore):
         """Filter cards by owner (case insensitive)."""
-        store.upsert_cards([
-            _make_card(card_id=_C1, owner="Alice"),
-            _make_card(card_id=_C2, owner="Bob"),
-            _make_card(card_id=_C3, owner="alice"),
-        ])
+        store.upsert_cards(
+            [
+                _make_card(card_id=_C1, owner="Alice"),
+                _make_card(card_id=_C2, owner="Bob"),
+                _make_card(card_id=_C3, owner="alice"),
+            ]
+        )
         results = store.query_cards(owner="alice")
         assert len(results) == 2
 
@@ -163,10 +169,12 @@ class TestQuery:
 
     def test_query_cards_search(self, store: CardStore):
         """Search via LIKE in query_cards."""
-        store.upsert_cards([
-            _make_card(card_id=_C1, title="Inventory system"),
-            _make_card(card_id=_C2, title="Audio mixer"),
-        ])
+        store.upsert_cards(
+            [
+                _make_card(card_id=_C1, title="Inventory system"),
+                _make_card(card_id=_C2, title="Audio mixer"),
+            ]
+        )
         results = store.query_cards(search="inventory")
         assert len(results) == 1
         assert results[0]["title"] == "Inventory system"
@@ -180,11 +188,13 @@ class TestQuery:
 class TestFTS:
     def test_search_cards_fts(self, store: CardStore):
         """FTS5 search finds matching cards by title or content."""
-        store.upsert_cards([
-            _make_card(card_id=_C1, title="Inventory system", content="Tracks items"),
-            _make_card(card_id=_C2, title="Audio mixer", content="Handles sound"),
-            _make_card(card_id=_C3, title="Shop UI", content="Inventory display panel"),
-        ])
+        store.upsert_cards(
+            [
+                _make_card(card_id=_C1, title="Inventory system", content="Tracks items"),
+                _make_card(card_id=_C2, title="Audio mixer", content="Handles sound"),
+                _make_card(card_id=_C3, title="Shop UI", content="Inventory display panel"),
+            ]
+        )
         results = store.search_cards("inventory")
         ids = {r["id"] for r in results}
         # Should find C1 (title) and C3 (content)

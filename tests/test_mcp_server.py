@@ -2528,6 +2528,7 @@ class TestUndoMcpTool:
     def test_undo_no_snapshot(self, tmp_path, monkeypatch):
         """undo() returns error when no snapshot file exists."""
         import codecks_cli._operations as ops
+
         monkeypatch.setattr(ops, "_UNDO_PATH", str(tmp_path / "nonexistent.json"))
 
         mock_client = MagicMock()
@@ -2540,13 +2541,23 @@ class TestUndoMcpTool:
     def test_undo_restores_status(self, tmp_path, monkeypatch):
         """undo() restores card status from snapshot."""
         import codecks_cli._operations as ops
+
         undo_file = tmp_path / ".pm_undo.json"
-        undo_file.write_text(json.dumps({
-            "timestamp": "2026-03-17T00:00:00Z",
-            "cards": {
-                _C1: {"status": "not_started", "priority": "b", "effort": None, "deck_name": "Code"}
-            }
-        }))
+        undo_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-03-17T00:00:00Z",
+                    "cards": {
+                        _C1: {
+                            "status": "not_started",
+                            "priority": "b",
+                            "effort": None,
+                            "deck_name": "Code",
+                        }
+                    },
+                }
+            )
+        )
         monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
 
         mock_client = MagicMock()
@@ -2557,20 +2568,28 @@ class TestUndoMcpTool:
         assert result["ok"] is True
         assert result["reverted_count"] == 1
         assert _C1 in result["reverted"]
-        mock_client.update_cards.assert_called_once_with(
-            [_C1], status="not_started", priority="b"
-        )
+        mock_client.update_cards.assert_called_once_with([_C1], status="not_started", priority="b")
 
     def test_undo_restores_effort(self, tmp_path, monkeypatch):
         """undo() restores effort field (regression test for effort bug fix)."""
         import codecks_cli._operations as ops
+
         undo_file = tmp_path / ".pm_undo.json"
-        undo_file.write_text(json.dumps({
-            "timestamp": "2026-03-17T00:00:00Z",
-            "cards": {
-                _C1: {"status": "started", "priority": "a", "effort": 5, "deck_name": "Code"}
-            }
-        }))
+        undo_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-03-17T00:00:00Z",
+                    "cards": {
+                        _C1: {
+                            "status": "started",
+                            "priority": "a",
+                            "effort": 5,
+                            "deck_name": "Code",
+                        }
+                    },
+                }
+            )
+        )
         monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
 
         mock_client = MagicMock()
@@ -2587,11 +2606,23 @@ class TestUndoMcpTool:
     def test_undo_deletes_snapshot_after_use(self, tmp_path, monkeypatch):
         """undo() removes the snapshot file after successful restoration."""
         import codecks_cli._operations as ops
+
         undo_file = tmp_path / ".pm_undo.json"
-        undo_file.write_text(json.dumps({
-            "timestamp": "2026-03-17T00:00:00Z",
-            "cards": {_C1: {"status": "done", "priority": None, "effort": None, "deck_name": "Code"}}
-        }))
+        undo_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-03-17T00:00:00Z",
+                    "cards": {
+                        _C1: {
+                            "status": "done",
+                            "priority": None,
+                            "effort": None,
+                            "deck_name": "Code",
+                        }
+                    },
+                }
+            )
+        )
         monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
 
         mock_client = MagicMock()
@@ -2612,12 +2643,11 @@ class TestSnapshotInCall:
         monkeypatch.setattr(_core, "_client", mock_client)
 
         snapshot_calls = []
+
         def mock_snapshot(client, card_ids):
             snapshot_calls.append(card_ids)
 
-        monkeypatch.setattr(
-            "codecks_cli._operations.snapshot_before_mutation", mock_snapshot
-        )
+        monkeypatch.setattr("codecks_cli._operations.snapshot_before_mutation", mock_snapshot)
 
         _core._call("update_cards", card_ids=[_C1], status="done")
         assert len(snapshot_calls) == 1
@@ -2630,12 +2660,11 @@ class TestSnapshotInCall:
         monkeypatch.setattr(_core, "_client", mock_client)
 
         snapshot_calls = []
+
         def mock_snapshot(client, card_ids):
             snapshot_calls.append(card_ids)
 
-        monkeypatch.setattr(
-            "codecks_cli._operations.snapshot_before_mutation", mock_snapshot
-        )
+        monkeypatch.setattr("codecks_cli._operations.snapshot_before_mutation", mock_snapshot)
 
         _core._call("create_card", title="Test")
         assert len(snapshot_calls) == 0
@@ -2662,9 +2691,11 @@ class TestDryRun:
         """update_cards dry_run must NOT call _call() or the client."""
         call_count = []
         original_call = _core._call
+
         def tracking_call(*args, **kwargs):
             call_count.append(1)
             return original_call(*args, **kwargs)
+
         monkeypatch.setattr(_core, "_call", tracking_call)
 
         mcp_mod.update_cards(card_ids=[_C1], status="started", dry_run=True)
@@ -2693,9 +2724,7 @@ class TestDryRun:
 
     def test_update_cards_dry_run_content_summarized(self):
         """dry_run should show content length, not full content."""
-        result = mcp_mod.update_cards(
-            card_ids=[_C1], content="x" * 5000, dry_run=True
-        )
+        result = mcp_mod.update_cards(card_ids=[_C1], content="x" * 5000, dry_run=True)
         assert result["ok"] is True
         assert "(5000 chars)" in result["changes"]["content"]
 
@@ -2729,7 +2758,15 @@ class TestCardSummary:
             "assignee": "u1",
         }
         summary = _core._card_summary(card)
-        assert set(summary.keys()) == {"id", "title", "status", "priority", "effort", "deck", "owner"}
+        assert set(summary.keys()) == {
+            "id",
+            "title",
+            "status",
+            "priority",
+            "effort",
+            "deck",
+            "owner",
+        }
         assert summary["id"] == _C1
         assert summary["title"] == "Test card"
         assert summary["status"] == "started"
@@ -2890,9 +2927,7 @@ class TestListCardsNoContent:
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_list_cards_stats_included_when_requested(self, MockClient):
         """Stats should appear when include_stats=True."""
-        client = _mock_client(
-            list_cards={"cards": [{"id": "c1"}], "stats": {"total": 1}}
-        )
+        client = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": {"total": 1}})
         MockClient.return_value = client
         result = mcp_mod.list_cards(include_stats=True)
         assert "stats" in result

@@ -26,7 +26,6 @@ from typing import Any
 from codecks_cli import api, config
 from codecks_cli.exceptions import CliError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -42,9 +41,7 @@ def _get_account_id() -> str:
 
 def _get_user_id() -> str:
     """Get the current user's UUID via the Codecks query API."""
-    result = api.query(
-        {"_root": [{"account": [{"roles": ["userId", {"user": ["id", "name"]}]}]}]}
-    )
+    result = api.query({"_root": [{"account": [{"roles": ["userId", {"user": ["id", "name"]}]}]}]})
     # Return first user (account owner / primary user)
     for _key, user in result.get("user", {}).items():
         return user["id"]
@@ -115,9 +112,7 @@ def _resolve_deck_id(deck_name: str, project: str | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def create_tag(
-    name: str, color: str | None = None, project: str | None = None
-) -> dict[str, Any]:
+def create_tag(name: str, color: str | None = None, project: str | None = None) -> dict[str, Any]:
     """Create a new project-level tag via dispatch API.
 
     Args:
@@ -160,10 +155,7 @@ def create_deck(name: str, project: str | None = None) -> dict[str, Any]:
 
     existing = list_decks()
     for _key, deck in existing.get("deck", {}).items():
-        if (
-            deck.get("title", "").lower() == name.lower()
-            and deck.get("projectId") == project_id
-        ):
+        if deck.get("title", "").lower() == name.lower() and deck.get("projectId") == project_id:
             return {
                 "ok": True,
                 "already_existed": True,
@@ -242,9 +234,7 @@ def create_milestone(
     project_id = _resolve_project_id(project)
 
     if not target_date:
-        target_date = (
-            datetime.date.today() + datetime.timedelta(days=30)
-        ).isoformat()
+        target_date = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
 
     payload = {
         "name": name,

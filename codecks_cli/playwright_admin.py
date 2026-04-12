@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from typing import Any
 
-from codecks_cli import config
-from codecks_cli import endpoint_cache
+from codecks_cli import config, endpoint_cache
 from codecks_cli.exceptions import CliError
 
 
@@ -70,26 +68,26 @@ class PlaywrightAdmin:
         from playwright.sync_api import sync_playwright
 
         if not config.SESSION_TOKEN:
-            raise CliError(
-                "[ERROR] CODECKS_TOKEN not set. Cannot authenticate with Codecks."
-            )
+            raise CliError("[ERROR] CODECKS_TOKEN not set. Cannot authenticate with Codecks.")
 
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(headless=self._headless)
         self._context = self._browser.new_context()
 
         # Inject auth cookie
-        self._context.add_cookies([
-            {
-                "name": "at",
-                "value": config.SESSION_TOKEN,
-                "domain": ".codecks.io",
-                "path": "/",
-                "httpOnly": False,
-                "secure": True,
-                "sameSite": "Lax",
-            }
-        ])
+        self._context.add_cookies(
+            [
+                {
+                    "name": "at",
+                    "value": config.SESSION_TOKEN,
+                    "domain": ".codecks.io",
+                    "path": "/",
+                    "httpOnly": False,
+                    "secure": True,
+                    "sameSite": "Lax",
+                }
+            ]
+        )
 
         self._page = self._context.new_page()
         self._page.set_default_timeout(15000)
@@ -105,11 +103,13 @@ class PlaywrightAdmin:
                 payload = request.post_data_json
             except Exception:
                 payload = None
-            self._captured_requests.append({
-                "url": url,
-                "method": request.method,
-                "payload": payload,
-            })
+            self._captured_requests.append(
+                {
+                    "url": url,
+                    "method": request.method,
+                    "payload": payload,
+                }
+            )
 
     def _save_captured_endpoint(self, operation: str) -> None:
         """Save the most recently captured dispatch endpoint to cache."""
@@ -121,14 +121,12 @@ class PlaywrightAdmin:
         # Strip base URL to get dispatch path
         for prefix in ("https://api.codecks.io", "https://open.codecks.io"):
             if url.startswith(prefix):
-                url = url[len(prefix):]
+                url = url[len(prefix) :]
                 break
         payload_template = {}
         if last.get("payload") and isinstance(last["payload"], dict):
             # Create template with placeholder values
-            payload_template = {
-                k: f"{{{{{k}}}}}" for k in last["payload"].keys()
-            }
+            payload_template = {k: f"{{{{{k}}}}}" for k in last["payload"].keys()}
         endpoint_cache.save_endpoint(
             operation=operation,
             endpoint=url,
@@ -237,9 +235,7 @@ class PlaywrightAdmin:
         except Exception as e:
             return {"ok": False, "error": f"Playwright create_deck failed: {e}"}
 
-    def create_milestone(
-        self, name: str, target_date: str | None = None
-    ) -> dict[str, Any]:
+    def create_milestone(self, name: str, target_date: str | None = None) -> dict[str, Any]:
         """Create a new milestone via the web UI.
 
         Args:
@@ -285,9 +281,7 @@ class PlaywrightAdmin:
         except Exception as e:
             return {"ok": False, "error": f"Playwright create_milestone failed: {e}"}
 
-    def create_tag(
-        self, name: str, color: str | None = None
-    ) -> dict[str, Any]:
+    def create_tag(self, name: str, color: str | None = None) -> dict[str, Any]:
         """Create a new tag via the web UI.
 
         Args:

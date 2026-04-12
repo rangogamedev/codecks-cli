@@ -6,6 +6,11 @@ Does NOT own cache lifecycle (TTL, disk persistence) — that stays in _core.py.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from codecks_cli.store import CardStore
+
 
 class CardRepository:
     """Indexed card store. Built from snapshot data, provides O(1) lookups.
@@ -168,25 +173,25 @@ class CardRepository:
         if old_status != new_status:
             # Re-index status
             if old_status in self._by_status:
-                self._by_status[old_status] = [c for c in self._by_status[old_status] if c.get("id") != card_id]
+                self._by_status[old_status] = [
+                    c for c in self._by_status[old_status] if c.get("id") != card_id
+                ]
             self._by_status.setdefault(new_status, []).append(card)
 
     # ------------------------------------------------------------------
     # SQLite persistence bridge
     # ------------------------------------------------------------------
 
-    def persist_to_store(self, store: "CardStore") -> None:
+    def persist_to_store(self, store: CardStore) -> None:
         """Write current in-memory data to SQLite store."""
-        from codecks_cli.store import CardStore as _CS  # noqa: F841
 
         store.upsert_cards(self._cards)
 
-    def load_from_store(self, store: "CardStore") -> bool:
+    def load_from_store(self, store: CardStore) -> bool:
         """Load cards from SQLite store into in-memory indexes.
 
         Returns True if data was loaded, False if the store was empty.
         """
-        from codecks_cli.store import CardStore as _CS  # noqa: F841
 
         cards = store.all_cards()
         if cards:

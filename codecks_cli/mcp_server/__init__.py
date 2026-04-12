@@ -1,3 +1,4 @@
+# ruff: noqa: E402, F401
 """MCP server exposing CodecksClient methods as tools.
 
 Package structure (see .claude/maps/mcp-server.md for tool index):
@@ -65,13 +66,14 @@ for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_te
 # ---------------------------------------------------------------------------
 
 # _core
-from codecks_cli.mcp_server._core import (  # noqa: E402, F401
+from codecks_cli.mcp_server._core import (
     _CACHE_INVALIDATION_MAP,
     _CLAIMS_PATH,
     _MUTATION_METHODS,
     MCP_RESPONSE_MODE,
     _agent_sessions,
     _call,
+    _card_summary,
     _client,
     _contract_error,
     _ensure_contract_dict,
@@ -90,7 +92,6 @@ from codecks_cli.mcp_server._core import (  # noqa: E402, F401
     _register_agent,
     _reset_sessions,
     _save_claims,
-    _card_summary,
     _slim_card,
     _slim_card_list,
     _slim_deck,
@@ -102,7 +103,7 @@ from codecks_cli.mcp_server._core import (  # noqa: E402, F401
 )
 
 # _security
-from codecks_cli.mcp_server._security import (  # noqa: E402, F401
+from codecks_cli.mcp_server._security import (
     _check_injection,
     _sanitize_activity,
     _sanitize_card,
@@ -112,8 +113,23 @@ from codecks_cli.mcp_server._security import (  # noqa: E402, F401
     _validate_preferences,
 )
 
+# _tools_admin
+from codecks_cli.mcp_server._tools_admin import (
+    archive_deck as archive_deck_admin,
+)
+from codecks_cli.mcp_server._tools_admin import (
+    create_deck as create_deck_admin,
+)
+from codecks_cli.mcp_server._tools_admin import (
+    create_milestone as create_milestone_admin,
+)
+from codecks_cli.mcp_server._tools_admin import create_project
+from codecks_cli.mcp_server._tools_admin import (
+    create_tag as create_tag_admin,
+)
+
 # _tools_comments
-from codecks_cli.mcp_server._tools_comments import (  # noqa: E402, F401
+from codecks_cli.mcp_server._tools_comments import (
     close_comment,
     create_comment,
     list_conversations,
@@ -122,7 +138,7 @@ from codecks_cli.mcp_server._tools_comments import (  # noqa: E402, F401
 )
 
 # _tools_local
-from codecks_cli.mcp_server._tools_local import (  # noqa: E402, F401
+from codecks_cli.mcp_server._tools_local import (
     _FEEDBACK_CATEGORIES,
     _FEEDBACK_MAX_ITEMS,
     _FEEDBACK_PATH,
@@ -148,7 +164,7 @@ from codecks_cli.mcp_server._tools_local import (  # noqa: E402, F401
 )
 
 # _tools_read
-from codecks_cli.mcp_server._tools_read import (  # noqa: E402, F401
+from codecks_cli.mcp_server._tools_read import (
     get_account,
     get_card,
     list_activity,
@@ -163,7 +179,7 @@ from codecks_cli.mcp_server._tools_read import (  # noqa: E402, F401
 )
 
 # _tools_team
-from codecks_cli.mcp_server._tools_team import (  # noqa: E402, F401
+from codecks_cli.mcp_server._tools_team import (
     claim_card,
     delegate_card,
     get_team_playbook,
@@ -175,17 +191,8 @@ from codecks_cli.mcp_server._tools_team import (  # noqa: E402, F401
     team_status,
 )
 
-# _tools_admin
-from codecks_cli.mcp_server._tools_admin import (  # noqa: E402, F401
-    archive_deck as archive_deck_admin,
-    create_deck as create_deck_admin,
-    create_milestone as create_milestone_admin,
-    create_project,
-    create_tag as create_tag_admin,
-)
-
 # _tools_write
-from codecks_cli.mcp_server._tools_write import (  # noqa: E402, F401
+from codecks_cli.mcp_server._tools_write import (
     add_to_hand,
     archive_card,
     batch_archive_cards,

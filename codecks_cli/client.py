@@ -1291,9 +1291,7 @@ class CodecksClient:
             self._warm_after_admin()
         return result
 
-    def create_milestone(
-        self, name: str, target_date: str | None = None
-    ) -> dict[str, Any]:
+    def create_milestone(self, name: str, target_date: str | None = None) -> dict[str, Any]:
         """Create a release milestone.
 
         Args:
