@@ -2521,6 +2521,26 @@ class TestFindAndUpdate:
         assert len(result["matches"]) == 1
         assert result["matches"][0]["id"] == _C1
 
+    def test_phase2_dry_run_returns_preview(self):
+        """dry_run=True should return preview without calling update_cards."""
+        result = mcp_mod.find_and_update(
+            search="x", confirm_ids=[_C1], priority="a", dry_run=True
+        )
+        assert result["ok"] is True
+        assert result["phase"] == "preview"
+        assert result["would_update"] == 1
+        assert result["changes"]["priority"] == "a"
+
+    def test_phase2_dry_run_does_not_call_api(self):
+        """dry_run=True must not invoke CodecksClient.update_cards."""
+        with patch("codecks_cli.mcp_server._core.CodecksClient") as MockClient:
+            client = _mock_client(update_cards={"ok": True})
+            MockClient.return_value = client
+            mcp_mod.find_and_update(
+                search="x", confirm_ids=[_C1], status="done", dry_run=True
+            )
+            client.update_cards.assert_not_called()
+
 
 class TestUndoMcpTool:
     """Tests for the undo MCP tool."""
@@ -2931,3 +2951,177 @@ class TestListCardsNoContent:
         MockClient.return_value = client
         result = mcp_mod.list_cards(include_stats=True)
         assert "stats" in result
+
+
+# ---------------------------------------------------------------------------
+# Batch operations
+# ---------------------------------------------------------------------------
+
+
+class TestBatchCreateCards:
+    """batch_create_cards() — JSON array, idempotent, max 20."""
+
+    def test_rejects_invalid_json(self):
+        result = mcp_mod.batch_create_cards(cards="not json")
+        assert result.get("ok") is False
+        assert "not valid JSON" in result.get("error", "")
+
+    def test_rejects_non_array(self):
+        result = mcp_mod.batch_create_cards(cards='{"title": "x"}')
+        assert result.get("ok") is False
+        assert "JSON array" in result.get("error", "")
+
+    def test_rejects_empty_array(self):
+        result = mcp_mod.batch_create_cards(cards="[]")
+        assert result.get("ok") is False
+        assert "empty" in result.get("error", "")
+
+    def test_rejects_over_20(self):
+        cards = [{"title": f"Card {i}"} for i in range(25)]
+        result = mcp_mod.batch_create_cards(cards=json.dumps(cards))
+        assert result.get("ok") is False
+        assert "20" in result.get("error", "")
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_creates_cards_successfully(self, MockClient):
+        client = _mock_client(create_card={"ok": True, "card_id": _C1, "title": "T"})
+        MockClient.return_value = client
+        result = mcp_mod.batch_create_cards(
+            cards=json.dumps([{"title": "Card 1"}, {"title": "Card 2"}])
+        )
+        assert result["ok"] is True
+        assert result["created"] >= 1
+        assert result["total"] == 2
+
+
+class TestBatchDeleteCards:
+    """batch_delete_cards() — UUID validation, max 20."""
+
+    def test_rejects_empty_list(self):
+        result = mcp_mod.batch_delete_cards(card_ids=[])
+        assert result.get("ok") is False
+
+    def test_rejects_invalid_uuids(self):
+        result = mcp_mod.batch_delete_cards(card_ids=[_BAD])
+        assert result.get("ok") is False
+        assert "UUID" in result.get("error", "")
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_deletes_cards_successfully(self, MockClient):
+        client = _mock_client(delete_card={"ok": True, "card_id": _C1})
+        MockClient.return_value = client
+        result = mcp_mod.batch_delete_cards(card_ids=[_C1, _C2])
+        assert result["ok"] is True
+        assert result["deleted"] == 2
+
+
+class TestBatchArchiveCards:
+    """batch_archive_cards() — UUID validation, max 20."""
+
+    def test_rejects_empty_list(self):
+        result = mcp_mod.batch_archive_cards(card_ids=[])
+        assert result.get("ok") is False
+
+    def test_rejects_invalid_uuids(self):
+        result = mcp_mod.batch_archive_cards(card_ids=[_BAD])
+        assert result.get("ok") is False
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_archives_cards_successfully(self, MockClient):
+        client = _mock_client(archive_card={"ok": True, "card_id": _C1})
+        MockClient.return_value = client
+        result = mcp_mod.batch_archive_cards(card_ids=[_C1])
+        assert result["ok"] is True
+        assert result["archived"] == 1
+
+
+class TestBatchUnarchiveCards:
+    """batch_unarchive_cards() — UUID validation, max 20."""
+
+    def test_rejects_empty_list(self):
+        result = mcp_mod.batch_unarchive_cards(card_ids=[])
+        assert result.get("ok") is False
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_unarchives_cards_successfully(self, MockClient):
+        client = _mock_client(unarchive_card={"ok": True, "card_id": _C1})
+        MockClient.return_value = client
+        result = mcp_mod.batch_unarchive_cards(card_ids=[_C1])
+        assert result["ok"] is True
+        assert result["unarchived"] == 1
+
+
+class TestBatchUpdateBodies:
+    """batch_update_bodies() — JSON array, max 20."""
+
+    def test_rejects_invalid_json(self):
+        result = mcp_mod.batch_update_bodies(updates="not json")
+        assert result.get("ok") is False
+
+    def test_rejects_over_20(self):
+        updates = [{"card_id": _C1, "body": f"Body {i}"} for i in range(25)]
+        result = mcp_mod.batch_update_bodies(updates=json.dumps(updates))
+        assert result.get("ok") is False
+        assert "20" in result.get("error", "")
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_updates_bodies_successfully(self, MockClient):
+        client = _mock_client(
+            update_cards={"ok": True, "updated": 1, "failed": 0, "fields": {}}
+        )
+        MockClient.return_value = client
+        updates = [{"card_id": _C1, "body": "New body"}]
+        result = mcp_mod.batch_update_bodies(updates=json.dumps(updates))
+        assert result["ok"] is True
+        assert result["updated"] == 1
+
+
+class TestTickCheckboxes:
+    """tick_checkboxes() — checkbox regex, all=True mode."""
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_all_true_ticks_space_format(self, MockClient):
+        """all=True must handle '- [ ]' checkboxes (with space)."""
+        card = {
+            "content": "Title\n\n- [ ] Task A\n- [ ] Task B\n- [x] Done",
+            "ok": True,
+        }
+        client = _mock_client(
+            get_card=card,
+            update_cards={"ok": True, "updated": 1, "failed": 0, "fields": {}},
+        )
+        MockClient.return_value = client
+        result = mcp_mod.tick_checkboxes(card_id=_C1, all=True)
+        assert result["ok"] is True
+        assert result["ticked_count"] == 2
+        assert result["changed"] is True
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_all_true_ticks_no_space_format(self, MockClient):
+        """all=True must also handle '- []' checkboxes (no space)."""
+        card = {
+            "content": "Title\n\n- [] Task A\n- [] Task B",
+            "ok": True,
+        }
+        client = _mock_client(
+            get_card=card,
+            update_cards={"ok": True, "updated": 1, "failed": 0, "fields": {}},
+        )
+        MockClient.return_value = client
+        result = mcp_mod.tick_checkboxes(card_id=_C1, all=True)
+        assert result["ok"] is True
+        assert result["ticked_count"] == 2
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_no_content_returns_error(self, MockClient):
+        """Card with no content should return error."""
+        client = _mock_client(get_card={"content": "", "ok": True})
+        MockClient.return_value = client
+        result = mcp_mod.tick_checkboxes(card_id=_C1, all=True)
+        assert result["ok"] is False
+        assert "no content" in result.get("error", "").lower()
+
+    def test_rejects_invalid_uuid(self):
+        result = mcp_mod.tick_checkboxes(card_id=_BAD)
+        assert result.get("ok") is False
+        assert "UUID" in result.get("error", "")

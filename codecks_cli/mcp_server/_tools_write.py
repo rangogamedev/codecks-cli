@@ -717,7 +717,7 @@ def tick_checkboxes(
         )
 
     # Checkbox patterns
-    unchecked_re = re.compile(r"^(\s*- \[)\](.*)$")
+    unchecked_re = re.compile(r"^(\s*- \[) ?\](.*)$")
     checked_re = re.compile(r"^(\s*- \[)x\](.*)$")
 
     lines = content.split("\n")
@@ -830,7 +830,7 @@ def tick_all_checkboxes(
 
     # Count before
     already_checked = len(re.findall(r"^\s*- \[x\]", content, re.MULTILINE))
-    total_unchecked = len(re.findall(r"^\s*- \[\]", content, re.MULTILINE))
+    total_unchecked = len(re.findall(r"^\s*- \[ ?\]", content, re.MULTILINE))
 
     if total_unchecked == 0:
         total_checkboxes = already_checked
@@ -845,7 +845,7 @@ def tick_all_checkboxes(
         )
 
     # Replace all unchecked with checked
-    new_content = re.sub(r"^(\s*- \[)\]", r"\1x]", content, flags=re.MULTILINE)
+    new_content = re.sub(r"^(\s*- \[) ?\]", r"\1x]", content, flags=re.MULTILINE)
     total_checkboxes = already_checked + total_unchecked
 
     # Write back
@@ -1259,6 +1259,29 @@ def find_and_update(
             _validate_uuid_list(confirm_ids)
         except CliError as e:
             return _finalize_tool_result(_contract_error(str(e), "error"))
+
+        if dry_run:
+            changes = {}
+            for k, v in {
+                "status": status,
+                "priority": priority,
+                "effort": effort,
+                "deck": deck,
+                "milestone": milestone,
+                "owner": owner,
+            }.items():
+                if v is not None:
+                    changes[k] = v
+            return _finalize_tool_result(
+                {
+                    "ok": True,
+                    "phase": "preview",
+                    "would_update": len(confirm_ids),
+                    "card_ids": confirm_ids,
+                    "changes": changes,
+                }
+            )
+
         result = _call(
             "update_cards",
             card_ids=confirm_ids,
@@ -1269,10 +1292,9 @@ def find_and_update(
             project=project,
             milestone=milestone,
             owner=owner,
-            dry_run=dry_run,
         )
         if isinstance(result, dict):
-            result["phase"] = "preview" if dry_run else "applied"
+            result["phase"] = "applied"
         return _finalize_tool_result(result)
 
     # Phase 1: Search
