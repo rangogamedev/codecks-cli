@@ -649,15 +649,24 @@ def tick_checkboxes(
         Dict with ok, ticked, already_ticked, not_found, total_checkboxes, checked_checkboxes.
         When all=True: ok, ticked_count, total_checkboxes, already_checked, changed.
     """
-    if all:
-        return tick_all_checkboxes(card_id)
-    import json
-    import re
+    from codecks_cli._operations import tick_all_checkboxes as _ops_tick_all
+    from codecks_cli._operations import tick_checkboxes as _ops_tick
+    from codecks_cli.mcp_server._core import _get_client
 
     try:
         _validate_uuid(card_id)
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    if all:
+        try:
+            result = _ops_tick_all(_get_client(), card_id)
+            return _finalize_tool_result(result)
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    # Items mode — parse JSON string to list
+    import json
 
     if items is None:
         return _finalize_tool_result(
@@ -668,25 +677,16 @@ def tick_checkboxes(
             )
         )
 
-    # Parse items JSON
     try:
         item_list = json.loads(items)
     except json.JSONDecodeError as e:
         return _finalize_tool_result(
-            _contract_error(
-                f"items is not valid JSON: {e}",
-                "error",
-                error_code="INVALID_INPUT",
-            )
+            _contract_error(f"items is not valid JSON: {e}", "error", error_code="INVALID_INPUT")
         )
 
     if not isinstance(item_list, list) or not builtins.all(isinstance(i, str) for i in item_list):
         return _finalize_tool_result(
-            _contract_error(
-                "items must be a JSON array of strings.",
-                "error",
-                error_code="INVALID_INPUT",
-            )
+            _contract_error("items must be a JSON array of strings.", "error", error_code="INVALID_INPUT")
         )
 
     if not item_list:
@@ -698,170 +698,11 @@ def tick_checkboxes(
             )
         )
 
-    # Read the card content
-    card_result = _call("get_card", card_id=card_id)
-    if isinstance(card_result, dict) and card_result.get("ok") is False:
-        return _finalize_tool_result(card_result)
-
-    content = ""
-    if isinstance(card_result, dict):
-        content = card_result.get("content") or ""
-
-    if not content:
-        return _finalize_tool_result(
-            _contract_error(
-                "Card has no content.",
-                "error",
-                error_code="NO_CONTENT",
-            )
-        )
-
-    # Checkbox patterns
-    unchecked_re = re.compile(r"^(\s*- \[) ?\](.*)$")
-    checked_re = re.compile(r"^(\s*- \[)x\](.*)$")
-
-    lines = content.split("\n")
-    ticked: list[str] = []
-    already_ticked: list[str] = []
-    not_found: list[str] = list(item_list)  # Track which items we haven't matched
-    changed = False
-
-    for i, line in enumerate(lines):
-        for item_text in item_list:
-            item_lower = item_text.lower()
-            if item_lower not in line.lower():
-                continue
-
-            if not untick:
-                # Tick: change - [] to - [x]
-                m = unchecked_re.match(line)
-                if m:
-                    lines[i] = m.group(1) + "x]" + m.group(2)
-                    ticked.append(item_text)
-                    if item_text in not_found:
-                        not_found.remove(item_text)
-                    changed = True
-                    break
-                # Already checked?
-                m2 = checked_re.match(line)
-                if m2:
-                    already_ticked.append(item_text)
-                    if item_text in not_found:
-                        not_found.remove(item_text)
-                    break
-            else:
-                # Untick: change - [x] to - []
-                m = checked_re.match(line)
-                if m:
-                    lines[i] = m.group(1) + "]" + m.group(2)
-                    ticked.append(item_text)
-                    if item_text in not_found:
-                        not_found.remove(item_text)
-                    changed = True
-                    break
-                # Already unchecked?
-                m2 = unchecked_re.match(line)
-                if m2:
-                    already_ticked.append(item_text)
-                    if item_text in not_found:
-                        not_found.remove(item_text)
-                    break
-
-    # Count total and checked checkboxes in the final content
-    new_content = "\n".join(lines)
-    total_checkboxes = len(re.findall(r"^\s*- \[[ x]\]", new_content, re.MULTILINE))
-    checked_checkboxes = len(re.findall(r"^\s*- \[x\]", new_content, re.MULTILINE))
-
-    # Write back if changed
-    if changed:
-        update_result = _call("update_cards", card_ids=[card_id], content=new_content)
-        if isinstance(update_result, dict) and update_result.get("ok") is False:
-            return _finalize_tool_result(update_result)
-
-    action = "unticked" if untick else "ticked"
-    return _finalize_tool_result(
-        {
-            "ok": True,
-            action: ticked,
-            "already_done": already_ticked,
-            "not_found": not_found,
-            "total_checkboxes": total_checkboxes,
-            "checked_checkboxes": checked_checkboxes,
-            "changed": changed,
-        }
-    )
-
-
-def tick_all_checkboxes(
-    card_id: str,
-) -> dict:
-    """Tick all unchecked checkbox items on a card. Use when marking a card done.
-
-    Args:
-        card_id: Full 36-char UUID.
-
-    Returns:
-        Dict with ok, ticked_count, total_checkboxes, already_checked.
-    """
-    import re
-
     try:
-        _validate_uuid(card_id)
+        result = _ops_tick(_get_client(), card_id, item_list, untick=untick)
+        return _finalize_tool_result(result)
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
-
-    # Read the card content
-    card_result = _call("get_card", card_id=card_id)
-    if isinstance(card_result, dict) and card_result.get("ok") is False:
-        return _finalize_tool_result(card_result)
-
-    content = ""
-    if isinstance(card_result, dict):
-        content = card_result.get("content") or ""
-
-    if not content:
-        return _finalize_tool_result(
-            _contract_error(
-                "Card has no content.",
-                "error",
-                error_code="NO_CONTENT",
-            )
-        )
-
-    # Count before
-    already_checked = len(re.findall(r"^\s*- \[x\]", content, re.MULTILINE))
-    total_unchecked = len(re.findall(r"^\s*- \[ ?\]", content, re.MULTILINE))
-
-    if total_unchecked == 0:
-        total_checkboxes = already_checked
-        return _finalize_tool_result(
-            {
-                "ok": True,
-                "ticked_count": 0,
-                "total_checkboxes": total_checkboxes,
-                "already_checked": already_checked,
-                "changed": False,
-            }
-        )
-
-    # Replace all unchecked with checked
-    new_content = re.sub(r"^(\s*- \[) ?\]", r"\1x]", content, flags=re.MULTILINE)
-    total_checkboxes = already_checked + total_unchecked
-
-    # Write back
-    update_result = _call("update_cards", card_ids=[card_id], content=new_content)
-    if isinstance(update_result, dict) and update_result.get("ok") is False:
-        return _finalize_tool_result(update_result)
-
-    return _finalize_tool_result(
-        {
-            "ok": True,
-            "ticked_count": total_unchecked,
-            "total_checkboxes": total_checkboxes,
-            "already_checked": already_checked,
-            "changed": True,
-        }
-    )
 
 
 def batch_create_cards(
@@ -1051,17 +892,36 @@ def batch_create_cards(
     return _finalize_tool_result(response)
 
 
-def batch_delete_cards(
-    card_ids: list[str],
-) -> dict:
-    """Delete multiple cards in one MCP call. Max 20 per call.
+def _batch_single_card_op(
+    card_ids: list[str], method_name: str, success_status: str, fail_msg: str
+) -> tuple[int, list[dict]]:
+    """Run a single-card client method on a list, collecting per-card results.
 
-    Args:
-        card_ids: List of 36-char card UUIDs to delete. Max 20.
-
-    Returns:
-        Dict with deleted count and per-card results.
+    Handles _batch_in_progress flag and cache persistence in try/finally.
+    Returns (success_count, results_list).
     """
+    results: list[dict] = []
+    success = 0
+    _core._batch_in_progress = True
+    try:
+        for card_id in card_ids:
+            op_result = _call(method_name, card_id=card_id)
+            if isinstance(op_result, dict) and op_result.get("ok"):
+                results.append({"card_id": card_id, "status": success_status})
+                success += 1
+            else:
+                error_msg = (
+                    op_result.get("error", fail_msg) if isinstance(op_result, dict) else fail_msg
+                )
+                results.append({"card_id": card_id, "status": "error", "error": error_msg})
+    finally:
+        _core._batch_in_progress = False
+        _core._persist_cache_to_disk()
+    return success, results
+
+
+def _validate_batch_ids(card_ids: list[str]) -> list[str] | dict:
+    """Validate and cap batch card_ids. Returns ids list or error dict."""
     if not card_ids:
         return _finalize_tool_result(
             _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
@@ -1070,41 +930,26 @@ def batch_delete_cards(
         _validate_uuid_list(card_ids[:20])
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
-    ids = card_ids[:20]
-    results: list[dict] = []
-    deleted = 0
-
-    _core._batch_in_progress = True
-    try:
-        for card_id in ids:
-            del_result = _call("delete_card", card_id=card_id)
-            if isinstance(del_result, dict) and del_result.get("ok"):
-                results.append({"card_id": card_id, "status": "deleted"})
-                deleted += 1
-            else:
-                error_msg = (
-                    del_result.get("error", "Delete failed.")
-                    if isinstance(del_result, dict)
-                    else "Delete failed."
-                )
-                results.append({"card_id": card_id, "status": "error", "error": error_msg})
-    finally:
-        _core._batch_in_progress = False
-        _core._persist_cache_to_disk()
-
-    return _finalize_tool_result(
-        {
-            "ok": True,
-            "deleted": deleted,
-            "total": len(ids),
-            "results": results,
-        }
-    )
+    return card_ids[:20]
 
 
-def batch_archive_cards(
-    card_ids: list[str],
-) -> dict:
+def batch_delete_cards(card_ids: list[str]) -> dict:
+    """Delete multiple cards in one MCP call. Max 20 per call.
+
+    Args:
+        card_ids: List of 36-char card UUIDs to delete. Max 20.
+
+    Returns:
+        Dict with deleted count and per-card results.
+    """
+    ids = _validate_batch_ids(card_ids)
+    if isinstance(ids, dict):
+        return ids
+    deleted, results = _batch_single_card_op(ids, "delete_card", "deleted", "Delete failed.")
+    return _finalize_tool_result({"ok": True, "deleted": deleted, "total": len(ids), "results": results})
+
+
+def batch_archive_cards(card_ids: list[str]) -> dict:
     """Archive multiple cards in one MCP call. Max 20 per call.
     Reversible — use unarchive_card to restore.
 
@@ -1114,49 +959,14 @@ def batch_archive_cards(
     Returns:
         Dict with archived count and per-card results.
     """
-    if not card_ids:
-        return _finalize_tool_result(
-            _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
-        )
-    try:
-        _validate_uuid_list(card_ids[:20])
-    except CliError as e:
-        return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
-    ids = card_ids[:20]
-    results: list[dict] = []
-    archived = 0
-
-    _core._batch_in_progress = True
-    try:
-        for card_id in ids:
-            arch_result = _call("archive_card", card_id=card_id)
-            if isinstance(arch_result, dict) and arch_result.get("ok"):
-                results.append({"card_id": card_id, "status": "archived"})
-                archived += 1
-            else:
-                error_msg = (
-                    arch_result.get("error", "Archive failed.")
-                    if isinstance(arch_result, dict)
-                    else "Archive failed."
-                )
-                results.append({"card_id": card_id, "status": "error", "error": error_msg})
-    finally:
-        _core._batch_in_progress = False
-        _core._persist_cache_to_disk()
-
-    return _finalize_tool_result(
-        {
-            "ok": True,
-            "archived": archived,
-            "total": len(ids),
-            "results": results,
-        }
-    )
+    ids = _validate_batch_ids(card_ids)
+    if isinstance(ids, dict):
+        return ids
+    archived, results = _batch_single_card_op(ids, "archive_card", "archived", "Archive failed.")
+    return _finalize_tool_result({"ok": True, "archived": archived, "total": len(ids), "results": results})
 
 
-def batch_unarchive_cards(
-    card_ids: list[str],
-) -> dict:
+def batch_unarchive_cards(card_ids: list[str]) -> dict:
     """Unarchive multiple cards in one MCP call. Max 20 per call.
 
     Args:
@@ -1165,35 +975,10 @@ def batch_unarchive_cards(
     Returns:
         Dict with unarchived count and per-card results.
     """
-    if not card_ids:
-        return _finalize_tool_result(
-            _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
-        )
-    try:
-        _validate_uuid_list(card_ids[:20])
-    except CliError as e:
-        return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
-    ids = card_ids[:20]
-    results: list[dict] = []
-    unarchived = 0
-
-    _core._batch_in_progress = True
-    try:
-        for card_id in ids:
-            result = _call("unarchive_card", card_id=card_id)
-            if isinstance(result, dict) and result.get("ok"):
-                results.append({"card_id": card_id, "status": "unarchived"})
-                unarchived += 1
-            else:
-                error_msg = (
-                    result.get("error", "Unarchive failed.")
-                    if isinstance(result, dict)
-                    else "Unarchive failed."
-                )
-                results.append({"card_id": card_id, "status": "error", "error": error_msg})
-    finally:
-        _core._batch_in_progress = False
-        _core._persist_cache_to_disk()
+    ids = _validate_batch_ids(card_ids)
+    if isinstance(ids, dict):
+        return ids
+    unarchived, results = _batch_single_card_op(ids, "unarchive_card", "unarchived", "Unarchive failed.")
 
     return _finalize_tool_result(
         {
