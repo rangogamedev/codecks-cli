@@ -29,7 +29,7 @@ dev = [
   "ruff>=0.6",
 ]
 mcp = [
-  "mcp[cli]>=1.6.0",
+  "mcp[cli]>=1.27.0",
 ]
 admin = [
   "playwright>=1.40",
