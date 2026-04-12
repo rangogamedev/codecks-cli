@@ -176,7 +176,8 @@ class CardRepository:
                 self._by_status[old_status] = [
                     c for c in self._by_status[old_status] if c.get("id") != card_id
                 ]
-            self._by_status.setdefault(new_status, []).append(card)
+            if new_status is not None:
+                self._by_status.setdefault(str(new_status), []).append(card)
 
     # ------------------------------------------------------------------
     # SQLite persistence bridge

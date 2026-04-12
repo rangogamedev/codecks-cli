@@ -95,7 +95,7 @@ def save_env_value(key, value):
         pass
 
 
-def _env_bool(key, default=False):
+def _env_bool(key: str, default: bool = False) -> bool:
     """Parse common boolean env formats."""
     raw = env.get(key)
     if raw is None:
@@ -103,7 +103,7 @@ def _env_bool(key, default=False):
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _env_int(key, default):
+def _env_int(key: str, default: int) -> int:
     """Parse integer env values with fallback."""
     raw = env.get(key)
     if raw is None or raw == "":
@@ -114,7 +114,7 @@ def _env_int(key, default):
         return default
 
 
-def _env_float(key, default):
+def _env_float(key: str, default: float) -> float:
     """Parse float env values with fallback."""
     raw = env.get(key)
     if raw is None or raw == "":

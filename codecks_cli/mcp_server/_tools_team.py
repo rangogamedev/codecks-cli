@@ -238,7 +238,8 @@ def _get_active_cards() -> list[dict]:
     # Fallback to API
     result = _call("list_cards")
     if isinstance(result, dict) and result.get("ok") is not False:
-        return result.get("cards", [])
+        cards = result.get("cards", [])
+        return cards if isinstance(cards, list) else []
     return []
 
 

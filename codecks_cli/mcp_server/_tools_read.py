@@ -18,7 +18,7 @@ from codecks_cli.mcp_server._core import (
 from codecks_cli.mcp_server._security import _sanitize_activity, _sanitize_card
 
 
-def _try_cache(key: str) -> dict | list | None:
+def _try_cache(key: str) -> dict | list | None:  # type: ignore[type-arg]
     """Return cached data for *key* if cache is valid, else None."""
     _core._load_cache_from_disk()
     if not _core._is_cache_valid():
@@ -26,7 +26,10 @@ def _try_cache(key: str) -> dict | list | None:
     snapshot = _core._get_snapshot()
     if snapshot is None or key not in snapshot:
         return None
-    return snapshot[key]
+    value = snapshot[key]
+    if isinstance(value, (dict, list)):
+        return value
+    return None
 
 
 def get_account() -> dict:

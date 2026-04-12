@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Literal
 
 from codecks_cli import CliError
@@ -681,7 +682,7 @@ def tick_checkboxes(
             )
         )
 
-    if not isinstance(item_list, list) or not all(isinstance(i, str) for i in item_list):
+    if not isinstance(item_list, list) or not builtins.all(isinstance(i, str) for i in item_list):
         return _finalize_tool_result(
             _contract_error(
                 "items must be a JSON array of strings.",

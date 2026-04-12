@@ -8,6 +8,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from typing import Any
 
 from codecks_cli import CliError, CodecksClient, SetupError
 from codecks_cli.config import (
@@ -140,7 +141,7 @@ def _is_cache_valid() -> bool:
     if CACHE_TTL_SECONDS <= 0:
         return False
     age = time.monotonic() - _cache_loaded_at
-    return age < CACHE_TTL_SECONDS
+    return bool(age < CACHE_TTL_SECONDS)
 
 
 def _get_snapshot() -> dict | None:
@@ -180,9 +181,9 @@ def _invalidate_cache() -> None:
     config._cache.clear()
 
 
-def _extract_hand_ids(hand: list) -> set[str]:
+def _extract_hand_ids(hand: list[Any]) -> set[str]:
     """Extract card IDs from hand list."""
-    return {c.get("id") for c in hand if isinstance(c, dict) and c.get("id")}
+    return {str(c.get("id")) for c in hand if isinstance(c, dict) and c.get("id")}
 
 
 def _compute_pm_focus(
@@ -748,7 +749,7 @@ def _contract_error(
     *,
     retryable: bool = False,
     error_code: str = "UNKNOWN",
-) -> dict:
+) -> dict[str, Any]:
     """Return a stable MCP error envelope with legacy compatibility fields."""
     return {
         "ok": False,
@@ -764,7 +765,7 @@ def _contract_error(
     }
 
 
-def _ensure_contract_dict(payload: dict) -> dict:
+def _ensure_contract_dict(payload: dict[str, Any]) -> dict[str, Any]:
     """Add stable contract metadata to dict responses."""
     out = dict(payload)
     out.setdefault("schema_version", CONTRACT_SCHEMA_VERSION)
@@ -786,12 +787,12 @@ def _ensure_contract_dict(payload: dict) -> dict:
     return out
 
 
-def _finalize_tool_result(result):
+def _finalize_tool_result(result: Any) -> dict[str, Any]:
     """Finalize tool response based on configured MCP response mode.
 
     Modes:
         - legacy (default): preserve existing top-level shapes; dicts gain
-          contract metadata (ok/schema_version).
+          contract metadata (ok/schema_version). Lists pass through as-is.
         - envelope: always return {"ok", "schema_version", "data"} for success.
     """
     if isinstance(result, dict):
@@ -814,7 +815,7 @@ def _finalize_tool_result(result):
             "schema_version": CONTRACT_SCHEMA_VERSION,
             "data": result,
         }
-    return result
+    return result  # type: ignore[no-any-return]  # legacy: lists pass through
 
 
 # ---------------------------------------------------------------------------
@@ -907,7 +908,7 @@ def _validate_uuid_list(values: list[str], field: str = "card_ids") -> list[str]
     return [_validate_uuid(v, field) for v in values]
 
 
-def _call(method_name: str, **kwargs):
+def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
     """Call a CodecksClient method, converting exceptions to error dicts.
 
     Mutations automatically update the snapshot cache via write-through.
@@ -941,7 +942,7 @@ def _call(method_name: str, **kwargs):
                     snapshot_before_mutation(client, card_ids)
                 except Exception:
                     pass  # Best-effort snapshot
-        result = getattr(client, method_name)(**kwargs)
+        result: dict[str, Any] = getattr(client, method_name)(**kwargs)
         if method_name in _MUTATION_METHODS:
             _write_through_cache(method_name, result, **kwargs)
         return result

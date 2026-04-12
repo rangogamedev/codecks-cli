@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump minimum dependency versions: pytest >=9.0.3, pytest-cov >=7.1.0, ruff >=0.15.10, mcp >=1.27.0, setuptools >=82.0.1
+- Expand mypy type checking to all source modules (41 files, up from 15) — covers MCP server, config, CLI, store, GDD, admin, operations
+- Add return type annotations to core MCP dispatcher (`_call`, `_contract_error`, `_ensure_contract_dict`, `_finalize_tool_result`)
+- Add parameter type annotations to config helpers (`_env_int`, `_env_float`, `_env_bool`)
+- Fix `tick_checkboxes` shadowing builtin `all()` with parameter name (latent bug)
+- Fix `CardRepository.update_card` null status handling in status index
+
+### Fixed
+- Updated `rich` transitive dependency 14.3.4 → 15.0.0
+
 ## [0.5.0] - 2026-04-12
 
 ### Added

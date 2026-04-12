@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,11 +25,11 @@ classifiers = [
 dev = [
   "mypy>=1.11",
   "pytest>=9.0.3",
-  "pytest-cov>=5.0",
-  "ruff>=0.6",
+  "pytest-cov>=7.1.0",
+  "ruff>=0.15.10",
 ]
 mcp = [
-  "mcp[cli]>=1.6.0",
+  "mcp[cli]>=1.27.0",
 ]
 admin = [
   "playwright>=1.40",

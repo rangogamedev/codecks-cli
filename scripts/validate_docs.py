@@ -60,10 +60,16 @@ def _actual_test_count() -> int:
 
 
 def _actual_mcp_tool_count() -> int:
+    mcp_dir = PKG / "mcp_server"
+    if mcp_dir.is_dir():
+        count = 0
+        for py_file in mcp_dir.glob("*.py"):
+            count += len(re.findall(r"mcp\.tool\(\)", py_file.read_text(encoding="utf-8")))
+        return count
     mcp_path = PKG / "mcp_server.py"
-    if not mcp_path.exists():
-        return 0
-    return len(re.findall(r"@mcp\.tool\(\)", mcp_path.read_text(encoding="utf-8")))
+    if mcp_path.exists():
+        return len(re.findall(r"mcp\.tool\(\)", mcp_path.read_text(encoding="utf-8")))
+    return 0
 
 
 def _actual_test_file_count() -> int:
@@ -75,9 +81,10 @@ def _actual_source_module_count() -> int:
     if (ROOT / "codecks_api.py").exists():
         count += 1
     count += len(list(PKG.glob("*.py")))
-    formatters = PKG / "formatters"
-    if formatters.is_dir():
-        count += len(list(formatters.glob("*.py")))
+    for subpkg in ["formatters", "mcp_server"]:
+        subdir = PKG / subpkg
+        if subdir.is_dir():
+            count += len(list(subdir.glob("*.py")))
     return count
 
 
@@ -86,25 +93,20 @@ def _actual_client_methods() -> int:
     if not client_path.exists():
         return 0
     content = client_path.read_text(encoding="utf-8")
-    # Count public methods — handles multi-line signatures (self on next line)
-    return len(re.findall(r"^    def [a-z]\w+\(", content, re.M))
+    # Count public methods (exclude private _methods)
+    return len(re.findall(r"^    def (?!_)[a-z]\w+\(", content, re.M))
 
 
 def _actual_mypy_command() -> str:
-    """Build the canonical mypy command."""
-    modules = [
-        "codecks_cli/api.py",
-        "codecks_cli/cards.py",
-        "codecks_cli/client.py",
-        "codecks_cli/commands.py",
-        "codecks_cli/formatters/",
-        "codecks_cli/models.py",
-        "codecks_cli/exceptions.py",
-        "codecks_cli/_utils.py",
-        "codecks_cli/types.py",
-        "codecks_cli/planning.py",
-    ]
-    return f"py -m mypy {' '.join(modules)}"
+    """Build the canonical mypy command from quality_gate.py MYPY_TARGETS."""
+    qg_path = ROOT / "scripts" / "quality_gate.py"
+    if qg_path.exists():
+        content = qg_path.read_text(encoding="utf-8")
+        m = re.search(r"MYPY_TARGETS\s*=\s*\[(.*?)\]", content, re.S)
+        if m:
+            targets = re.findall(r'"([^"]+)"', m.group(1))
+            return f"py -m mypy {' '.join(targets)}"
+    return "py -m mypy"
 
 
 # ---------------------------------------------------------------------------
