@@ -537,7 +537,7 @@ class TestUpdateCards:
         client = _client()
         client.update_cards(["c1"], content="New body text")
         call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "Old Title\nNew body text"
+        assert call_kwargs["content"] == "Old Title\n\nNew body text"
 
     @patch("codecks_cli.client.update_card")
     @patch("codecks_cli.client.get_card")
@@ -570,7 +570,7 @@ class TestUpdateCards:
         client = _client()
         client.update_cards(["c1"], content="New body")
         call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "Title\nNew body"
+        assert call_kwargs["content"] == "Title\n\nNew body"
 
     @patch("codecks_cli.client.update_card")
     @patch("codecks_cli.client.get_card")
@@ -581,7 +581,7 @@ class TestUpdateCards:
         client = _client()
         client.update_cards(["c1"], content="New body")
         call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "\nNew body"
+        assert call_kwargs["content"] == "\n\nNew body"
 
     @patch("codecks_cli.client.update_card")
     def test_title_and_content_combined(self, mock_update):
@@ -590,7 +590,7 @@ class TestUpdateCards:
         client = _client()
         client.update_cards(["c1"], title="New Title", content="New body")
         call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "New Title\nNew body"
+        assert call_kwargs["content"] == "New Title\n\nNew body"
 
     @patch("codecks_cli.client.update_card")
     @patch("codecks_cli.client.get_card")
@@ -601,7 +601,7 @@ class TestUpdateCards:
         client = _client()
         client.update_cards(["c1"], title="New Title")
         call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "New Title\nExisting body"
+        assert call_kwargs["content"] == "New Title\n\nExisting body"
 
 
 # ---------------------------------------------------------------------------

@@ -145,13 +145,12 @@ class TestCacheCore:
             assert _core._load_cache_from_disk() is False
 
     def test_load_cache_idempotent(self, tmp_path):
-        """Second call returns True without re-reading disk."""
+        """Second call returns True without re-reading disk (same mtime)."""
         cache_file = tmp_path / "cache.json"
         cache_file.write_text(json.dumps({"fetched_at": "2026-03-05T10:00:00Z"}))
         with patch.object(_core, "CACHE_PATH", str(cache_file)):
             _core._load_cache_from_disk()
-            # Delete file — second call should still return True (already loaded)
-            cache_file.unlink()
+            # Second call with same file (unchanged mtime) returns True via early-return
             assert _core._load_cache_from_disk() is True
 
     def test_is_cache_valid_when_empty(self):
@@ -618,22 +617,21 @@ class TestCacheInvalidation:
         mock = self._setup_mock_call()
         mock.mark_done.return_value = {"ok": True}
         with patch.object(_core, "_get_client", return_value=mock):
-            _core._call("mark_done", card_id="x")
-        # Selective invalidation: cards_result, pm_focus, standup removed
+            _core._call("mark_done", card_ids=["aaaabbbb-cccc-dddd-eeee-ffffffffffff"])
+        # Write-through: cache updated in place, keys still present
         assert _core._snapshot_cache is not None
-        assert "cards_result" not in _core._snapshot_cache
+        assert "cards_result" in _core._snapshot_cache
         assert "account" in _core._snapshot_cache
 
     def test_add_to_hand_invalidates_cache(self):
         mock = self._setup_mock_call()
         mock.add_to_hand.return_value = {"ok": True}
         with patch.object(_core, "_get_client", return_value=mock):
-            _core._call("add_to_hand", card_ids=[])
-        # Selective invalidation: hand, pm_focus, standup removed
+            _core._call("add_to_hand", card_ids=["aaaabbbb-cccc-dddd-eeee-ffffffffffff"])
+        # Write-through: cache updated in place, keys still present
         assert _core._snapshot_cache is not None
-        assert "hand" not in _core._snapshot_cache
-        assert "pm_focus" not in _core._snapshot_cache
-        # cards_result should survive (hand mutation doesn't affect card list)
+        assert "hand" in _core._snapshot_cache
+        assert "pm_focus" in _core._snapshot_cache
         assert "cards_result" in _core._snapshot_cache
 
     def test_read_does_not_invalidate_cache(self):
@@ -706,8 +704,8 @@ class TestStaleWarning:
     def test_metadata_no_stale_warning_when_fresh(self):
         """Cache age < 80% TTL should NOT include stale_warning."""
         _core._snapshot_cache = {"fetched_at": "2026-03-07T00:00:00Z"}
-        # Simulate cache loaded 50s ago (<80% of 300s)
-        _core._cache_loaded_at = time.monotonic() - 50
+        # Simulate cache loaded 10s ago (<80% of 60s TTL = 48s)
+        _core._cache_loaded_at = time.monotonic() - 10
         meta = _core._get_cache_metadata()
         assert meta["cached"] is True
         assert "stale_warning" not in meta
