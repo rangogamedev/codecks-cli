@@ -2,7 +2,6 @@
 
 Agent-first CLI + MCP for AI-powered Codecks project management.
 Public repo (MIT): https://github.com/rangogamedev/codecks-cli
-Fast navigation map: `PROJECT_INDEX.md`.
 
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.12+.

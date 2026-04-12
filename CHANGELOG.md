@@ -10,7 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `validate_docs.py --fix` flag auto-repairs stale counts in doc files
 - `validate_docs.py` now scans ALL `.md` files (not just hardcoded subset) for count mismatches
-- New checks: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
+
+### Removed
+- `HANDOFF.md` — stale session handoff doc, redundant with DEVELOPMENT.md + CHANGELOG
+- `PROJECT_INDEX.md` — navigation map, redundant with CLAUDE.md architecture section
+
+### Added (continued)
+- New checks in `validate_docs.py`: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
 
 ### Changed
 - Minimum Python version raised from 3.10 to 3.12

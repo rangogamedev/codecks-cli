@@ -27,11 +27,7 @@ _SKIP_FILES = {"CHANGELOG.md"}
 
 def _doc_files() -> list[Path]:
     """All markdown docs that should have accurate counts."""
-    docs = [p for p in sorted(ROOT.glob("*.md")) if p.name not in _SKIP_FILES]
-    idx = ROOT / "PROJECT_INDEX.md"
-    if idx.exists() and idx not in docs:
-        docs.append(idx)
-    return docs
+    return [p for p in sorted(ROOT.glob("*.md")) if p.name not in _SKIP_FILES]
 
 
 def _scan_docs(
@@ -321,7 +317,6 @@ def check_mypy_sync() -> list[dict]:
 
     files_to_check = [
         ROOT / "CLAUDE.md",
-        ROOT / "PROJECT_INDEX.md",
         ROOT / ".claude" / "commands" / "quality.md",
         ROOT / ".claude" / "commands" / "release.md",
         ROOT / ".github" / "workflows" / "test.yml",
