@@ -50,7 +50,7 @@ py codecks_api.py cards -f table   # list cards (human-readable)
 py codecks_api.py --version        # show version
 ```
 
-## Quality checks
+## Quality Checks
 
 ```bash
 # Individual checks
@@ -81,40 +81,63 @@ codecks_cli/
   config.py             <- .env loading, constants, VERSION
   exceptions.py         <- CliError, SetupError, HTTPError
   _content.py           <- Title/body parsing and serialization
+  _operations.py        <- Shared operations (CLI + MCP business logic)
   _utils.py             <- Field helpers, parsers
+  _last_result.py       <- Last result caching
   types.py              <- TypedDict response shapes
   models.py             <- FeatureSpec, SplitFeaturesSpec dataclasses
   tags.py               <- Tag registry (TagDefinition, TAGS)
   lanes.py              <- Lane registry (LaneDefinition, LANES)
-  formatters/           <- JSON/table/CSV output (7 sub-modules)
+  store.py              <- SQLite storage layer (.pm_store.db)
+  admin.py              <- Admin commands (project/deck/milestone/tag CRUD)
+  endpoint_cache.py     <- API endpoint discovery cache
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  _content.py           <- Content title/body parsing, serialization
-  _operations.py        <- Shared operations (CLI + MCP business logic)
-  store.py              <- SQLite storage layer (.pm_store.db)
+  formatters/           <- JSON/table/CSV output (7 sub-modules)
+    __init__.py          re-exports all 24 names
+    _table.py            _table(), _trunc(), _sanitize_str()
+    _core.py             output(), mutation_response(), pretty_print()
+    _cards.py            format_cards_table, format_card_detail, format_cards_csv
+    _entities.py         format_decks_table, format_projects_table, format_milestones_table
+    _activity.py         format_activity_table, format_activity_diff
+    _dashboards.py       format_pm_focus_table, format_standup_table
+    _gdd.py              format_gdd_table, format_sync_report
   mcp_server/           <- 52 MCP tools (package, 6 tool modules)
-    __init__.py          <- FastMCP init, registration, re-exports
-    __main__.py          <- py -m codecks_cli.mcp_server entry
-    _core.py             <- Client cache, dispatcher, snapshot cache
-    _security.py         <- Injection detection, sanitization
-    _repository.py       <- CardRepository (O(1) indexed lookups)
-    _tools_read.py       <- 11 query/dashboard tools
-    _tools_write.py      <- 21 mutation/hand/scaffolding/batch tools
-    _tools_comments.py   <- 5 comment CRUD tools
-    _tools_local.py      <- 4 session/preference tools
-    _tools_team.py       <- 6 team coordination tools
-    _tools_admin.py      <- 5 admin tools (Playwright-backed)
+    __init__.py          FastMCP init, registration, re-exports
+    __main__.py          py -m codecks_cli.mcp_server entry
+    _core.py             Client cache, dispatcher, snapshot cache
+    _security.py         Injection detection, sanitization
+    _repository.py       CardRepository (O(1) indexed lookups)
+    _tools_read.py       11 query/dashboard tools
+    _tools_write.py      21 mutation/hand/scaffolding/batch tools
+    _tools_comments.py   5 comment CRUD tools
+    _tools_local.py      4 session/preference tools
+    _tools_team.py       6 team coordination tools
+    _tools_admin.py      5 admin tools (Playwright-backed)
+  pm_playbook.md        <- Agent-agnostic PM methodology
+  py.typed              <- PEP 561 type marker
+tests/                  <- 1000+ pytest tests across 20 files (no live API calls)
+docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, shell, dev, logs)
 ```
 
-### Request flow
+### Request Flow
 
 ```
 CLI:  cli.py -> commands.py -> CodecksClient (client.py) -> cards.py/api.py
 MCP:  mcp_server/ -> _core._call() -> CodecksClient -> _core._finalize_tool_result()
 ```
 
-### Key design decisions
+### Import Graph (no circular deps)
+
+```
+exceptions.py  <-  config.py  <-  _utils.py  <-  api.py  <-  cards.py  <-  scaffolding.py  <-  client.py
+                                                                                                    |
+types.py (standalone)    formatters/ <- commands.py <- cli.py                                  models.py
+tags.py (standalone) <- lanes.py
+```
+
+### Key Design Decisions
 
 - **Zero runtime dependencies** — stdlib only, dev tools are optional extras
 - **AI-agent first** — JSON default output, token-efficient responses
@@ -122,10 +145,13 @@ MCP:  mcp_server/ -> _core._call() -> CodecksClient -> _core._finalize_tool_resu
 - **Error prefixes** — `[ERROR]` and `[TOKEN_EXPIRED]` for pattern matching
 - **Flat dict returns** — CodecksClient methods return plain dicts, not custom objects
 - **Snake/camel compat** — `_get_field()` helper handles both naming conventions
+- **Contracts** — `CONTRACT_SCHEMA_VERSION` (`1.0`) emitted in CLI JSON errors and MCP responses
+- **Pagination** — `cards --limit/--offset` applies client-side paging, JSON adds `total_count`, `has_more`
+- **Mutation contract** — mutation methods return stable `ok` + `per_card` shapes; `continue_on_error=True` reports partial failures
 
 ## Testing
 
-### Running tests
+### Running Tests
 
 ```bash
 pwsh -File scripts/run-tests.ps1      # full suite (1000+ tests)
@@ -134,7 +160,7 @@ py -m pytest -k "test_update" -x       # run tests matching pattern
 py -m pytest --tb=short                # shorter tracebacks
 ```
 
-### Test organization
+### Test Organization
 
 | File | Coverage |
 |------|----------|
@@ -159,40 +185,44 @@ py -m pytest --tb=short                # shorter tracebacks
 | `test_store.py` | CardStore (SQLite storage layer) |
 | `test_exceptions.py` | Exception hierarchy |
 
-### Writing tests
+### Writing Tests
 
 - Mock at module boundaries — no live API calls
 - Test patches target sub-modules: `_core.CodecksClient`, `_core.MCP_RESPONSE_MODE`
 - Use `conftest.py` fixtures for common setup (cache reset, path patches)
 - Follow existing patterns — look at neighboring tests in the same file
 
-## MCP Server
+## Docker
+
+Run everything in a sandboxed Linux container — no Python install needed on the host.
 
 ```bash
-# Install MCP dependency
-uv sync --extra mcp     # or: py -m pip install .[mcp]
-
-# Run (stdio transport)
-py -m codecks_cli.mcp_server
-
-# Or via entry point
-codecks-mcp
+./docker/build.sh                        # build image (once, or after dep changes)
+./docker/test.sh                         # run pytest (1000+ tests)
+./docker/quality.sh                      # ruff + mypy + pytest
+./docker/cli.sh cards --format table     # any CLI command
+./docker/mcp.sh                          # MCP server (stdio)
+./docker/mcp-http.sh                     # MCP server (HTTP :8808)
+./docker/shell.sh                        # interactive bash shell
+./docker/dev.sh                          # one-command dev setup (build + shell)
+./docker/logs.sh -f                      # tail MCP HTTP server logs
+./docker/claude.sh                       # run Claude Code in container
 ```
 
-52 tools across 6 modules. Call `session_start()` at session start for fast reads and full context.
+- Source is volume-mounted — edits reflect instantly, no rebuild needed
+- `.env` is mounted at runtime via `env_file:`, never baked into the image
+- `PYTHON_VERSION=3.14 ./docker/build.sh` to build with a different Python version
+- `MCP_HTTP_PORT=9000 ./docker/mcp-http.sh` to override the HTTP port
 
-## Docker (optional)
+### Security Hardening
 
-```bash
-./docker/build.sh        # build image
-./docker/test.sh         # run tests in container
-./docker/quality.sh      # quality checks in container
-./docker/cli.sh cards    # run CLI commands
-./docker/mcp.sh          # MCP server (stdio)
-./docker/shell.sh        # interactive shell
-```
+All Docker services inherit these settings:
 
-Security: non-root user, no-new-privileges, cap_drop ALL, pids_limit 256, tmpfs /tmp:64M.
+- **no-new-privileges** — prevents privilege escalation via setuid/setgid
+- **cap_drop ALL** — drops all Linux capabilities
+- **pids_limit 256** — prevents fork bombs
+- **tmpfs /tmp:64M** — writable temp capped at 64MB, cleaned on stop
+- Container runs as non-root user (`codecks`)
 
 ## Versioning
 
@@ -202,57 +232,45 @@ This project follows [Semantic Versioning](https://semver.org/):
 - **MINOR** (0.x.0) — new features, new commands, new MCP tools
 - **PATCH** (0.0.x) — bug fixes, documentation updates, internal refactors
 
-### Version locations
+### Version Locations
 
 Version is maintained in **two files** (must stay in sync):
 - `codecks_cli/config.py` — `VERSION = "x.y.z"` (runtime)
 - `pyproject.toml` — `version = "x.y.z"` (packaging)
 
-### Git tags
+### Release Process
 
-Every release gets an annotated git tag: `v0.1.0`, `v0.2.0`, etc.
+1. Review `[Unreleased]` in `CHANGELOG.md`
+2. Determine version (patch/minor/major)
+3. Update version in `config.py` and `pyproject.toml`
+4. Move CHANGELOG entries under new version heading with date
+5. Run `py scripts/quality_gate.py` (must pass clean)
+6. Commit: `git commit -m "Release v0.5.0"`
+7. Tag: `git tag -a v0.5.0 -m "v0.5.0 - Summary"`
+8. Push: `git push && git push --tags`
 
-```bash
-git tag -a v0.5.0 -m "v0.5.0 - Description of release"
-git push origin v0.5.0
-```
+## Adding Features
 
-### Release process
-
-1. **Review changes** — read `[Unreleased]` section in `CHANGELOG.md`
-2. **Determine version** — patch, minor, or major based on changes
-3. **Update version** in both `config.py` and `pyproject.toml`
-4. **Update CHANGELOG** — move `[Unreleased]` entries under new version heading with date
-5. **Run quality gate** — `py scripts/quality_gate.py` (must pass clean)
-6. **Commit** — `git commit -m "Release v0.5.0"`
-7. **Tag** — `git tag -a v0.5.0 -m "v0.5.0 - Summary"`
-8. **Push** — `git push && git push --tags`
-9. **GitHub Release** (optional) — create release from tag on GitHub
-
-The `/release` and `/changelog` Claude Code skills automate steps 1-8.
-
-## Adding features
-
-### New CLI command
+### New CLI Command
 
 1. `codecks_cli/cli.py` — add argparse subparser
 2. `codecks_cli/commands.py` — add `cmd_*()` handler
 3. `codecks_cli/client.py` — add business logic method
-4. `tests/test_cli.py`, `tests/test_commands.py`, `tests/test_client.py` — add tests
+4. Tests: `test_cli.py`, `test_commands.py`, `test_client.py`
 5. `CHANGELOG.md` — add entry under `[Unreleased]`
 
-### New MCP tool
+### New MCP Tool
 
 1. `codecks_cli/mcp_server/_tools_*.py` — add function + register in `register()`
 2. `codecks_cli/mcp_server/__init__.py` — add to re-exports
-3. `tests/test_mcp_server.py` — add tests
+3. Tests: `test_mcp_server.py`
 4. `CHANGELOG.md` — add entry under `[Unreleased]`
 
-### New formatter
+### New Formatter
 
 1. `codecks_cli/formatters/_*.py` — add formatter module
 2. `codecks_cli/formatters/__init__.py` — add to export list
-3. `tests/test_formatters.py` — add tests
+3. Tests: `test_formatters.py`
 
 ## CI/CD
 
@@ -261,11 +279,12 @@ GitHub Actions (`.github/workflows/test.yml`):
 - **Matrix** — Python 3.12, 3.14
 - **Coverage** — uploaded to Codecov
 - **Docker smoke test** — builds and runs tests in container
+- **Docs validation** — `validate_docs.py` checks for stale counts
 
 Automated docs backup (`.github/workflows/backup-docs.yml`):
 - Syncs `*.md` files to private backup repo on push to main
 
-## Useful commands
+## Useful Commands
 
 ```bash
 # Project info

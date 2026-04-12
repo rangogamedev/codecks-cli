@@ -27,7 +27,11 @@ _SKIP_FILES = {"CHANGELOG.md"}
 
 def _doc_files() -> list[Path]:
     """All markdown docs that should have accurate counts."""
-    return [p for p in sorted(ROOT.glob("*.md")) if p.name not in _SKIP_FILES]
+    paths = sorted(ROOT.glob("*.md"))
+    docs_dir = ROOT / "docs"
+    if docs_dir.is_dir():
+        paths += sorted(docs_dir.glob("*.md"))
+    return [p for p in paths if p.name not in _SKIP_FILES]
 
 
 def _scan_docs(

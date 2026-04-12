@@ -13,7 +13,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
-~35 tools total (down from 55 in v0.4.0).
+52 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
@@ -33,7 +33,7 @@ from codecks_cli.mcp_server import (
 mcp = FastMCP(
     "codecks",
     instructions=(
-        "Codecks project management tools (~35 tools). "
+        "Codecks project management tools (52 tools). "
         "All card IDs must be full 36-char UUIDs. "
         "Doc cards: no status/priority/effort. "
         "Rate limit: 40 req/5s.\n"

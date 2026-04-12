@@ -10,13 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `validate_docs.py --fix` flag auto-repairs stale counts in doc files
 - `validate_docs.py` now scans ALL `.md` files (not just hardcoded subset) for count mismatches
+- New checks in `validate_docs.py`: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
+- `docs/cli-reference.md` — full CLI command reference (extracted from README)
+- `docs/mcp-reference.md` — full MCP tool inventory and agent patterns (consolidated from README, AGENTS.md, CLAUDE.md)
+
+### Changed
+- Documentation restructured: each fact now lives in one canonical location
+  - Architecture/file tree → DEVELOPMENT.md only
+  - Token architecture, API pitfalls, known bugs → AGENTS.md only
+  - Full CLI reference → docs/cli-reference.md
+  - Full MCP reference → docs/mcp-reference.md
+  - Claude-specific config → CLAUDE.md only
+- README.md condensed from ~740 lines to ~140 lines (landing page, not reference manual)
+- CLAUDE.md trimmed to Claude-only content with cross-references
+- AGENTS.md: Known Bugs reformatted as scannable table, API Pitfalls reorganized with sub-headers
 
 ### Removed
 - `HANDOFF.md` — stale session handoff doc, redundant with DEVELOPMENT.md + CHANGELOG
 - `PROJECT_INDEX.md` — navigation map, redundant with CLAUDE.md architecture section
-
-### Added (continued)
-- New checks in `validate_docs.py`: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
 
 ### Changed
 - Minimum Python version raised from 3.10 to 3.12
