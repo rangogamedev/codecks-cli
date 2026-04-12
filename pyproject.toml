@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codecks-cli"
 version = "0.5.0"
-description = "CLI, Python API, and MCP server for Codecks.io project management — zero dependencies"
+description = "CLI, Python API, and MCP server for Codecks.io project management"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"

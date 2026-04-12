@@ -6,14 +6,18 @@ The MCP (Model Context Protocol) server exposes 52 tools for AI agents, enabling
 
 ### Install and Run
 
+The base `codecks-cli` package has zero runtime dependencies. The MCP server requires one additional package (`mcp[cli]`), installed via the `mcp` optional extra:
+
 ```bash
-# Install MCP dependency
+# Install CLI + MCP server
 py -m pip install .[mcp]
 
 # Run the server (stdio transport)
 codecks-mcp
 # or: py -m codecks_cli.mcp_server
 ```
+
+The MCP server wraps the same `CodecksClient` library that powers the CLI, adding caching, guardrails, and team coordination on top.
 
 ### Claude Code
 

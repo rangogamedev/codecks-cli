@@ -6,7 +6,7 @@
 ![CI](https://github.com/rangogamedev/codecks-cli/actions/workflows/test.yml/badge.svg)
 [![codecov](https://codecov.io/gh/rangogamedev/codecks-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/rangogamedev/codecks-cli)
 
-A command-line tool, Python library, and MCP server for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Zero runtime dependencies.
+Three interfaces to [Codecks.io](https://codecks.io) project management — a CLI, a Python API, and an MCP server for AI agents — built on one shared library with zero runtime dependencies.
 
 ## Why codecks-cli?
 
@@ -14,8 +14,8 @@ A command-line tool, Python library, and MCP server for managing [Codecks.io](ht
 
 - **For humans** — manage cards, run standups, and track sprints from your terminal
 - **For scripts** — typed Python API with 33 methods, JSON output by default
-- **For AI agents** — 52 MCP tools with snapshot caching, batch operations, and multi-agent coordination
-- **Zero dependencies** — stdlib only, installs anywhere Python 3.12+ runs
+- **For AI agents** — 52 MCP tools with snapshot caching, batch operations, and multi-agent coordination (requires optional `mcp` extra)
+- **Zero runtime dependencies** — the CLI and Python API use stdlib only. The MCP server adds one optional extra (`mcp[cli]`)
 
 ## Installation
 
@@ -25,7 +25,9 @@ cd codecks-cli
 py -m pip install .
 ```
 
-This installs two commands: `codecks-cli` (CLI) and `codecks-mcp` (MCP server).
+This installs the `codecks-cli` command with zero external dependencies.
+
+To also install the MCP server for AI agents: `py -m pip install .[mcp]` (adds `codecks-mcp` command).
 
 You can also run without installing: `py codecks_api.py <command>`
 
@@ -72,6 +74,16 @@ Add to your MCP configuration (Claude Code, Cursor, etc.):
 **Important:** Call `session_start()` as your first MCP tool call in every session. It returns account info, project context, and warms the cache for instant reads.
 
 See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory and agent patterns.
+
+## How It Works
+
+All three interfaces — CLI, Python API, and MCP server — wrap the same `CodecksClient` library. The CLI formats output for terminals, the API returns dicts for scripts, and the MCP server adds caching, guardrails, and team coordination on top for AI agents.
+
+```
+CLI (codecks-cli)  ─┐
+Python API         ─┤── CodecksClient ── Codecks HTTP API
+MCP Server         ─┘   (33 methods)
+```
 
 ## Features
 
