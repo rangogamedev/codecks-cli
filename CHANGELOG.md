@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `partition_cards` `max_cards_per_group` parameter (default 10, 0=unlimited) — caps cards per partition group, priority-sorted, with `total_in_group` and `truncated` metadata
+- `team_dashboard` `summary_only` parameter — returns counts only (~2KB vs ~45KB)
+- 25 new tests: batch operations (create/delete/archive/unarchive), `tick_checkboxes` both checkbox formats, `find_and_update` dry_run, partition field assertions, team_dashboard summary_only, list_activity entity trimming
 - `validate_docs.py --fix` flag auto-repairs stale counts in doc files
 - `validate_docs.py` now scans ALL `.md` files (not just hardcoded subset) for count mismatches
 - New checks in `validate_docs.py`: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
@@ -15,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/mcp-reference.md` — full MCP tool inventory and agent patterns (consolidated from README, AGENTS.md, CLAUDE.md)
 
 ### Changed
+- `tick_checkboxes` MCP tool delegates to `_operations.py` (removed 180 lines of duplicated regex logic)
+- `batch_delete_cards`, `batch_archive_cards`, `batch_unarchive_cards` use shared `_batch_single_card_op` helper
+- `list_activity` strips orphaned entity references and account key after limit trim (224KB → 2.8KB for limit=5)
+- `create_card` resolves deck/project BEFORE creating card (prevents orphaned cards on resolution failure)
+- MCP server instructions expanded with token efficiency defaults for `partition_cards`, `team_dashboard`, `get_card`
 - Documentation restructured: each fact now lives in one canonical location
   - Architecture/file tree → DEVELOPMENT.md only
   - Token architecture, API pitfalls, known bugs → AGENTS.md only
@@ -41,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `CardRepository.update_card` null status handling in status index
 
 ### Fixed
+- `resolve_deck_id` project filter: used `deck.get("projectId")` but API returns `project_id` (snake_case). Deck resolution with `project=` always failed.
+- `find_and_update` Phase 2 passed `dry_run` to `CodecksClient.update_cards()` which doesn't accept it. Now handles dry_run locally.
+- Checkbox regex in 5 locations: `\[\]` only matched `- []`, not `- [ ]` (standard Markdown). Changed to `\[ ?\]`.
 - Updated `rich` transitive dependency 14.3.4 → 15.0.0
 
 ## [0.5.0] - 2026-04-12
