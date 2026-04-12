@@ -40,9 +40,12 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-deps -e .
 
-# Node.js + Claude Code for in-container AI dev
+# Node.js 22 LTS + Claude Code for in-container AI dev
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nodejs npm && rm -rf /var/lib/apt/lists/*
+    ca-certificates curl && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
 RUN npm install -g @anthropic-ai/claude-code
 
 # Switch to non-root user

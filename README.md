@@ -3,6 +3,8 @@
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
 ![Tests: 900+](https://img.shields.io/badge/Tests-900%2B-brightgreen)
+![CI](https://github.com/rangogamedev/codecks-cli/actions/workflows/test.yml/badge.svg)
+[![codecov](https://codecov.io/gh/rangogamedev/codecks-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/rangogamedev/codecks-cli)
 
 A command-line tool and Python library for managing [Codecks.io](https://codecks.io) cards, decks, and projects. Zero runtime dependencies. Works from a terminal, as a Python API, or as an MCP server for AI agents.
 
