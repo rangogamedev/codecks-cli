@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `validate_docs.py --fix` flag auto-repairs stale counts in doc files
+- `validate_docs.py` now scans ALL `.md` files (not just hardcoded subset) for count mismatches
+- New checks: formatter sub-module count, MCP tool module count — 8 checks total (up from 6)
+
 ### Changed
 - Minimum Python version raised from 3.10 to 3.12
 - CI matrix reduced from 3 versions (3.10, 3.12, 3.14) to 2 (3.12, 3.14)

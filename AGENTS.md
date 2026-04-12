@@ -57,7 +57,7 @@ codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                <- argparse, build_parser(), main() dispatch
   commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
-  client.py             <- CodecksClient: 27 core methods (the API surface)
+  client.py             <- CodecksClient: 33 core methods (the API surface)
   scaffolding.py        <- Feature scaffolding: scaffold_feature(), split_features() + helpers
   cards.py              <- Card CRUD, hand, conversations, enrichment
   api.py                <- HTTP layer: query(), dispatch(), retries, token check

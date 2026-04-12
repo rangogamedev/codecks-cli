@@ -74,7 +74,7 @@ codecks_api.py          <- entry point (thin wrapper)
 codecks_cli/
   cli.py                <- argparse parser, dispatch
   commands.py           <- cmd_*() CLI handlers
-  client.py             <- CodecksClient: 27 core methods
+  client.py             <- CodecksClient: 33 public methods
   scaffolding.py        <- scaffold_feature(), split_features()
   cards.py              <- Card CRUD, hand, conversations
   api.py                <- HTTP layer (retries, timeouts, tokens)
