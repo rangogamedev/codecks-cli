@@ -1681,7 +1681,11 @@ class TestPartitionByLane:
         result = mcp_mod.partition_by_lane()
         assert result["ok"] is True
         assert result["lanes"]["code"]["count"] == 1
+        assert result["lanes"]["code"]["total_in_group"] == 1
+        assert result["lanes"]["code"]["truncated"] is False
         assert result["lanes"]["art"]["count"] == 1
+        assert result["lanes"]["art"]["total_in_group"] == 1
+        assert result["lanes"]["art"]["truncated"] is False
 
     def test_partition_annotates_claims(self):
         mock_client = MagicMock()
@@ -1696,6 +1700,8 @@ class TestPartitionByLane:
         result = mcp_mod.partition_by_lane()
         assert result["lanes"]["code"]["claimed"] == 1
         assert result["lanes"]["code"]["unclaimed"] == 0
+        assert result["lanes"]["code"]["total_in_group"] == 1
+        assert result["lanes"]["code"]["truncated"] is False
 
 
 class TestPartitionByOwner:
@@ -1712,7 +1718,10 @@ class TestPartitionByOwner:
         result = mcp_mod.partition_by_owner()
         assert result["ok"] is True
         assert "Thomas" in result["owners"]
+        assert result["owners"]["Thomas"]["total_in_group"] == 1
+        assert result["owners"]["Thomas"]["truncated"] is False
         assert "Caroline" in result["owners"]
+        assert result["owners"]["Caroline"]["total_in_group"] == 1
 
     def test_unassigned_cards(self):
         mock_client = MagicMock()
@@ -1725,6 +1734,8 @@ class TestPartitionByOwner:
         _core._invalidate_cache()
         result = mcp_mod.partition_by_owner()
         assert result["unassigned"]["count"] == 1
+        assert result["unassigned"]["total_in_group"] == 1
+        assert result["unassigned"]["truncated"] is False
 
 
 class TestTeamDashboard:
@@ -1756,6 +1767,38 @@ class TestTeamDashboard:
         result = mcp_mod.team_dashboard()
         assert result["ok"] is True
         assert result["unclaimed_in_progress_count"] == 0
+
+    def test_dashboard_summary_only(self):
+        """summary_only=True returns counts without card arrays."""
+        mock_client = MagicMock()
+        mock_client.pm_focus.return_value = {
+            "counts": {"started": 2, "blocked": 0},
+            "deck_health": {"Coding": {"total": 10}},
+            "blocked": [{"id": "x"}],
+            "stale": [],
+        }
+        mock_client.list_cards.return_value = {
+            "cards": [
+                {"id": _C1, "status": "started", "title": "Active"},
+            ]
+        }
+        _core._client = mock_client
+        _core._invalidate_cache()
+        result = mcp_mod.team_dashboard(summary_only=True)
+        assert result["ok"] is True
+        assert result["summary_only"] is True
+        # Health should have counts + deck_health but no card arrays
+        assert "counts" in result["health"]
+        assert "deck_health" in result["health"]
+        assert "blocked" not in result["health"]
+        assert "stale" not in result["health"]
+        # Agent entries should have card_count but not active_cards
+        for agent in result.get("agents", []):
+            assert "card_count" in agent
+            assert "active_cards" not in agent
+        # unclaimed count present, but no card array
+        assert "unclaimed_in_progress_count" in result
+        assert "unclaimed_in_progress" not in result
 
 
 class TestGetTeamPlaybook:
