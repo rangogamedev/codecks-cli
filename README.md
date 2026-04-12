@@ -2,7 +2,7 @@
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
-![Tests: 900+](https://img.shields.io/badge/Tests-900%2B-brightgreen)
+![Tests: 1000+](https://img.shields.io/badge/Tests-1000%2B-brightgreen)
 ![CI](https://github.com/rangogamedev/codecks-cli/actions/workflows/test.yml/badge.svg)
 [![codecov](https://codecov.io/gh/rangogamedev/codecks-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/rangogamedev/codecks-cli)
 
@@ -451,7 +451,7 @@ All methods use keyword-only arguments and return flat `dict[str, Any]` for easy
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server exposes ~35 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 52 tools for AI agents like Claude Code, enabling full Codecks management from within an AI conversation.
 
 ### Setup
 
@@ -697,10 +697,22 @@ codecks-cli/
       _gdd.py                 format_gdd_table, format_sync_report
     gdd.py                    ← Google OAuth2, GDD fetch/parse/sync
     setup_wizard.py           ← Interactive .env bootstrap
-    mcp_server.py             ← MCP server: ~35 tools (stdio transport)
+    _content.py               ← Content title/body parse, serialize, replace
+    _operations.py            ← Shared operations (CLI + MCP business logic)
+    store.py                  ← SQLite storage layer (.pm_store.db)
+    mcp_server/               ← MCP server package: 52 tools (6 tool modules)
+      _core.py                  Client cache, dispatcher, snapshot cache
+      _security.py              Injection detection, sanitization
+      _repository.py            CardRepository (O(1) indexed lookups)
+      _tools_read.py            11 query/dashboard tools
+      _tools_write.py           21 mutation/hand/scaffolding/batch tools
+      _tools_comments.py        5 comment CRUD tools
+      _tools_local.py           4 session/preference tools
+      _tools_team.py            6 team coordination tools
+      _tools_admin.py           5 admin tools (Playwright-backed)
     pm_playbook.md            ← Agent-agnostic PM methodology
     py.typed                  ← PEP 561 type marker
-  tests/                      ← 627 pytest tests (no live API calls)
+  tests/                      ← 1013 pytest tests across 20 files (no live API calls)
   .env                        ← Your tokens and config (gitignored)
   .env.example                ← Template showing required env vars
 ```

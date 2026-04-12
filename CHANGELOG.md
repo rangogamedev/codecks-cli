@@ -73,8 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `client.py` content handling refactored to use `_content.py` helpers
 - CI matrix expanded to Python 3.10, 3.12, 3.14
 - mypy targets centralized in `scripts/quality_gate.py`
-- Test suite grown from 588 to 900+ tests
-- MCP tools consolidated from 55 to ~35 (13 removed — see Removed)
+- Test suite grown from 588 to 1013 tests across 20 files
+- MCP tools: 52 registered (13 removed, new batch/overview/team/admin tools added)
 - Cache TTL reduced from 300s to 60s
 - `session_start()` returns removed-tools migration guide + project context
 - Batch operations suppress disk writes until completion
@@ -88,6 +88,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `severity` field API 500 — removed from card queries
 - `isArchived` field API 500 — use `visibility` field instead
 - Docker MCP HTTP binding and compose build
+- Resolved 36 ruff lint errors (import sorting, missing `_core` import, E402 violations)
+- Resolved 12 mypy type errors across 5 files
+- Docker basetemp: use `/tmp` for non-root container user
+- CI: install `--extra mcp` for test collection, `mkdir -p .tmp` for basetemp
+- Filter deleted/archived projects from deck listing and setup (ported from community PR #7)
+- Updated vulnerable transitive deps: cryptography 46.0.7, Pygments 2.20.0, PyJWT 2.12.1
+- Upgraded GitHub Actions to Node.js 24: checkout v6.0.2, setup-uv v8.0.0, setup-python v6.2.0, codecov v6.0.0
+- Added CODE_OF_CONDUCT.md, .editorconfig, CI/coverage badges, CODEOWNERS
+- Dockerfile: pinned Node.js 22 LTS via NodeSource
+- Dependabot: added docker ecosystem monitoring
+- Secret scanning, push protection, branch protection enabled on GitHub
+- Added `validate_docs.py` step to CI quality gate
 
 ## [0.4.0] - 2026-02-19
 

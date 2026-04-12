@@ -57,7 +57,7 @@ py codecks_api.py --version        # show version
 py -m ruff check .                       # lint
 py -m ruff format --check .              # format
 py scripts/quality_gate.py --mypy-only   # type check
-pwsh -File scripts/run-tests.ps1         # 900 tests
+pwsh -File scripts/run-tests.ps1         # 1000+ tests
 
 # All at once
 py scripts/quality_gate.py               # lint + types + tests
@@ -74,7 +74,7 @@ codecks_api.py          <- entry point (thin wrapper)
 codecks_cli/
   cli.py                <- argparse parser, dispatch
   commands.py           <- cmd_*() CLI handlers
-  client.py             <- CodecksClient: 25 core methods
+  client.py             <- CodecksClient: 27 core methods
   scaffolding.py        <- scaffold_feature(), split_features()
   cards.py              <- Card CRUD, hand, conversations
   api.py                <- HTTP layer (retries, timeouts, tokens)
@@ -90,16 +90,21 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/           <- 55 MCP tools (package)
+  _content.py           <- Content title/body parsing, serialization
+  _operations.py        <- Shared operations (CLI + MCP business logic)
+  store.py              <- SQLite storage layer (.pm_store.db)
+  mcp_server/           <- 52 MCP tools (package, 6 tool modules)
     __init__.py          <- FastMCP init, registration, re-exports
     __main__.py          <- py -m codecks_cli.mcp_server entry
     _core.py             <- Client cache, dispatcher, snapshot cache
     _security.py         <- Injection detection, sanitization
-    _tools_read.py       <- 10 query/dashboard tools
-    _tools_write.py      <- 13 mutation/hand/scaffolding tools
+    _repository.py       <- CardRepository (O(1) indexed lookups)
+    _tools_read.py       <- 11 query/dashboard tools
+    _tools_write.py      <- 21 mutation/hand/scaffolding/batch tools
     _tools_comments.py   <- 5 comment CRUD tools
-    _tools_local.py      <- 15 local tools (PM, feedback, cache)
-    _tools_team.py       <- 8 team coordination tools
+    _tools_local.py      <- 4 session/preference tools
+    _tools_team.py       <- 6 team coordination tools
+    _tools_admin.py      <- 5 admin tools (Playwright-backed)
 ```
 
 ### Request flow
@@ -123,7 +128,7 @@ MCP:  mcp_server/ -> _core._call() -> CodecksClient -> _core._finalize_tool_resu
 ### Running tests
 
 ```bash
-pwsh -File scripts/run-tests.ps1      # full suite (900 tests)
+pwsh -File scripts/run-tests.ps1      # full suite (1000+ tests)
 py -m pytest tests/test_client.py -x   # single file, stop on first failure
 py -m pytest -k "test_update" -x       # run tests matching pattern
 py -m pytest --tb=short                # shorter tracebacks
@@ -150,6 +155,9 @@ py -m pytest --tb=short                # shorter tracebacks
 | `test_models.py` | Dataclass models |
 | `test_tags.py` | Tag registry |
 | `test_lanes.py` | Lane registry |
+| `test_repository.py` | CardRepository (indexed card access) |
+| `test_store.py` | CardStore (SQLite storage layer) |
+| `test_exceptions.py` | Exception hierarchy |
 
 ### Writing tests
 
@@ -171,7 +179,7 @@ py -m codecks_cli.mcp_server
 codecks-mcp
 ```
 
-55 tools across 5 modules. Call `session_start()` at session start for fast reads and full context.
+52 tools across 6 modules. Call `session_start()` at session start for fast reads and full context.
 
 ## Docker (optional)
 

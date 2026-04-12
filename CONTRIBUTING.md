@@ -10,7 +10,7 @@ For architecture details, see `AGENTS.md` (agent-agnostic) or `CLAUDE.md` (Claud
 git clone https://github.com/rangogamedev/codecks-cli.git
 cd codecks-cli
 uv sync --extra dev          # or: py -m pip install -e .[dev]
-pwsh -File scripts/run-tests.ps1   # 900 tests, no API calls
+pwsh -File scripts/run-tests.ps1   # 1000+ tests, no API calls
 ```
 
 ## Project principles
@@ -80,7 +80,7 @@ When your change is user-visible (new feature, bug fix, breaking change), add an
 
 ## Testing
 
-The test suite has **900 tests** across 17 test files. All must pass before submitting:
+The test suite has **1000+ tests** across 20 test files. All must pass before submitting:
 
 ```bash
 pwsh -File scripts/run-tests.ps1

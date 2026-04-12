@@ -10,20 +10,20 @@ Public repo (MIT): https://github.com/rangogamedev/codecks-cli
 ## Environment
 - **Python**: `py` (never `python`/`python3`). Requires 3.10+.
 - **Run**: `py codecks_api.py` (no args = help). `--version` for version.
-- **Test**: `pwsh -File scripts/run-tests.ps1` (900 tests, no API calls)
+- **Test**: `pwsh -File scripts/run-tests.ps1` (1000+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only` (targets in `scripts/quality_gate.py:MYPY_TARGETS`)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.10, 3.12, 3.14)
 - **Docs backup**: `.github/workflows/backup-docs.yml` — auto-syncs all `*.md` files to private `codecks-cli-docs-backup` repo on push to main. Manual trigger via `workflow_dispatch`. Requires `BACKUP_TOKEN` secret.
 - **Dev deps**: `py -m pip install .[dev]` (ruff, mypy, pytest-cov in `pyproject.toml`)
-- **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.4.0)
+- **Version**: `VERSION` in `codecks_cli/config.py` (currently 0.5.0)
 
 ## Docker (optional)
 Runs the project in a sandboxed Linux container. Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
 ./docker/build.sh                        # Build image (once, or after dep changes)
-./docker/test.sh                         # Run pytest (711 tests)
+./docker/test.sh                         # Run pytest (1000+ tests)
 ./docker/quality.sh                      # Ruff + mypy + pytest
 ./docker/cli.sh cards --format table     # Any CLI command
 ./docker/mcp.sh                          # MCP server (stdio)
@@ -57,7 +57,7 @@ codecks_api.py          <- CLI entry point (backward-compat wrapper)
 codecks_cli/
   cli.py                <- argparse, build_parser(), main() dispatch
   commands.py           <- cmd_*() wrappers: argparse -> CodecksClient -> formatters (+ cards pagination metadata)
-  client.py             <- CodecksClient: 25 core methods + 2 scaffolding stubs (the API surface)
+  client.py             <- CodecksClient: 27 core methods (the API surface)
   scaffolding.py        <- Feature scaffolding: scaffold_feature(), split_features() + helpers
   cards.py              <- Card CRUD, hand, conversations, enrichment
   api.py                <- HTTP layer: query(), dispatch(), retries, token check
@@ -81,16 +81,20 @@ codecks_cli/
   planning.py           <- File-based planning tools (init, status, update, measure)
   gdd.py                <- Google OAuth2, GDD fetch/parse/sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- MCP server package: ~49 tools wrapping CodecksClient (stdio, legacy/envelope modes)
+  _operations.py        <- Shared operations (CLI + MCP business logic)
+  store.py              <- SQLite storage layer (.pm_store.db)
+  mcp_server/            <- MCP server package: 52 tools (6 tool modules, stdio transport)
     __init__.py          FastMCP init, register() calls, re-exports
     __main__.py          ``py -m codecks_cli.mcp_server`` entry point
-    _core.py             Client caching, _call dispatcher, response contract, UUID validation, snapshot cache, agent session registry
+    _core.py             Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
     _security.py         Injection detection, sanitization, input validation
+    _repository.py       CardRepository (O(1) indexed lookups by ID/status/deck/owner)
     _tools_read.py       11 query/dashboard tools (cache-aware, summary_only modes)
-    _tools_write.py      18 mutation/hand/scaffolding tools (tick_checkboxes merged)
+    _tools_write.py      21 mutation/hand/scaffolding/batch tools
     _tools_comments.py   5 comment CRUD tools
-    _tools_local.py      4 local tools (session_start, workflow preferences)
+    _tools_local.py      4 session/preference tools (session_start, workflow preferences)
     _tools_team.py       6 team coordination tools (partition_cards merged, playbook removed)
+    _tools_admin.py      5 admin tools (Playwright-backed project/deck/milestone/tag CRUD)
   pm_playbook.md        <- Agent-agnostic PM methodology (read by MCP tool)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, mcp-http, shell, dev, logs, claude)
 Dockerfile              <- Multi-stage build (Python 3.12-slim, dev+mcp+claude deps)
@@ -148,7 +152,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ## Testing
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- 17 test files mirror source: `test_config.py`, `test_api.py`, `test_cards.py`, `test_commands.py`, `test_formatters.py`, `test_gdd.py`, `test_cli.py`, `test_models.py`, `test_setup_wizard.py`, `test_client.py`, `test_scaffolding.py`, `test_exceptions.py`, `test_mcp_server.py`, `test_mcp_cache.py`, `test_planning.py`, `test_lanes.py`, `test_tags.py`
+- 20 test files mirror source: `test_api.py`, `test_cards.py`, `test_cli.py`, `test_client.py`, `test_commands.py`, `test_config.py`, `test_content.py`, `test_exceptions.py`, `test_formatters.py`, `test_gdd.py`, `test_lanes.py`, `test_models.py`, `test_mcp_cache.py`, `test_mcp_server.py`, `test_planning.py`, `test_repository.py`, `test_scaffolding.py`, `test_setup_wizard.py`, `test_store.py`, `test_tags.py`
 - Mocks at module boundary (e.g. `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)
@@ -167,7 +171,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 ## MCP Server
 - Install: `py -m pip install .[mcp]`
 - Run: `py -m codecks_cli.mcp_server` (stdio transport)
-- ~49 tools exposed (down from 55 in v0.4.0). 13 tools removed, 2 merged.
+- 52 tools registered (down from 55 in v0.4.0, 13 removed but new batch/overview tools added).
 - Response mode: `CODECKS_MCP_RESPONSE_MODE=legacy|envelope` (default `legacy`)
   - `legacy`: preserve top-level success shapes, normalize dicts with `ok`/`schema_version`
   - `envelope`: success always returned as `{"ok": true, "schema_version": "1.0", "data": ...}`

@@ -41,7 +41,7 @@ codecks_cli/
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
-  mcp_server/            <- ~35 MCP tools (package: _core, _security, _tools_*)
+  mcp_server/            <- 52 MCP tools (package: _core, _security, _tools_*)
 ```
 
 Use `/architecture` for full details, import graph, and design patterns.
@@ -133,7 +133,7 @@ Always use Context7 MCP for library/API docs. These IDs are pre-resolved — ski
 | mypy | `/websites/mypy_readthedocs_io_en` |
 
 ## MCP Servers (`.claude/settings.json`)
-- `codecks` — this project's own MCP server (~35 tools, Codecks API access)
+- `codecks` — this project's own MCP server (52 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 
