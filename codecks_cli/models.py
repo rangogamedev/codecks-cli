@@ -39,6 +39,7 @@ class FeatureSpec:
     effort: int | None
     format: str
     allow_duplicate: bool
+    project: str | None = None
     lane_descriptions: dict[str, str] | None = None
 
     # --- Backward-compat properties ---
@@ -173,6 +174,7 @@ class FeatureSpec:
         effort=None,
         format="json",
         allow_duplicate=False,
+        project=None,
         lane_descriptions=None,
     ):
         """Create a FeatureSpec from keyword arguments (programmatic API)."""
@@ -220,6 +222,7 @@ class FeatureSpec:
             effort=effort,
             format=format,
             allow_duplicate=allow_duplicate,
+            project=project,
             lane_descriptions=lane_descriptions,
         )
 
@@ -295,7 +298,8 @@ class SplitFeaturesSpec:
     lane_decks: dict[str, str | None]
     lane_skips: dict[str, bool]
     priority: str | None
-    dry_run: bool
+    project: str | None = None
+    dry_run: bool = False
 
     # --- Backward-compat properties ---
 
@@ -387,6 +391,7 @@ class SplitFeaturesSpec:
         audio_deck=None,
         skip_audio=False,
         priority=None,
+        project=None,
         dry_run=False,
     ):
         """Create from keyword arguments (programmatic API / MCP)."""
@@ -412,6 +417,7 @@ class SplitFeaturesSpec:
             lane_decks=lane_decks,
             lane_skips=lane_skips,
             priority=priority,
+            project=project,
             dry_run=bool(dry_run),
         )
 

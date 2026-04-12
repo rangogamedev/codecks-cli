@@ -19,16 +19,17 @@ from codecks_cli.exceptions import CliError
 
 class TestExtractGlobalFlags:
     def test_no_flags(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards"])
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
         assert fmt == "json"
         assert strict is False
         assert dry_run is False
         assert quiet is False
         assert verbose is False
+        assert agent is False
         assert remaining == ["cards"]
 
     def test_format_before_command(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["--format", "table", "cards"]
         )
         assert fmt == "table"
@@ -36,7 +37,7 @@ class TestExtractGlobalFlags:
         assert remaining == ["cards"]
 
     def test_format_after_command(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--format", "table"]
         )
         assert fmt == "table"
@@ -44,7 +45,7 @@ class TestExtractGlobalFlags:
         assert remaining == ["cards"]
 
     def test_format_between_args(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--status", "done", "--format", "csv"]
         )
         assert fmt == "csv"
@@ -52,7 +53,7 @@ class TestExtractGlobalFlags:
         assert remaining == ["cards", "--status", "done"]
 
     def test_strict_flag_anywhere(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--strict", "--status", "done"]
         )
         assert fmt == "json"
@@ -71,7 +72,7 @@ class TestExtractGlobalFlags:
 
     def test_format_without_value(self):
         """--format at end of argv with no value should be kept as-is."""
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--format"]
         )
         assert fmt == "json"
@@ -79,7 +80,7 @@ class TestExtractGlobalFlags:
         assert remaining == ["cards", "--format"]
 
     def test_preserves_other_args(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["update", "abc", "--status", "done", "--format", "table"]
         )
         assert fmt == "table"
@@ -87,44 +88,48 @@ class TestExtractGlobalFlags:
         assert remaining == ["update", "abc", "--status", "done"]
 
     def test_dry_run_extracted(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["create", "Card", "--dry-run"]
         )
         assert dry_run is True
         assert remaining == ["create", "Card"]
 
     def test_dry_run_anywhere(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["--dry-run", "cards", "--status", "done"]
         )
         assert dry_run is True
         assert remaining == ["cards", "--status", "done"]
 
     def test_dry_run_default_false(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards"])
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
         assert dry_run is False
 
     def test_quiet_flag(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--quiet"]
         )
         assert quiet is True
         assert remaining == ["cards"]
 
     def test_quiet_short_flag(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards", "-q"])
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["cards", "-q"]
+        )
         assert quiet is True
         assert remaining == ["cards"]
 
     def test_verbose_flag(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
             ["cards", "--verbose"]
         )
         assert verbose is True
         assert remaining == ["cards"]
 
     def test_verbose_short_flag(self):
-        fmt, strict, dry_run, quiet, verbose, remaining = _extract_global_flags(["cards", "-v"])
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["cards", "-v"]
+        )
         assert verbose is True
         assert remaining == ["cards"]
 
@@ -132,6 +137,71 @@ class TestExtractGlobalFlags:
         with pytest.raises(CliError) as exc_info:
             _extract_global_flags(["cards", "--quiet", "--verbose"])
         assert "mutually exclusive" in str(exc_info.value)
+
+    def test_json_flag(self):
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["cards", "--json"]
+        )
+        assert fmt == "json"
+        assert agent is False
+        assert remaining == ["cards"]
+
+    def test_json_flag_overrides_format(self):
+        """--json after --format table should force json."""
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["--format", "table", "--json", "cards"]
+        )
+        assert fmt == "json"
+        assert remaining == ["cards"]
+
+    def test_agent_flag(self):
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["cards", "--agent"]
+        )
+        assert fmt == "json"
+        assert quiet is True
+        assert agent is True
+        assert remaining == ["cards"]
+
+    def test_agent_flag_implies_json_and_quiet(self):
+        """--agent should force json format and suppress warnings (quiet)."""
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["--format", "table", "--agent", "cards"]
+        )
+        assert fmt == "json"
+        assert quiet is True
+        assert agent is True
+
+    def test_agent_env_var(self, monkeypatch):
+        monkeypatch.setenv("CODECKS_AGENT", "1")
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
+        assert agent is True
+        assert fmt == "json"
+        assert quiet is True
+
+    def test_agent_env_var_true(self, monkeypatch):
+        monkeypatch.setenv("CODECKS_AGENT", "true")
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
+        assert agent is True
+
+    def test_agent_env_var_yes(self, monkeypatch):
+        monkeypatch.setenv("CODECKS_AGENT", "yes")
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
+        assert agent is True
+
+    def test_agent_env_var_disabled(self, monkeypatch):
+        monkeypatch.setenv("CODECKS_AGENT", "0")
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(["cards"])
+        assert agent is False
+        assert quiet is False
+
+    def test_agent_flag_takes_precedence_over_env(self, monkeypatch):
+        """--agent flag should work even if env is unset."""
+        monkeypatch.delenv("CODECKS_AGENT", raising=False)
+        fmt, strict, dry_run, quiet, verbose, agent, remaining = _extract_global_flags(
+            ["--agent", "cards"]
+        )
+        assert agent is True
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +437,15 @@ class TestBuildParser:
         ns2 = self.parser.parse_args(["remove", "card-1"])
         assert ns1.command == "archive"
         assert ns2.command == "remove"
-        assert ns1.card_id == ns2.card_id == "card-1"
+        assert ns1.card_ids == ns2.card_ids == ["card-1"]
+
+    def test_archive_multiple_ids(self):
+        ns = self.parser.parse_args(["archive", "card-1", "card-2", "card-3"])
+        assert ns.card_ids == ["card-1", "card-2", "card-3"]
+
+    def test_unarchive_multiple_ids(self):
+        ns = self.parser.parse_args(["unarchive", "card-1", "card-2"])
+        assert ns.card_ids == ["card-1", "card-2"]
 
     def test_every_subparser_has_func_default(self):
         """Every subparser must set a func default for dispatch."""
@@ -506,6 +584,72 @@ class TestAgentCLIFeatures:
     def test_undo_subcommand(self):
         ns = self.parser.parse_args(["undo"])
         assert ns.command == "undo"
+
+    # --- --stdin flag on subparsers ---
+
+    def test_done_stdin_flag(self):
+        ns = self.parser.parse_args(["done", "--stdin"])
+        assert ns.stdin is True
+        assert ns.card_ids == []
+
+    def test_done_stdin_with_positional(self):
+        ns = self.parser.parse_args(["done", "id1", "--stdin"])
+        assert ns.stdin is True
+        assert ns.card_ids == ["id1"]
+
+    def test_start_stdin_flag(self):
+        ns = self.parser.parse_args(["start", "--stdin"])
+        assert ns.stdin is True
+
+    def test_hand_stdin_flag(self):
+        ns = self.parser.parse_args(["hand", "--stdin"])
+        assert ns.stdin is True
+
+    def test_unhand_stdin_flag(self):
+        ns = self.parser.parse_args(["unhand", "--stdin"])
+        assert ns.stdin is True
+
+    def test_update_stdin_flag(self):
+        ns = self.parser.parse_args(["update", "id1", "--stdin", "--status", "done"])
+        assert ns.stdin is True
+        assert ns.card_ids == ["id1"]
+
+
+class TestReadIdsFromStdin:
+    """Tests for _read_ids_from_stdin helper."""
+
+    def test_reads_ids_from_pipe(self, monkeypatch):
+        import io
+
+        from codecks_cli.commands import _read_ids_from_stdin
+
+        fake_stdin = io.StringIO("uuid-1\nuuid-2\n\nuuid-3\n")
+        fake_stdin.isatty = lambda: False
+        monkeypatch.setattr("sys.stdin", fake_stdin)
+        result = _read_ids_from_stdin()
+        assert result == ["uuid-1", "uuid-2", "uuid-3"]
+
+    def test_returns_empty_on_tty(self, monkeypatch):
+        import io
+
+        from codecks_cli.commands import _read_ids_from_stdin
+
+        fake_stdin = io.StringIO("")
+        fake_stdin.isatty = lambda: True
+        monkeypatch.setattr("sys.stdin", fake_stdin)
+        result = _read_ids_from_stdin()
+        assert result == []
+
+    def test_strips_whitespace(self, monkeypatch):
+        import io
+
+        from codecks_cli.commands import _read_ids_from_stdin
+
+        fake_stdin = io.StringIO("  uuid-1  \n  uuid-2  \n")
+        fake_stdin.isatty = lambda: False
+        monkeypatch.setattr("sys.stdin", fake_stdin)
+        result = _read_ids_from_stdin()
+        assert result == ["uuid-1", "uuid-2"]
 
 
 class TestAtLastRef:

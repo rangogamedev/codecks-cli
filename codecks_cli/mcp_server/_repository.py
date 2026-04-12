@@ -121,3 +121,75 @@ class CardRepository:
             if text_lower in str(c.get("title", "")).lower()
             or text_lower in str(c.get("content", "")).lower()
         ]
+
+    # ------------------------------------------------------------------
+    # Write-through mutations (single-card add/remove/update)
+    # ------------------------------------------------------------------
+
+    def add(self, card: dict) -> None:
+        """Add a single card to all indexes. Used by write-through cache."""
+        if not isinstance(card, dict) or not card.get("id"):
+            return
+        self._cards.append(card)
+        self._by_id[card["id"]] = card
+        status = card.get("status", "")
+        self._by_status.setdefault(status, []).append(card)
+        deck = str(card.get("deck") or card.get("deck_name") or "").lower()
+        if deck:
+            self._by_deck.setdefault(deck, []).append(card)
+        owner = str(card.get("owner") or card.get("owner_name") or "unassigned").lower()
+        self._by_owner.setdefault(owner, []).append(card)
+
+    def remove(self, card_id: str) -> None:
+        """Remove a card from all indexes by ID. Used by write-through cache."""
+        card = self._by_id.pop(card_id, None)
+        if card is None:
+            return
+        self._cards = [c for c in self._cards if c.get("id") != card_id]
+        # Clean up secondary indexes
+        status = card.get("status", "")
+        if status in self._by_status:
+            self._by_status[status] = [c for c in self._by_status[status] if c.get("id") != card_id]
+        deck = str(card.get("deck") or card.get("deck_name") or "").lower()
+        if deck and deck in self._by_deck:
+            self._by_deck[deck] = [c for c in self._by_deck[deck] if c.get("id") != card_id]
+        owner = str(card.get("owner") or card.get("owner_name") or "unassigned").lower()
+        if owner in self._by_owner:
+            self._by_owner[owner] = [c for c in self._by_owner[owner] if c.get("id") != card_id]
+
+    def update(self, card_id: str, fields: dict) -> None:
+        """Update specific fields on a cached card. Re-indexes if status changes."""
+        card = self._by_id.get(card_id)
+        if card is None:
+            return
+        old_status = card.get("status")
+        card.update(fields)
+        new_status = card.get("status")
+        if old_status != new_status:
+            # Re-index status
+            if old_status in self._by_status:
+                self._by_status[old_status] = [c for c in self._by_status[old_status] if c.get("id") != card_id]
+            self._by_status.setdefault(new_status, []).append(card)
+
+    # ------------------------------------------------------------------
+    # SQLite persistence bridge
+    # ------------------------------------------------------------------
+
+    def persist_to_store(self, store: "CardStore") -> None:
+        """Write current in-memory data to SQLite store."""
+        from codecks_cli.store import CardStore as _CS  # noqa: F841
+
+        store.upsert_cards(self._cards)
+
+    def load_from_store(self, store: "CardStore") -> bool:
+        """Load cards from SQLite store into in-memory indexes.
+
+        Returns True if data was loaded, False if the store was empty.
+        """
+        from codecks_cli.store import CardStore as _CS  # noqa: F841
+
+        cards = store.all_cards()
+        if cards:
+            self.load(cards)
+            return True
+        return False

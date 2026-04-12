@@ -86,6 +86,29 @@ def list_decks():
     return result
 
 
+_FIELDS_MINIMAL = [
+    "title",
+    "status",
+    "priority",
+    "deckId",
+    "effort",
+    {"assignee": ["name", "id"]},
+]
+
+_FIELDS_LIST = _FIELDS_MINIMAL + [
+    "masterTags",
+    "lastUpdatedAt",
+]
+
+_FIELDS_FULL = _FIELDS_LIST + [
+    "createdAt",
+    "milestoneId",
+    "isDoc",
+    "childCardInfo",
+    "content",
+]
+
+
 def list_cards(
     deck_filter=None,
     status_filter=None,
@@ -99,23 +122,19 @@ def list_cards(
     updated_after=None,
     updated_before=None,
     archived=False,
+    include_content=True,
 ):
-    card_fields = [
-        "title",
-        "status",
-        "priority",
-        "deckId",
-        "effort",
-        "createdAt",
-        "milestoneId",
-        "masterTags",
-        "lastUpdatedAt",
-        "isDoc",
-        "childCardInfo",
-        "content",
-        {"assignee": ["name", "id"]},
-    ]
+    if include_content:
+        card_fields = list(_FIELDS_FULL)
+    else:
+        # Content needed for search — upgrade to full if searching
+        if search_filter:
+            card_fields = list(_FIELDS_FULL)
+        else:
+            card_fields = list(_FIELDS_LIST)
     card_query = {"visibility": "archived" if archived else "default"}
+    # NOTE: Codecks GraphQL API does not support server-side limit/offset
+    # on card queries. All pagination is client-side. Tested 2026-03.
 
     # Parse and validate status filter (supports comma-separated values)
     status_values = None
@@ -282,9 +301,15 @@ def _build_project_map(decks_result):
             project_decks[pid]["deck_ids"].add(deck.get("id"))
             project_decks[pid]["deck_titles"].append(deck.get("title", ""))
 
+    # Include zero-deck projects from CODECKS_PROJECTS that aren't in decks yet
+    for pid, pname in project_names.items():
+        if pid not in project_decks:
+            project_decks[pid] = {"deck_ids": set(), "deck_titles": [], "name": pname}
+
     # Apply names from .env mapping, fallback to projectId
     for pid, info in project_decks.items():
-        info["name"] = project_names.get(pid, pid)
+        if "name" not in info:
+            info["name"] = project_names.get(pid, pid)
 
     return project_decks
 
@@ -348,8 +373,32 @@ def list_tags():
 
 
 def list_milestones():
-    """List milestones. Scans cards for milestone IDs and uses .env names."""
+    """List milestones via direct API query, with .env name fallback.
+
+    Tries direct milestones query first (O(1) API call).
+    Falls back to card-scan approach if the direct query returns no data.
+    """
     milestone_names = load_milestone_names()
+
+    # Direct API query for milestones (avoids scanning all cards)
+    try:
+        api_result = query({"_root": [{"account": [{"milestones": ["id", "name"]}]}]})
+        api_milestones = api_result.get("milestone", {})
+        if api_milestones:
+            milestone_map = {}
+            for _key, ms in api_milestones.items():
+                ms_id = ms.get("id", _key)
+                ms_name = ms.get("name") or milestone_names.get(ms_id, ms_id)
+                milestone_map[ms_id] = {"name": ms_name, "cards": []}
+            # Include any .env milestones not returned by API
+            for mid, name in milestone_names.items():
+                if mid not in milestone_map:
+                    milestone_map[mid] = {"name": name, "cards": []}
+            return milestone_map
+    except Exception:
+        pass  # Fall back to card-scan approach
+
+    # Fallback: scan cards for milestone IDs (original approach)
     result = list_cards()
     used_ids: dict[str, list] = {}
     for _key, card in result.get("card", {}).items():
@@ -742,11 +791,33 @@ def _find_closest(query: str, candidates: list[str]) -> str | None:
     return None
 
 
-def resolve_deck_id(deck_name):
-    """Resolve deck name to ID with fuzzy match suggestions."""
+def resolve_deck_id(deck_name, project=None):
+    """Resolve deck name to ID with fuzzy match suggestions.
+
+    Args:
+        deck_name: Deck name (case-insensitive).
+        project: Optional project name to scope resolution. When provided,
+            only decks belonging to that project are considered, preventing
+            cross-project name collisions.
+    """
     decks_result = list_decks()
+
+    # Resolve project name to ID if scoping is requested
+    project_id = None
+    if project is not None:
+        project_names = load_project_names()
+        for pid, pname in project_names.items():
+            if pname.lower() == project.lower():
+                project_id = pid
+                break
+        if project_id is None:
+            raise CliError(f"[ERROR] Project '{project}' not found for deck resolution.")
+
     available = []
     for _key, deck in decks_result.get("deck", {}).items():
+        # Skip decks outside the target project when scoped
+        if project_id is not None and deck.get("projectId") != project_id:
+            continue
         title = deck.get("title", "")
         if title.lower() == deck_name.lower():
             return deck.get("id")
@@ -754,15 +825,42 @@ def resolve_deck_id(deck_name):
     closest = _find_closest(deck_name, available)
     hint = f" Did you mean '{closest}'?" if closest else ""
     avail_str = f" Available: {', '.join(sorted(available))}" if available else ""
-    raise CliError(f"[ERROR] Deck '{deck_name}' not found.{hint}{avail_str}")
+    scope = f" in project '{project}'" if project else ""
+    raise CliError(f"[ERROR] Deck '{deck_name}' not found{scope}.{hint}{avail_str}")
 
 
 def resolve_milestone_id(milestone_name):
-    """Resolve milestone name to ID using .env mapping."""
+    """Resolve milestone name to ID using .env mapping, with API fallback.
+
+    Steps:
+        1. Check env mapping (fast path).
+        2. Query Codecks API for all milestones (handles newly created ones).
+        3. Error with available names hint.
+    """
+    # Step 1: Check env mapping (fast path)
     milestone_names = load_milestone_names()
     for mid, name in milestone_names.items():
         if name.lower() == milestone_name.lower():
             return mid
+
+    # Step 2: API fallback — query Codecks for milestones not yet in .env
+    try:
+        result = query({"_root": [{"account": [{"milestones": ["id", "name"]}]}]})
+        for _key, ms in result.get("milestone", {}).items():
+            if (ms.get("name") or "").lower() == milestone_name.lower():
+                ms_id = ms.get("id", _key)
+                # Auto-register so future lookups are fast
+                existing = config.env.get("CODECKS_MILESTONES", "")
+                new_entry = f"{ms_id}={ms.get('name', milestone_name)}"
+                if ms_id not in existing:
+                    updated = f"{existing},{new_entry}" if existing else new_entry
+                    config.save_env_value("CODECKS_MILESTONES", updated)
+                    config.env["CODECKS_MILESTONES"] = updated
+                return ms_id
+    except CliError:
+        pass
+
+    # Step 3: Error with helpful hint
     available = list(milestone_names.values())
     hint = f" Available: {', '.join(available)}" if available else ""
     raise CliError(

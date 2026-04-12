@@ -4,6 +4,7 @@ codecks-cli — CLI tool for managing Codecks.io cards, decks, and projects
 
 import argparse
 import json
+import os
 import sys
 
 from codecks_cli import config
@@ -21,6 +22,7 @@ from codecks_cli.commands import (
     cmd_completion,
     cmd_conversations,
     cmd_create,
+    cmd_deck_full,
     cmd_decks,
     cmd_delete,
     cmd_dispatch,
@@ -61,6 +63,9 @@ Usage: py codecks_api.py <command> [args...]
 Global flags:
   --format table          Output as readable text instead of JSON (default: json)
   --format csv            Output cards as CSV (cards command only)
+  --json                  Force JSON output (same as --format json)
+  --agent                 Agent mode: JSON output + suppress warnings + strict envelope
+                          Auto-enabled by CODECKS_AGENT=1 env var
   --strict                Enable strict agent mode (fail fast on ambiguous raw API responses)
   --dry-run               Preview mutations without executing them
   --quiet, -q             Suppress confirmations and warnings
@@ -156,8 +161,8 @@ Commands:
     --tag <tags>            Set tags (comma-separated, use "none" to clear all)
     --doc <true|false>      Convert to/from doc card
     --continue-on-error     Continue updating remaining cards after failure
-  archive|remove <id>     - Remove a card (reversible, this is the standard way)
-  unarchive <id>          - Restore an archived card
+  archive|remove <id...>  - Remove card(s) (reversible, this is the standard way)
+  unarchive <id...>       - Restore archived card(s)
   delete <id> --confirm   - PERMANENTLY delete (requires --confirm, prefer archive)
   done <id> [id...]       - Mark one or more cards as done
   start <id> [id...]      - Mark one or more cards as started
@@ -216,7 +221,7 @@ Commands:
 def _extract_global_flags(argv):
     """Extract global flags from argv regardless of position.
 
-    Returns (format_str, strict, dry_run, quiet, verbose, remaining_argv).
+    Returns (format_str, strict, dry_run, quiet, verbose, agent_mode, remaining_argv).
     Handles --version directly.
     """
     fmt = "json"
@@ -224,12 +229,23 @@ def _extract_global_flags(argv):
     dry_run = False
     quiet = False
     verbose = False
+    agent_mode = False
     remaining = []
     i = 0
     while i < len(argv):
         if argv[i] == "--version":
             print(f"codecks-cli {config.VERSION}")
             sys.exit(0)
+        elif argv[i] == "--json":
+            fmt = "json"
+            i += 1
+            continue
+        elif argv[i] == "--agent":
+            agent_mode = True
+            fmt = "json"
+            quiet = True
+            i += 1
+            continue
         elif argv[i] == "--strict":
             strict = True
             i += 1
@@ -255,9 +271,18 @@ def _extract_global_flags(argv):
         else:
             remaining.append(argv[i])
         i += 1
+    # Auto-detect agent mode from env
+    if not agent_mode and os.environ.get("CODECKS_AGENT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        agent_mode = True
+        fmt = "json"
+        quiet = True
     if quiet and verbose:
         raise CliError("[ERROR] --quiet and --verbose are mutually exclusive.")
-    return fmt, strict, dry_run, quiet, verbose, remaining
+    return fmt, strict, dry_run, quiet, verbose, agent_mode, remaining
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +351,14 @@ def build_parser():
     # --- account / decks / projects / milestones / tags ---
     sub.add_parser("account").set_defaults(func=cmd_account)
     sub.add_parser("decks").set_defaults(func=cmd_decks)
+
+    # --- deck-full ---
+    p = sub.add_parser("deck-full", help="List all cards in a deck with full content")
+    p.add_argument("deck_name")
+    p.add_argument("--project")
+    p.add_argument("--status", "-s")
+    p.set_defaults(func=cmd_deck_full)
+
     sub.add_parser("projects").set_defaults(func=cmd_projects)
     sub.add_parser("milestones").set_defaults(func=cmd_milestones)
     sub.add_parser("tags").set_defaults(func=cmd_tags)
@@ -389,6 +422,7 @@ def build_parser():
     p.add_argument("--tag")
     p.add_argument("--doc")
     p.add_argument("--continue-on-error", action="store_true", dest="continue_on_error")
+    p.add_argument("--stdin", action="store_true", help="Read additional card IDs from stdin")
     p.set_defaults(func=cmd_update)
 
     # --- feature ---
@@ -458,12 +492,12 @@ def build_parser():
     # --- archive / remove ---
     for name in ("archive", "remove"):
         p = sub.add_parser(name)
-        p.add_argument("card_id")
+        p.add_argument("card_ids", nargs="+", help="Card UUID(s)")
         p.set_defaults(func=cmd_archive)
 
     # --- unarchive ---
     p = sub.add_parser("unarchive")
-    p.add_argument("card_id")
+    p.add_argument("card_ids", nargs="+", help="Card UUID(s)")
     p.set_defaults(func=cmd_unarchive)
 
     # --- delete ---
@@ -474,20 +508,24 @@ def build_parser():
 
     # --- done / start ---
     p = sub.add_parser("done")
-    p.add_argument("card_ids", nargs="+")
+    p.add_argument("card_ids", nargs="*")
+    p.add_argument("--stdin", action="store_true", help="Read card IDs from stdin")
     p.set_defaults(func=cmd_done)
     p = sub.add_parser("start")
-    p.add_argument("card_ids", nargs="+")
+    p.add_argument("card_ids", nargs="*")
+    p.add_argument("--stdin", action="store_true", help="Read card IDs from stdin")
     p.set_defaults(func=cmd_start)
 
     # --- hand ---
     p = sub.add_parser("hand")
     p.add_argument("card_ids", nargs="*")
+    p.add_argument("--stdin", action="store_true", help="Read card IDs from stdin")
     p.set_defaults(func=cmd_hand)
 
     # --- unhand ---
     p = sub.add_parser("unhand")
-    p.add_argument("card_ids", nargs="+")
+    p.add_argument("card_ids", nargs="*")
+    p.add_argument("--stdin", action="store_true", help="Read card IDs from stdin")
     p.set_defaults(func=cmd_unhand)
 
     # --- activity ---
@@ -676,11 +714,14 @@ def main():
         sys.exit(0)
 
     # Extract global flags from anywhere in argv
-    fmt, strict, dry_run, quiet, verbose, remaining_argv = _extract_global_flags(sys.argv[1:])
+    fmt, strict, dry_run, quiet, verbose, agent_mode, remaining_argv = _extract_global_flags(
+        sys.argv[1:]
+    )
     config.RUNTIME_STRICT = strict
     config.RUNTIME_DRY_RUN = dry_run
     config.RUNTIME_QUIET = quiet
     config.RUNTIME_VERBOSE = verbose
+    config.RUNTIME_AGENT_MODE = agent_mode
     if verbose:
         config.HTTP_LOG_ENABLED = True
 

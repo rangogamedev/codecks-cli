@@ -70,33 +70,63 @@ async def create_deck(name: str, project: str | None = None) -> dict:
     return await asyncio.to_thread(_run_admin, admin.create_deck, name, project=project)
 
 
-async def create_milestone(name: str, target_date: str | None = None) -> dict:
+async def create_milestone(
+    name: str,
+    target_date: str | None = None,
+    project: str | None = None,
+    color: str = "blue",
+) -> dict:
     """Create a release milestone.
 
-    Uses direct Codecks dispatch API.
+    Uses direct Codecks dispatch API. Auto-registers in .env for immediate
+    name resolution without server restart.
 
     Args:
         name: Milestone name (e.g., "Alpha").
         target_date: Optional target date (YYYY-MM or YYYY-MM-DD).
+        project: Project name. Defaults to the primary project.
+        color: Milestone color. Valid values: blue, green, red, yellow.
+               Default: blue.
 
     Returns:
-        Dict with ok, milestone_name, source.
+        Dict with ok, milestone_name, milestone_id, color, source.
     """
+    # Pre-flight color validation (Codecks API is more restrictive than Python code)
+    _API_VALID_COLORS = {"blue", "green", "red", "yellow"}
+    if color and color.lower().strip() not in _API_VALID_COLORS:
+        return _finalize_tool_result(
+            _contract_error(
+                f"Invalid milestone color '{color}'. "
+                f"Valid: {', '.join(sorted(_API_VALID_COLORS))}. Default: blue.",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
+
     try:
         name = _validate_input(name, "name")
         if target_date is not None:
             target_date = _validate_input(target_date, "target_date")
+        if project is not None:
+            project = _validate_input(project, "project")
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
 
     from codecks_cli import admin
 
     return await asyncio.to_thread(
-        _run_admin, admin.create_milestone, name, target_date=target_date
+        _run_admin,
+        admin.create_milestone,
+        name,
+        target_date=target_date,
+        project=project,
+        color=color,
     )
 
 
-async def create_tag(name: str, color: str | None = None) -> dict:
+async def create_tag(
+    name: str, color: str | None = None, project: str | None = None
+) -> dict:
     """Create a new project-level tag.
 
     Uses direct Codecks dispatch API.
@@ -104,6 +134,7 @@ async def create_tag(name: str, color: str | None = None) -> dict:
     Args:
         name: Tag name (e.g., "legal").
         color: Optional hex color (e.g., "#ff0000").
+        project: Project name. Defaults to the primary project.
 
     Returns:
         Dict with ok, tag_name, source.
@@ -112,12 +143,16 @@ async def create_tag(name: str, color: str | None = None) -> dict:
         name = _validate_input(name, "name")
         if color is not None:
             color = _validate_input(color, "color")
+        if project is not None:
+            project = _validate_input(project, "project")
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
 
     from codecks_cli import admin
 
-    return await asyncio.to_thread(_run_admin, admin.create_tag, name, color=color)
+    return await asyncio.to_thread(
+        _run_admin, admin.create_tag, name, color=color, project=project
+    )
 
 
 async def archive_deck(deck: str) -> dict:

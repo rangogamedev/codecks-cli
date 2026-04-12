@@ -33,6 +33,8 @@ def load_env():
         "CODECKS_REPORT_TOKEN",
         "CODECKS_ACCOUNT",
         "CODECKS_USER_ID",
+        "CODECKS_PROJECTS",
+        "CODECKS_MILESTONES",
         "CODECKS_HTTP_TIMEOUT_SECONDS",
         "CODECKS_HTTP_MAX_RETRIES",
         "CODECKS_HTTP_RETRY_BASE_SECONDS",
@@ -41,6 +43,7 @@ def load_env():
         "CODECKS_HTTP_LOG_SAMPLE_RATE",
         "CODECKS_MCP_RESPONSE_MODE",
         "CODECKS_CACHE_TTL_SECONDS",
+        "CODECKS_AGENT",
         "GDD_GOOGLE_DOC_URL",
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
@@ -165,7 +168,10 @@ if MCP_RESPONSE_MODE not in {"legacy", "envelope"}:
 
 CACHE_FILE = ".pm_cache.json"
 CACHE_PATH = os.path.join(_PROJECT_ROOT, CACHE_FILE)
-CACHE_TTL_SECONDS = _env_int("CODECKS_CACHE_TTL_SECONDS", 300)
+CACHE_TTL_SECONDS = _env_int("CODECKS_CACHE_TTL_SECONDS", 60)
+
+STORE_DB_FILE = ".pm_store.db"
+STORE_DB_PATH = os.path.join(_PROJECT_ROOT, STORE_DB_FILE)
 
 # ---------------------------------------------------------------------------
 # GDD-related paths and Google OAuth constants
@@ -191,6 +197,7 @@ RUNTIME_STRICT = False
 RUNTIME_DRY_RUN = False
 RUNTIME_QUIET = False
 RUNTIME_VERBOSE = False
+RUNTIME_AGENT_MODE = False
 
 # ---------------------------------------------------------------------------
 # Re-export exceptions for backward compatibility

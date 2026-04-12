@@ -78,6 +78,7 @@ class TestReadTools:
             updated_before=None,
             archived=False,
             include_stats=False,
+            include_content=False,
         )
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
@@ -1087,6 +1088,7 @@ class TestSplitFeaturesTool:
             audio_deck=None,
             skip_audio=False,
             priority=None,
+            project=None,
             dry_run=True,
         )
 
@@ -1134,6 +1136,7 @@ class TestSplitFeaturesTool:
             audio_deck=None,
             skip_audio=False,
             priority="b",
+            project=None,
             dry_run=False,
         )
 
@@ -1167,6 +1170,7 @@ class TestSplitFeaturesTool:
             audio_deck="Audio",
             skip_audio=False,
             priority=None,
+            project=None,
             dry_run=False,
         )
 
@@ -1357,8 +1361,8 @@ class TestRegistryTools:
     def test_tag_registry_returns_all_tags(self):
         result = mcp_mod.get_tag_registry()
         assert result["ok"] is True
-        assert result["count"] == 8
-        assert len(result["tags"]) == 8
+        assert result["count"] == 12
+        assert len(result["tags"]) == 12
 
     def test_tag_registry_filter_system(self):
         result = mcp_mod.get_tag_registry(category="system")
@@ -1371,7 +1375,7 @@ class TestRegistryTools:
     def test_tag_registry_filter_discipline(self):
         result = mcp_mod.get_tag_registry(category="discipline")
         assert result["ok"] is True
-        assert result["count"] == 6
+        assert result["count"] == 10
         names = [t["name"] for t in result["tags"]]
         assert "code" in names
         assert "art" in names
@@ -1451,7 +1455,7 @@ class TestRegistryResponseModes:
             assert result["ok"] is True
             assert result["schema_version"] == "1.0"
             assert "tags" in result["data"]
-            assert result["data"]["count"] == 8
+            assert result["data"]["count"] == 12
         finally:
             _core.MCP_RESPONSE_MODE = original_mode
 
@@ -2694,3 +2698,201 @@ class TestDryRun:
         )
         assert result["ok"] is True
         assert "(5000 chars)" in result["changes"]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Token Diet verification tests
+# ---------------------------------------------------------------------------
+
+
+class TestCardSummary:
+    """Verify _card_summary returns exactly the 7 expected fields."""
+
+    def test_card_summary_fields(self):
+        card = {
+            "id": _C1,
+            "title": "Test card",
+            "status": "started",
+            "priority": "a",
+            "effort": 3,
+            "deck": "Features",
+            "deck_name": "Features",
+            "owner": "Alice",
+            "owner_name": "Alice",
+            "content": "Long body text that should be excluded...",
+            "isDoc": False,
+            "lastUpdatedAt": "2025-01-01T00:00:00Z",
+            "checkboxStats": {"total": 5, "checked": 2},
+            "resolvables": ["r1", "r2"],
+            "deckId": "d1",
+            "milestoneId": "m1",
+            "assignee": "u1",
+        }
+        summary = _core._card_summary(card)
+        assert set(summary.keys()) == {"id", "title", "status", "priority", "effort", "deck", "owner"}
+        assert summary["id"] == _C1
+        assert summary["title"] == "Test card"
+        assert summary["status"] == "started"
+        assert summary["priority"] == "a"
+        assert summary["effort"] == 3
+        assert summary["deck"] == "Features"
+        assert summary["owner"] == "Alice"
+
+    def test_card_summary_handles_missing_fields(self):
+        card = {"id": _C1, "title": "Minimal"}
+        summary = _core._card_summary(card)
+        assert summary["id"] == _C1
+        assert summary["title"] == "Minimal"
+        assert summary["status"] is None
+        assert summary["priority"] is None
+        assert summary["effort"] is None
+        assert summary["deck"] == ""
+        assert summary["owner"] == ""
+
+    def test_card_summary_size_much_smaller(self):
+        """Verify summary is significantly smaller than full card."""
+        import json
+
+        card = {
+            "id": _C1,
+            "title": "Feature: Implement inventory system",
+            "status": "started",
+            "priority": "a",
+            "effort": 5,
+            "deck": "Code",
+            "owner": "Alice",
+            "content": "# Inventory System\n\n" + "Design doc body " * 200,
+            "isDoc": False,
+            "lastUpdatedAt": "2025-01-01T00:00:00Z",
+            "checkboxStats": {"total": 10, "checked": 3},
+            "resolvables": [f"r{i}" for i in range(5)],
+            "deckId": "d1",
+            "milestoneId": "m1",
+            "assignee": "u1",
+            "tags": ["code", "feature"],
+        }
+        full_size = len(json.dumps(card))
+        summary_size = len(json.dumps(_core._card_summary(card)))
+        assert summary_size < full_size * 0.2  # Summary should be <20% of full
+
+
+class TestSlimCardListDropsContent:
+    """Verify _slim_card_list drops content, timestamps, and extra metadata."""
+
+    def test_slim_card_list_drops_content(self):
+        card = {
+            "id": _C1,
+            "title": "Test",
+            "status": "started",
+            "content": "Long body...",
+            "isDoc": True,
+            "lastUpdatedAt": "2025-01-01T00:00:00Z",
+            "checkboxStats": {"total": 5},
+            "resolvables": ["r1"],
+        }
+        slimmed = _core._slim_card_list(card)
+        assert "content" not in slimmed
+        assert "isDoc" not in slimmed
+        assert "lastUpdatedAt" not in slimmed
+        assert "checkboxStats" not in slimmed
+        assert "resolvables" not in slimmed
+        assert slimmed["id"] == _C1
+        assert slimmed["title"] == "Test"
+        assert slimmed["status"] == "started"
+
+
+class TestPmFocusSummaryOnly:
+    """Verify summary_only mode returns counts+deck_health only."""
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_pm_focus_summary_only(self, MockClient):
+        client = _mock_client(
+            pm_focus={
+                "counts": {"started": 5, "blocked": 2, "in_review": 1, "hand": 3, "stale": 1},
+                "blocked": [{"id": _C1, "title": "Blocked card"}],
+                "in_review": [],
+                "hand": [],
+                "stale": [],
+                "suggested": [],
+                "deck_health": {"by_deck": {"Code": {"total": 5}}, "by_owner": {}},
+                "filters": {"project": None, "owner": None, "limit": 5, "stale_days": 14},
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.pm_focus(summary_only=True)
+        assert result.get("summary_only") is True
+        assert "counts" in result
+        assert "deck_health" in result
+        # Card arrays should NOT be present
+        assert "blocked" not in result
+        assert "in_review" not in result
+        assert "hand" not in result
+        assert "stale" not in result
+        assert "suggested" not in result
+
+
+class TestStandupSummaryOnly:
+    """Verify summary_only mode returns counts only."""
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_standup_summary_only(self, MockClient):
+        client = _mock_client(
+            standup={
+                "recently_done": [{"id": _C1}],
+                "in_progress": [{"id": _C2}],
+                "blocked": [],
+                "hand": [{"id": _C1}],
+                "filters": {"project": None, "owner": None, "days": 2},
+            }
+        )
+        MockClient.return_value = client
+        result = mcp_mod.standup(summary_only=True)
+        assert result.get("summary_only") is True
+        assert "counts" in result
+        assert result["counts"]["recently_done"] == 1
+        assert result["counts"]["in_progress"] == 1
+        assert result["counts"]["blocked"] == 0
+        assert result["counts"]["hand"] == 1
+        # Card arrays should NOT be present
+        assert "recently_done" not in result
+        assert "in_progress" not in result
+
+
+class TestListCardsNoContent:
+    """Verify list_cards passes include_content=False to API by default."""
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_list_cards_no_content_default(self, MockClient):
+        """Without search, include_content should be False."""
+        client = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": None})
+        MockClient.return_value = client
+        mcp_mod.list_cards()
+        call_kwargs = client.list_cards.call_args[1]
+        assert call_kwargs["include_content"] is False
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_list_cards_with_search_includes_content(self, MockClient):
+        """With search param, include_content should be True."""
+        client = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": None})
+        MockClient.return_value = client
+        mcp_mod.list_cards(search="inventory")
+        call_kwargs = client.list_cards.call_args[1]
+        assert call_kwargs["include_content"] is True
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_list_cards_stats_excluded_by_default(self, MockClient):
+        """Stats should not appear in response unless include_stats=True."""
+        client = _mock_client(list_cards={"cards": [{"id": "c1"}], "stats": {"total": 1}})
+        MockClient.return_value = client
+        result = mcp_mod.list_cards()
+        assert "stats" not in result
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_list_cards_stats_included_when_requested(self, MockClient):
+        """Stats should appear when include_stats=True."""
+        client = _mock_client(
+            list_cards={"cards": [{"id": "c1"}], "stats": {"total": 1}}
+        )
+        MockClient.return_value = client
+        result = mcp_mod.list_cards(include_stats=True)
+        assert "stats" in result

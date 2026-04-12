@@ -88,8 +88,14 @@ def _make_snapshot():
 def _reset_cache():
     """Ensure cache is clean before and after each test."""
     _core._invalidate_cache()
+    # Use an in-memory SQLite store to avoid reading stale data from .pm_store.db
+    from codecks_cli.store import CardStore
+
+    _core._reset_store()
+    _core._store = CardStore(":memory:")
     yield
     _core._invalidate_cache()
+    _core._reset_store()
 
 
 def _inject_cache(snapshot=None):

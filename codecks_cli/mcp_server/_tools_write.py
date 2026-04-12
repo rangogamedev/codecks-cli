@@ -80,6 +80,7 @@ def update_cards(
     priority: Literal["a", "b", "c", "null"] | None = None,
     effort: str | None = None,
     deck: str | None = None,
+    project: str | None = None,
     title: str | None = None,
     content: str | None = None,
     milestone: str | None = None,
@@ -175,6 +176,7 @@ def update_cards(
             priority=priority,
             effort=effort,
             deck=deck,
+            project=project,
             title=title,
             content=content,
             milestone=milestone,
@@ -305,6 +307,7 @@ def scaffold_feature(
     priority: Literal["a", "b", "c", "null"] | None = None,
     effort: int | None = None,
     allow_duplicate: bool = False,
+    project: str | None = None,
     lane_descriptions: str | None = None,
 ) -> dict:
     """Create a Hero card with Code/Design/Art/Audio sub-cards. Transaction-safe rollback on failure.
@@ -373,6 +376,7 @@ def scaffold_feature(
             priority=priority,
             effort=effort,
             allow_duplicate=allow_duplicate,
+            project=project,
             lane_descriptions=parsed_lane_descriptions,
         )
     )
@@ -387,6 +391,7 @@ def split_features(
     audio_deck: str | None = None,
     skip_audio: bool = False,
     priority: Literal["a", "b", "c", "null"] | None = None,
+    project: str | None = None,
     dry_run: bool = False,
 ) -> dict:
     """Batch-split unsplit feature cards into lane sub-cards. Use dry_run=True to preview.
@@ -400,6 +405,7 @@ def split_features(
         audio_deck: Destination deck for Audio sub-cards (required unless skip_audio=True).
         skip_audio: True to skip Audio lane entirely.
         priority: Priority for created sub-cards (a/b/c/null).
+        project: Scope deck resolution to this project (prevents cross-project collisions).
         dry_run: True to preview without creating cards.
 
     Returns:
@@ -416,6 +422,7 @@ def split_features(
             audio_deck=audio_deck,
             skip_audio=skip_audio,
             priority=priority,
+            project=project,
             dry_run=dry_run,
         )
     )
@@ -595,24 +602,30 @@ def batch_update_bodies(
 
 def tick_checkboxes(
     card_id: str,
-    items: str,
+    items: str | None = None,
     untick: bool = False,
+    all: bool = False,
 ) -> dict:
-    """Tick (or untick) specific checkbox items in a card's content.
+    """Tick (or untick) checkbox items in a card's content.
 
     Reads the card, finds checkboxes matching the given text substrings,
-    toggles them, and writes back.
+    toggles them, and writes back. Use all=True to tick every checkbox at once.
 
     Args:
         card_id: Full 36-char UUID.
         items: JSON array of strings to match against checkbox text.
                Each string is matched as a substring (case-insensitive).
                Example: '["Lane coverage", "Integration verified"]'
+               Not required when all=True.
         untick: If True, change [x] to [] instead of [] to [x].
+        all: If True, tick (or untick) ALL checkboxes. Ignores items param.
 
     Returns:
         Dict with ok, ticked, already_ticked, not_found, total_checkboxes, checked_checkboxes.
+        When all=True: ok, ticked_count, total_checkboxes, already_checked, changed.
     """
+    if all:
+        return tick_all_checkboxes(card_id)
     import json
     import re
 
@@ -620,6 +633,15 @@ def tick_checkboxes(
         _validate_uuid(card_id)
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
+
+    if items is None:
+        return _finalize_tool_result(
+            _contract_error(
+                "items is required when all=False. Provide a JSON array of checkbox text substrings.",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
 
     # Parse items JSON
     try:
@@ -817,18 +839,330 @@ def tick_all_checkboxes(
     )
 
 
+def batch_create_cards(
+    cards: str,
+) -> dict:
+    """Create multiple cards in one MCP call. Idempotent — existing cards with
+    matching titles are skipped (not duplicated). Max 20 per call.
+
+    Args:
+        cards: JSON array of card objects. Max 20 per call. Each object:
+            - title (required): Card title (max 500 chars).
+            - content: Card body/description.
+            - deck: Destination deck name.
+            - project: Project name.
+            - priority: "a", "b", or "c".
+            - owner: Owner name (e.g., "Thomas").
+            - effort: Effort estimate (integer string).
+            - doc: True for doc card.
+
+    Returns:
+        Dict with ok, created count, skipped count, total, results per card,
+        and any errors. Each result has status "created" or "skipped".
+    """
+    import json
+
+    try:
+        parsed = json.loads(cards)
+    except json.JSONDecodeError as e:
+        return _finalize_tool_result(
+            _contract_error(
+                f"cards is not valid JSON: {e}",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
+
+    if not isinstance(parsed, list):
+        return _finalize_tool_result(
+            _contract_error(
+                "cards must be a JSON array of card objects.",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
+
+    if len(parsed) > 20:
+        return _finalize_tool_result(
+            _contract_error(
+                f"Too many cards: {len(parsed)} (max 20 per call).",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
+
+    if len(parsed) == 0:
+        return _finalize_tool_result(
+            _contract_error(
+                "cards array is empty. Provide at least one card object.",
+                "error",
+                error_code="INVALID_INPUT",
+            )
+        )
+
+    results: list[dict] = []
+    errors: list[dict] = []
+    created = 0
+    skipped = 0
+
+    # Pre-build title index from cache to skip duplicates without API searches.
+    # This avoids N separate list_cards API calls (one per card) for duplicate
+    # detection, reducing a 20-card batch from ~40 API calls to ~20.
+    _existing_titles: dict[str, str] = {}  # normalized_title → card_id
+    _cache_has_data = False
+    repo = _core.get_repository()
+    if repo and repo.all_cards:
+        _cache_has_data = True
+        for c in repo.all_cards:
+            t = (c.get("title") or "").strip().lower()
+            if t:
+                _existing_titles[t] = c.get("id", "")
+
+    # Suppress per-card disk writes; persist once after the batch
+    _core._batch_in_progress = True
+    try:
+        for i, item in enumerate(parsed):
+            if not isinstance(item, dict):
+                errors.append({"index": i, "error": "Item must be a card object with at least 'title'."})
+                continue
+
+            title = item.get("title", "")
+            if not title:
+                errors.append({"index": i, "error": "Missing title."})
+                continue
+
+            try:
+                title = _validate_input(title, "title")
+                content = item.get("content")
+                if content is not None:
+                    content = _validate_input(content, "content")
+            except CliError as e:
+                errors.append({"index": i, "title": title, "error": str(e)})
+                continue
+
+            # Fast cache-based duplicate check (avoids API search)
+            normalized = title.strip().lower()
+            if _cache_has_data and normalized in _existing_titles:
+                results.append({
+                    "index": i, "title": title, "status": "skipped",
+                    "existing_id": _existing_titles[normalized],
+                })
+                skipped += 1
+                continue
+
+            card_result = _call(
+                "create_card",
+                title=title,
+                content=content,
+                deck=item.get("deck"),
+                project=item.get("project"),
+                doc=item.get("doc", False),
+                priority=item.get("priority"),
+                owner=item.get("owner"),
+                effort=item.get("effort"),
+                # Skip API-level dupe check only if cache has data (we checked above).
+                # On cold start (no cache), let the API do its own duplicate detection.
+                allow_duplicate=_cache_has_data,
+            )
+
+            if isinstance(card_result, dict) and card_result.get("ok") is False:
+                error_msg = card_result.get("error", "")
+                # On cold start, API-level duplicate detection may fire.
+                # Treat as "skipped" (idempotent) rather than error.
+                if "Duplicate" in error_msg and "title" in error_msg:
+                    import re
+                    id_match = re.search(
+                        r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+                        error_msg,
+                    )
+                    existing_id = id_match.group(1) if id_match else ""
+                    results.append({
+                        "index": i, "title": title, "status": "skipped",
+                        "existing_id": existing_id,
+                    })
+                    skipped += 1
+                    continue
+                errors.append({
+                    "index": i,
+                    "title": title,
+                    "error": error_msg or "Create failed.",
+                })
+                continue
+
+            card_id = ""
+            if isinstance(card_result, dict):
+                card_id = card_result.get("card_id", "")
+
+            results.append({"index": i, "card_id": card_id, "title": title, "status": "created"})
+            created += 1
+            # Track this title so later items in the same batch don't duplicate it
+            _existing_titles[normalized] = card_id
+    finally:
+        _core._batch_in_progress = False
+        _core._persist_cache_to_disk()  # Single disk write for the whole batch
+
+    response: dict = {
+        "ok": len(errors) == 0,
+        "created": created,
+        "skipped": skipped,
+        "total": len(parsed),
+        "results": results,
+    }
+    if errors:
+        response["errors"] = errors
+    return _finalize_tool_result(response)
+
+
+def batch_delete_cards(
+    card_ids: list[str],
+) -> dict:
+    """Delete multiple cards in one MCP call. Max 20 per call.
+
+    Args:
+        card_ids: List of 36-char card UUIDs to delete. Max 20.
+
+    Returns:
+        Dict with deleted count and per-card results.
+    """
+    if not card_ids:
+        return _finalize_tool_result(
+            _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
+        )
+    try:
+        _validate_uuid_list(card_ids[:20])
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
+    ids = card_ids[:20]
+    results: list[dict] = []
+    deleted = 0
+
+    _core._batch_in_progress = True
+    try:
+        for card_id in ids:
+            del_result = _call("delete_card", card_id=card_id)
+            if isinstance(del_result, dict) and del_result.get("ok"):
+                results.append({"card_id": card_id, "status": "deleted"})
+                deleted += 1
+            else:
+                error_msg = del_result.get("error", "Delete failed.") if isinstance(del_result, dict) else "Delete failed."
+                results.append({"card_id": card_id, "status": "error", "error": error_msg})
+    finally:
+        _core._batch_in_progress = False
+        _core._persist_cache_to_disk()
+
+    return _finalize_tool_result({
+        "ok": True,
+        "deleted": deleted,
+        "total": len(ids),
+        "results": results,
+    })
+
+
+def batch_archive_cards(
+    card_ids: list[str],
+) -> dict:
+    """Archive multiple cards in one MCP call. Max 20 per call.
+    Reversible — use unarchive_card to restore.
+
+    Args:
+        card_ids: List of 36-char card UUIDs to archive. Max 20.
+
+    Returns:
+        Dict with archived count and per-card results.
+    """
+    if not card_ids:
+        return _finalize_tool_result(
+            _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
+        )
+    try:
+        _validate_uuid_list(card_ids[:20])
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
+    ids = card_ids[:20]
+    results: list[dict] = []
+    archived = 0
+
+    _core._batch_in_progress = True
+    try:
+        for card_id in ids:
+            arch_result = _call("archive_card", card_id=card_id)
+            if isinstance(arch_result, dict) and arch_result.get("ok"):
+                results.append({"card_id": card_id, "status": "archived"})
+                archived += 1
+            else:
+                error_msg = arch_result.get("error", "Archive failed.") if isinstance(arch_result, dict) else "Archive failed."
+                results.append({"card_id": card_id, "status": "error", "error": error_msg})
+    finally:
+        _core._batch_in_progress = False
+        _core._persist_cache_to_disk()
+
+    return _finalize_tool_result({
+        "ok": True,
+        "archived": archived,
+        "total": len(ids),
+        "results": results,
+    })
+
+
+def batch_unarchive_cards(
+    card_ids: list[str],
+) -> dict:
+    """Unarchive multiple cards in one MCP call. Max 20 per call.
+
+    Args:
+        card_ids: List of 36-char card UUIDs to unarchive. Max 20.
+
+    Returns:
+        Dict with unarchived count and per-card results.
+    """
+    if not card_ids:
+        return _finalize_tool_result(
+            _contract_error("card_ids is empty.", "error", error_code="INVALID_INPUT")
+        )
+    try:
+        _validate_uuid_list(card_ids[:20])
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error", error_code="INVALID_INPUT"))
+    ids = card_ids[:20]
+    results: list[dict] = []
+    unarchived = 0
+
+    _core._batch_in_progress = True
+    try:
+        for card_id in ids:
+            result = _call("unarchive_card", card_id=card_id)
+            if isinstance(result, dict) and result.get("ok"):
+                results.append({"card_id": card_id, "status": "unarchived"})
+                unarchived += 1
+            else:
+                error_msg = result.get("error", "Unarchive failed.") if isinstance(result, dict) else "Unarchive failed."
+                results.append({"card_id": card_id, "status": "error", "error": error_msg})
+    finally:
+        _core._batch_in_progress = False
+        _core._persist_cache_to_disk()
+
+    return _finalize_tool_result({
+        "ok": True,
+        "unarchived": unarchived,
+        "total": len(ids),
+        "results": results,
+    })
+
+
 def find_and_update(
     search: str,
     status: Literal["not_started", "started", "done", "blocked", "in_review"] | None = None,
     priority: Literal["a", "b", "c", "null"] | None = None,
     effort: str | None = None,
     deck: str | None = None,
+    project: str | None = None,
     milestone: str | None = None,
     owner: str | None = None,
     search_deck: str | None = None,
     search_status: str | None = None,
     max_results: int = 10,
     confirm_ids: list[str] | None = None,
+    dry_run: bool = False,
 ) -> dict:
     """Search cards then update in one tool. Two phases:
 
@@ -842,10 +1176,12 @@ def find_and_update(
         max_results: Max matches in phase 1 (default 10).
         confirm_ids: Full 36-char UUIDs to update (from phase 1 results).
         status/priority/effort/deck/milestone/owner: Fields to update.
+        dry_run: If True, preview what would change without applying (Phase 2 only).
 
     Returns:
         Phase 1: {phase: "confirm", matches: [...], match_count: int}
         Phase 2: {phase: "applied", ok: bool, updated: int}
+        Phase 2 dry_run: {phase: "preview", would_update: int, changes: {...}}
     """
     try:
         search = _validate_input(search, "title")
@@ -874,11 +1210,13 @@ def find_and_update(
             priority=priority,
             effort=effort,
             deck=deck,
+            project=project,
             milestone=milestone,
             owner=owner,
+            dry_run=dry_run,
         )
         if isinstance(result, dict):
-            result["phase"] = "applied"
+            result["phase"] = "preview" if dry_run else "applied"
         return _finalize_tool_result(result)
 
     # Phase 1: Search
@@ -965,7 +1303,11 @@ def register(mcp):
     mcp.tool()(remove_from_hand)
     mcp.tool()(update_card_body)
     mcp.tool()(batch_update_bodies)
+    mcp.tool()(batch_create_cards)
+    mcp.tool()(batch_delete_cards)
+    mcp.tool()(batch_archive_cards)
+    mcp.tool()(batch_unarchive_cards)
     mcp.tool()(tick_checkboxes)
-    mcp.tool()(tick_all_checkboxes)
+    # tick_all_checkboxes merged into tick_checkboxes(all=True)
     mcp.tool()(find_and_update)
     mcp.tool()(undo)

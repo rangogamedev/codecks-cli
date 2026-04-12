@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from typing import Literal
 
 from codecks_cli import CliError
 from codecks_cli.mcp_server._core import (
@@ -256,6 +257,26 @@ def _annotate_claims(cards: list[dict]) -> list[dict]:
     return annotated
 
 
+def partition_cards(
+    by: Literal["lane", "owner"] = "lane",
+    project: str | None = None,
+) -> dict:
+    """Group active cards by lane tag or Codecks owner for team work distribution.
+
+    Args:
+        by: Partition strategy — "lane" groups by lane tags (code, design, art, audio),
+            "owner" groups by Codecks card owner.
+        project: Optional project name filter.
+
+    Returns:
+        When by="lane": {ok, lanes: {code: {cards, claimed, unclaimed}, ...}, untagged: {...}}.
+        When by="owner": {ok, owners: {name: {cards, claimed, unclaimed}, ...}, unassigned: {...}}.
+    """
+    if by == "owner":
+        return partition_by_owner(project=project)
+    return partition_by_lane(project=project)
+
+
 def partition_by_lane(project: str | None = None) -> dict:
     """Group active cards by lane tag for team work distribution.
 
@@ -487,12 +508,15 @@ def get_team_playbook() -> dict:
 
 
 def register(mcp):
-    """Register all team coordination tools with the FastMCP instance."""
+    """Register team coordination tools with the FastMCP instance.
+
+    Tools removed in v0.5.0:
+    - partition_by_lane/partition_by_owner → merged into partition_cards(by=...)
+    - get_team_playbook → injected via session_start() / CLAUDE.md
+    """
     mcp.tool()(claim_card)
     mcp.tool()(release_card)
     mcp.tool()(delegate_card)
     mcp.tool()(team_status)
-    mcp.tool()(partition_by_lane)
-    mcp.tool()(partition_by_owner)
+    mcp.tool()(partition_cards)
     mcp.tool()(team_dashboard)
-    mcp.tool()(get_team_playbook)

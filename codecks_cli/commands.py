@@ -58,6 +58,18 @@ def _dry_run_guard(action, details=""):
     return True
 
 
+def _read_ids_from_stdin() -> list[str]:
+    """Read card IDs from stdin, one per line. Strips whitespace and ignores empty lines."""
+    if sys.stdin.isatty():
+        return []
+    ids = []
+    for line in sys.stdin:
+        line = line.strip()
+        if line:
+            ids.append(line)
+    return ids
+
+
 # ---------------------------------------------------------------------------
 # Client factory
 # ---------------------------------------------------------------------------
@@ -94,6 +106,16 @@ def cmd_account(ns):
 
 def cmd_decks(ns):
     output(_get_client().list_decks(), format_decks_table, ns.format)
+
+
+def cmd_deck_full(ns):
+    """List all cards in a deck with full content."""
+    result = _get_client().list_cards(
+        deck=ns.deck_name,
+        status=getattr(ns, "status", None),
+        project=getattr(ns, "project", None),
+    )
+    output(result, format_cards_table, ns.format)
 
 
 def cmd_projects(ns):
@@ -287,14 +309,19 @@ def cmd_split_features(ns):
 
 
 def cmd_update(ns):
-    if _dry_run_guard("update card(s)", f"ids={ns.card_ids}"):
+    card_ids = list(ns.card_ids or [])
+    if getattr(ns, "stdin", False):
+        card_ids.extend(_read_ids_from_stdin())
+    if not card_ids:
+        raise CliError("[ERROR] No card IDs provided. Use positional args or --stdin.")
+    if _dry_run_guard("update card(s)", f"ids={card_ids}"):
         return
     from codecks_cli._operations import snapshot_before_mutation
 
-    snapshot_before_mutation(_get_client(), ns.card_ids)
+    snapshot_before_mutation(_get_client(), card_ids)
     fmt = ns.format
     result = _get_client().update_cards(
-        ns.card_ids,
+        card_ids,
         status=ns.status,
         priority=ns.priority,
         effort=ns.effort,
@@ -310,28 +337,32 @@ def cmd_update(ns):
     )
     fields = result.get("fields", {})
     detail_parts = [f"{k}={v}" for k, v in fields.items()]
-    if len(ns.card_ids) > 1:
+    if len(card_ids) > 1:
         mutation_response(
             "Updated",
-            details=f"{len(ns.card_ids)} card(s), " + ", ".join(detail_parts),
+            details=f"{len(card_ids)} card(s), " + ", ".join(detail_parts),
             fmt=fmt,
         )
     else:
-        mutation_response("Updated", ns.card_ids[0], ", ".join(detail_parts), fmt=fmt)
+        mutation_response("Updated", card_ids[0], ", ".join(detail_parts), fmt=fmt)
 
 
 def cmd_archive(ns):
-    if _dry_run_guard("archive card", ns.card_id):
-        return
-    _get_client().archive_card(ns.card_id)
-    mutation_response("Archived", ns.card_id, fmt=ns.format)
+    card_ids = ns.card_ids if hasattr(ns, "card_ids") else [ns.card_id]
+    for cid in card_ids:
+        if _dry_run_guard("archive card", cid):
+            continue
+        _get_client().archive_card(cid)
+    mutation_response("Archived", details=f"{len(card_ids)} card(s)", fmt=ns.format)
 
 
 def cmd_unarchive(ns):
-    if _dry_run_guard("unarchive card", ns.card_id):
-        return
-    _get_client().unarchive_card(ns.card_id)
-    mutation_response("Unarchived", ns.card_id, fmt=ns.format)
+    card_ids = ns.card_ids if hasattr(ns, "card_ids") else [ns.card_id]
+    for cid in card_ids:
+        if _dry_run_guard("unarchive card", cid):
+            continue
+        _get_client().unarchive_card(cid)
+    mutation_response("Unarchived", details=f"{len(card_ids)} card(s)", fmt=ns.format)
 
 
 def cmd_delete(ns):
@@ -342,25 +373,35 @@ def cmd_delete(ns):
 
 
 def cmd_done(ns):
-    if _dry_run_guard("mark done", f"{len(ns.card_ids)} card(s)"):
+    card_ids = list(ns.card_ids or [])
+    if getattr(ns, "stdin", False):
+        card_ids.extend(_read_ids_from_stdin())
+    if not card_ids:
+        raise CliError("[ERROR] No card IDs provided. Use positional args or --stdin.")
+    if _dry_run_guard("mark done", f"{len(card_ids)} card(s)"):
         return
     from codecks_cli._operations import snapshot_before_mutation
 
-    snapshot_before_mutation(_get_client(), ns.card_ids)
-    _get_client().mark_done(ns.card_ids)
-    mutation_response("Marked done", details=f"{len(ns.card_ids)} card(s)", fmt=ns.format)
+    snapshot_before_mutation(_get_client(), card_ids)
+    _get_client().mark_done(card_ids)
+    mutation_response("Marked done", details=f"{len(card_ids)} card(s)", fmt=ns.format)
 
 
 def cmd_start(ns):
-    if _dry_run_guard("mark started", f"{len(ns.card_ids)} card(s)"):
+    card_ids = list(ns.card_ids)
+    if getattr(ns, "stdin", False):
+        card_ids.extend(_read_ids_from_stdin())
+    if not card_ids:
+        raise CliError("[ERROR] No card IDs provided. Use positional args or --stdin.")
+    if _dry_run_guard("mark started", f"{len(card_ids)} card(s)"):
         return
     from codecks_cli._operations import snapshot_before_mutation
 
-    snapshot_before_mutation(_get_client(), ns.card_ids)
-    _get_client().mark_started(ns.card_ids)
+    snapshot_before_mutation(_get_client(), card_ids)
+    _get_client().mark_started(card_ids)
     mutation_response(
         "Marked started",
-        details=f"{len(ns.card_ids)} card(s)",
+        details=f"{len(card_ids)} card(s)",
         fmt=ns.format,
     )
 
@@ -372,7 +413,10 @@ def cmd_start(ns):
 
 def cmd_hand(ns):
     fmt = ns.format
-    if not ns.card_ids:
+    card_ids = list(ns.card_ids or [])
+    if getattr(ns, "stdin", False):
+        card_ids.extend(_read_ids_from_stdin())
+    if not card_ids:
         hand_cards = _get_client().list_hand()
         if not hand_cards:
             print("Your hand is empty.", file=sys.stderr)
@@ -384,19 +428,24 @@ def cmd_hand(ns):
             csv_formatter=format_cards_csv,
         )
     else:
-        if _dry_run_guard("add to hand", f"{len(ns.card_ids)} card(s)"):
+        if _dry_run_guard("add to hand", f"{len(card_ids)} card(s)"):
             return
-        _get_client().add_to_hand(ns.card_ids)
-        mutation_response("Added to hand", details=f"{len(ns.card_ids)} card(s)", fmt=fmt)
+        _get_client().add_to_hand(card_ids)
+        mutation_response("Added to hand", details=f"{len(card_ids)} card(s)", fmt=fmt)
 
 
 def cmd_unhand(ns):
-    if _dry_run_guard("remove from hand", f"{len(ns.card_ids)} card(s)"):
+    card_ids = list(ns.card_ids or [])
+    if getattr(ns, "stdin", False):
+        card_ids.extend(_read_ids_from_stdin())
+    if not card_ids:
+        raise CliError("[ERROR] No card IDs provided. Use positional args or --stdin.")
+    if _dry_run_guard("remove from hand", f"{len(card_ids)} card(s)"):
         return
-    _get_client().remove_from_hand(ns.card_ids)
+    _get_client().remove_from_hand(card_ids)
     mutation_response(
         "Removed from hand",
-        details=f"{len(ns.card_ids)} card(s)",
+        details=f"{len(card_ids)} card(s)",
         fmt=ns.format,
     )
 
@@ -580,7 +629,7 @@ def cmd_completion(ns):
             break
 
     cmds_str = " ".join(subcommands)
-    global_opts = "--format --strict --dry-run --quiet --verbose --version --help"
+    global_opts = "--format --json --agent --strict --dry-run --quiet --verbose --version --help"
 
     if shell == "bash":
         cases = []

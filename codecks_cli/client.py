@@ -208,6 +208,7 @@ class CodecksClient:
         updated_before: str | None = None,
         archived: bool = False,
         include_stats: bool = False,
+        include_content: bool = True,
     ) -> dict[str, Any]:
         """List cards with optional filters.
 
@@ -263,6 +264,7 @@ class CodecksClient:
             updated_after=updated_after,
             updated_before=updated_before,
             archived=archived,
+            include_content=include_content,
         )
 
         # Filter to hand cards if requested
@@ -820,7 +822,7 @@ class CodecksClient:
         placed_in = None
         post_update = {}
         if deck:
-            post_update["deckId"] = resolve_deck_id(deck)
+            post_update["deckId"] = resolve_deck_id(deck, project=project)
             placed_in = deck
         elif project:
             decks_result = list_decks()
@@ -871,6 +873,7 @@ class CodecksClient:
         priority: str | None = None,
         effort: str | int | None = None,
         deck: str | None = None,
+        project: str | None = None,
         title: str | None = None,
         content: str | None = None,
         milestone: str | None = None,
@@ -921,7 +924,7 @@ class CodecksClient:
                     ) from e
 
         if deck is not None:
-            update_kwargs["deckId"] = resolve_deck_id(deck)
+            update_kwargs["deckId"] = resolve_deck_id(deck, project=project)
 
         if title is not None or content is not None:
             from codecks_cli._content import parse_content, serialize_content
@@ -1117,6 +1120,7 @@ class CodecksClient:
         priority: str | None = None,
         effort: int | None = None,
         allow_duplicate: bool = False,
+        project: str | None = None,
     ) -> dict[str, Any]:
         """Scaffold a Hero feature with lane sub-cards.
 
@@ -1141,6 +1145,7 @@ class CodecksClient:
             priority=priority,
             effort=effort,
             allow_duplicate=allow_duplicate,
+            project=project,
         )
 
     def split_features(
@@ -1154,6 +1159,7 @@ class CodecksClient:
         audio_deck: str | None = None,
         skip_audio: bool = False,
         priority: str | None = None,
+        project: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         """Batch-split feature cards into discipline sub-cards.
@@ -1171,6 +1177,7 @@ class CodecksClient:
             audio_deck=audio_deck,
             skip_audio=skip_audio,
             priority=priority,
+            project=project,
             dry_run=dry_run,
         )
 

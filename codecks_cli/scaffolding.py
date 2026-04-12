@@ -232,6 +232,7 @@ def scaffold_feature(
     priority: str | None = None,
     effort: int | None = None,
     allow_duplicate: bool = False,
+    project: str | None = None,
     lane_descriptions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Scaffold a Hero feature with lane sub-cards.
@@ -260,6 +261,7 @@ def scaffold_feature(
         priority=priority,
         effort=effort,
         allow_duplicate=allow_duplicate,
+        project=project,
         lane_descriptions=lane_descriptions,
     )
 
@@ -270,13 +272,13 @@ def scaffold_feature(
         context="feature hero",
     )
 
-    hero_deck_id = resolve_deck_id(spec.hero_deck)
+    hero_deck_id = resolve_deck_id(spec.hero_deck, project=spec.project)
 
     # Resolve lane deck IDs from registry
     lane_deck_ids: dict[str, str | None] = {}
     for lane_def in LANES:
         deck_val = spec.lane_decks.get(lane_def.name)
-        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val) if deck_val else None
+        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val, project=spec.project) if deck_val else None
 
     hero_owner_id = _resolve_owner_id(spec.owner) if spec.owner else None
     pri = None if spec.priority == "null" else spec.priority
@@ -423,6 +425,7 @@ def split_features(
     audio_deck: str | None = None,
     skip_audio: bool = False,
     priority: str | None = None,
+    project: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Batch-split feature cards into discipline sub-cards.
@@ -439,15 +442,16 @@ def split_features(
         audio_deck=audio_deck,
         skip_audio=skip_audio,
         priority=priority,
+        project=project,
         dry_run=dry_run,
     )
 
     # Resolve deck IDs upfront (fail fast)
-    resolve_deck_id(spec.deck)  # validate source deck exists
+    resolve_deck_id(spec.deck, project=spec.project)  # validate source deck exists
     lane_deck_ids: dict[str, str | None] = {}
     for lane_def in LANES:
         deck_val = spec.lane_decks.get(lane_def.name)
-        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val) if deck_val else None
+        lane_deck_ids[lane_def.name] = resolve_deck_id(deck_val, project=spec.project) if deck_val else None
 
     # Build active lane config from registry
     active_lanes = []

@@ -572,6 +572,41 @@ class TestResolvers:
             resolve_milestone_id("Nonexistent")
         assert exc_info.value.exit_code == 1
 
+    def test_resolve_deck_id_with_project_scope(self, monkeypatch):
+        """Same-named decks across projects resolve correctly when project is given."""
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop,p2=AI Tooling"})
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-tea-backlog", "title": "Backlog", "projectId": "p1"},
+                "dk2": {"id": "d-ai-backlog", "title": "Backlog", "projectId": "p2"},
+            }
+        }
+        assert resolve_deck_id("Backlog", project="AI Tooling") == "d-ai-backlog"
+        assert resolve_deck_id("Backlog", project="Tea Shop") == "d-tea-backlog"
+
+    def test_resolve_deck_id_no_project_backward_compat(self):
+        """Without project, first match wins (backward-compatible)."""
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-first", "title": "Backlog", "projectId": "p1"},
+                "dk2": {"id": "d-second", "title": "Backlog", "projectId": "p2"},
+            }
+        }
+        # Should return whichever comes first in dict iteration
+        result = resolve_deck_id("Backlog")
+        assert result in ("d-first", "d-second")
+
+    def test_resolve_deck_id_project_not_found(self, monkeypatch):
+        """Raises CliError when project name doesn't exist."""
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
+        config._cache["decks"] = {
+            "deck": {
+                "dk1": {"id": "d-id-1", "title": "Backlog", "projectId": "p1"},
+            }
+        }
+        with pytest.raises(CliError, match="Project.*not found"):
+            resolve_deck_id("Backlog", project="Nonexistent")
+
 
 # ---------------------------------------------------------------------------
 # list_tags

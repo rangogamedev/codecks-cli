@@ -8,6 +8,7 @@ from codecks_cli import CliError
 from codecks_cli.mcp_server import _core
 from codecks_cli.mcp_server._core import (
     _call,
+    _card_summary,
     _contract_error,
     _finalize_tool_result,
     _slim_card,
@@ -112,18 +113,21 @@ def list_cards(
                 filtered = _sort_cards(filtered, sort)
             total = len(filtered)
             page = filtered[offset : offset + limit]
-            payload = {
-                "cards": [_sanitize_card(_slim_card(c)) for c in page],
-                "stats": cached.get("stats"),
+            payload: dict = {
+                "cards": [_sanitize_card(_core._slim_card_list(c)) for c in page],
                 "total_count": total,
                 "has_more": offset + limit < total,
                 "limit": limit,
                 "offset": offset,
             }
+            if include_stats:
+                payload["stats"] = cached.get("stats")
             payload.update(_core._get_cache_metadata())
             return _finalize_tool_result(payload)
 
     # Cache miss — original API path
+    # Only fetch content when searching (needed for text match); otherwise skip
+    # to save ~40-60% of payload size.
     result = _call(
         "list_cards",
         deck=deck,
@@ -143,6 +147,7 @@ def list_cards(
         updated_before=updated_before,
         archived=archived,
         include_stats=include_stats,
+        include_content=bool(search),
     )
     if isinstance(result, dict) and result.get("ok") is False:
         return _finalize_tool_result(result)
@@ -152,13 +157,14 @@ def list_cards(
         total = len(all_cards)
         page = all_cards[offset : offset + limit]
         payload = {
-            "cards": [_sanitize_card(_slim_card(c)) for c in page],
-            "stats": result.get("stats"),
+            "cards": [_sanitize_card(_core._slim_card_list(c)) for c in page],
             "total_count": total,
             "has_more": offset + limit < total,
             "limit": limit,
             "offset": offset,
         }
+        if include_stats:
+            payload["stats"] = result.get("stats")
         return _finalize_tool_result(payload)
     return _finalize_tool_result(result)
 
@@ -479,6 +485,7 @@ def pm_focus(
     owner: str | None = None,
     limit: int = 5,
     stale_days: int = 14,
+    summary_only: bool = False,
 ) -> dict:
     """PM focus dashboard: blocked, stale, unassigned, and suggested next cards.
 
@@ -487,20 +494,32 @@ def pm_focus(
         owner: Filter to a specific owner name.
         limit: Max cards per category (default 5).
         stale_days: Days since last update to consider stale (default 14).
+        summary_only: If True, return only counts + deck_health (no card arrays).
+            Reduces response from ~65KB to ~2KB. Use for "how's the project?" checks.
 
     Returns:
         Dict with counts, blocked, stale, in_review, hand, and suggested lists.
+        With summary_only=True: counts + deck_health only.
     """
     # Serve from cache when no project/owner filter
     if project is None and owner is None:
         cached = _try_cache("pm_focus")
         if cached is not None and isinstance(cached, dict) and "counts" in cached:
             result = dict(cached)
-            # Re-slice to requested limit
+            if summary_only:
+                result = {
+                    "counts": result.get("counts", {}),
+                    "deck_health": result.get("deck_health", {}),
+                    "filters": result.get("filters", {}),
+                    "summary_only": True,
+                }
+                result.update(_core._get_cache_metadata())
+                return _finalize_tool_result(result)
+            # Re-slice to requested limit, use _card_summary for compact output
             for key in ("blocked", "in_review", "hand", "stale", "suggested"):
                 if key in result and isinstance(result[key], list):
                     result[key] = [
-                        _sanitize_card(_slim_card(r)) if isinstance(r, dict) else r
+                        _sanitize_card(_card_summary(r)) if isinstance(r, dict) else r
                         for r in result[key][:limit]
                     ]
             result.update(_core._get_cache_metadata())
@@ -510,10 +529,19 @@ def pm_focus(
     result = _call("pm_focus", project=project, owner=owner, limit=limit, stale_days=stale_days)
     if isinstance(result, dict) and "counts" in result:
         result = dict(result)
+        if summary_only:
+            result = {
+                "counts": result.get("counts", {}),
+                "deck_health": result.get("deck_health", {}),
+                "filters": result.get("filters", {}),
+                "summary_only": True,
+            }
+            return _finalize_tool_result(result)
         for key in ("blocked", "in_review", "hand", "stale", "suggested"):
             if key in result and isinstance(result[key], list):
                 result[key] = [
-                    _sanitize_card(_slim_card(r)) if isinstance(r, dict) else r for r in result[key]
+                    _sanitize_card(_card_summary(r)) if isinstance(r, dict) else r
+                    for r in result[key]
                 ]
 
     # Append hand suggestions based on workflow preferences
@@ -523,26 +551,45 @@ def pm_focus(
     return _finalize_tool_result(result)
 
 
-def standup(days: int = 2, project: str | None = None, owner: str | None = None) -> dict:
+def standup(
+    days: int = 2,
+    project: str | None = None,
+    owner: str | None = None,
+    summary_only: bool = False,
+) -> dict:
     """Daily standup summary: recently done, in-progress, blocked, and hand.
 
     Args:
         days: Lookback window for recently done cards (default 2).
         project: Filter to a specific project name.
         owner: Filter to a specific owner name.
+        summary_only: If True, return only counts (no card arrays).
+            Reduces response size significantly.
 
     Returns:
         Dict with recently_done, in_progress, blocked, and hand lists.
+        With summary_only=True: counts only.
     """
     # Serve from cache when no project/owner filter
     if project is None and owner is None:
         cached = _try_cache("standup")
         if cached is not None and isinstance(cached, dict):
             result = dict(cached)
+            if summary_only:
+                result = {
+                    "counts": {
+                        key: len(result.get(key, []))
+                        for key in ("recently_done", "in_progress", "blocked", "hand")
+                    },
+                    "filters": result.get("filters", {}),
+                    "summary_only": True,
+                }
+                result.update(_core._get_cache_metadata())
+                return _finalize_tool_result(result)
             for key in ("recently_done", "in_progress", "blocked", "hand"):
                 if key in result and isinstance(result[key], list):
                     result[key] = [
-                        _sanitize_card(_slim_card(r)) if isinstance(r, dict) else r
+                        _sanitize_card(_card_summary(r)) if isinstance(r, dict) else r
                         for r in result[key]
                     ]
             result.update(_core._get_cache_metadata())
@@ -551,10 +598,21 @@ def standup(days: int = 2, project: str | None = None, owner: str | None = None)
     result = _call("standup", days=days, project=project, owner=owner)
     if isinstance(result, dict) and result.get("ok") is not False:
         result = dict(result)
+        if summary_only:
+            result = {
+                "counts": {
+                    key: len(result.get(key, []))
+                    for key in ("recently_done", "in_progress", "blocked", "hand")
+                },
+                "filters": result.get("filters", {}),
+                "summary_only": True,
+            }
+            return _finalize_tool_result(result)
         for key in ("recently_done", "in_progress", "blocked", "hand"):
             if key in result and isinstance(result[key], list):
                 result[key] = [
-                    _sanitize_card(_slim_card(r)) if isinstance(r, dict) else r for r in result[key]
+                    _sanitize_card(_card_summary(r)) if isinstance(r, dict) else r
+                    for r in result[key]
                 ]
     return _finalize_tool_result(result)
 

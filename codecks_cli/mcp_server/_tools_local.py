@@ -577,7 +577,7 @@ def session_start(agent_name: str | None = None) -> dict:
 
     # Step 4: Build project context from cache + registries
     from codecks_cli.lanes import LANES
-    from codecks_cli.tags import TAGS
+    from codecks_cli.tags import HERO_TAGS, LANE_TAGS, TAGS
 
     decks = snapshot.get("decks", [])
     deck_names = []
@@ -591,17 +591,66 @@ def session_start(agent_name: str | None = None) -> dict:
     hand = snapshot.get("hand", [])
     hand_size = len(hand) if isinstance(hand, list) else 0
 
+    # Tag registry (replaces get_tag_registry tool)
+    tag_registry = [
+        {"name": t.name, "display_name": t.display_name, "category": t.category}
+        for t in TAGS
+    ]
+
+    # Lane registry (replaces get_lane_registry tool)
+    lane_registry = [
+        {"name": ln.name, "display_name": ln.display_name, "required": ln.required}
+        for ln in LANES
+    ]
+
     project_context = {
         "deck_names": deck_names,
         "tag_names": [t.name for t in TAGS],
         "lane_names": [ln.name for ln in LANES],
         "card_count": card_count,
         "hand_size": hand_size,
+        "tag_registry": tag_registry,
+        "lane_registry": lane_registry,
+        "hero_tags": list(HERO_TAGS),
+        "lane_tags": {k: list(v) for k, v in LANE_TAGS.items()},
     }
+
+    # Compact playbook rules (replaces get_pm_playbook/get_team_playbook tools)
+    playbook_rules = [
+        "Call session_start() first in every session",
+        "Use summary_only=True on pm_focus/standup for quick checks",
+        "Use find_and_update() for search+update workflows (2 calls, not 5+)",
+        "Use quick_overview() for aggregate counts (no card details)",
+        "Doc cards: no status/priority/effort changes",
+        "Card IDs must be full 36-char UUIDs",
+        "Rate limit: 40 req/5s",
+        "Use claim_card/release_card for multi-agent coordination",
+    ]
 
     # Step 5: Register agent if named
     if agent_name:
         _core._register_agent(agent_name)
+
+    # Removed tools migration guide (helps agents discover new patterns)
+    removed_tools = {
+        "get_pm_playbook": "Rules injected in session_start().playbook_rules",
+        "get_team_playbook": "Rules injected in session_start().playbook_rules",
+        "get_tag_registry": "Included in session_start().project_context.tag_registry",
+        "get_lane_registry": "Included in session_start().project_context.lane_registry",
+        "planning_init": "CLI: py codecks_api.py plan init",
+        "planning_status": "CLI: py codecks_api.py plan status",
+        "planning_update": "CLI: py codecks_api.py plan update",
+        "planning_measure": "CLI: py codecks_api.py plan measure",
+        "save_cli_feedback": "CLI: py codecks_api.py feedback save",
+        "get_cli_feedback": "CLI: py codecks_api.py feedback list",
+        "clear_cli_feedback": "CLI: py codecks_api.py feedback clear",
+        "warm_cache": "session_start() already warms cache",
+        "cache_status": "CLI: py codecks_api.py cache status",
+        "partition_by_lane": "Use partition_cards(by='lane')",
+        "partition_by_owner": "Use partition_cards(by='owner')",
+        "get_team_playbook": "Rules injected in session_start().playbook_rules",
+        "tick_all_checkboxes": "Use tick_checkboxes(all=True)",
+    }
 
     result = {
         "ok": True,
@@ -609,26 +658,26 @@ def session_start(agent_name: str | None = None) -> dict:
         "standup": standup_data,
         "preferences": prefs_result,
         "project_context": project_context,
+        "playbook_rules": playbook_rules,
+        "removed_tools": removed_tools,
     }
     result.update(_core._get_cache_metadata())
     return _finalize_tool_result(result)
 
 
 def register(mcp):
-    """Register all local tools with the FastMCP instance."""
+    """Register local tools with the FastMCP instance.
+
+    Tools removed in v0.5.0 (available via CLI or session_start):
+    - get_pm_playbook → injected via session_start() / CLAUDE.md
+    - get_tag_registry → included in session_start() project_context
+    - get_lane_registry → included in session_start() project_context
+    - planning_init/status/update/measure → CLI: py codecks_api.py plan <cmd>
+    - save/get/clear_cli_feedback → CLI: py codecks_api.py feedback <cmd>
+    - warm_cache → session_start() already warms cache
+    - cache_status → CLI: py codecks_api.py cache status
+    """
     mcp.tool()(session_start)
-    mcp.tool()(get_pm_playbook)
     mcp.tool()(get_workflow_preferences)
     mcp.tool()(save_workflow_preferences)
     mcp.tool()(clear_workflow_preferences)
-    mcp.tool()(save_cli_feedback)
-    mcp.tool()(get_cli_feedback)
-    mcp.tool()(clear_cli_feedback)
-    mcp.tool()(planning_init)
-    mcp.tool()(planning_status)
-    mcp.tool()(planning_update)
-    mcp.tool()(planning_measure)
-    mcp.tool()(get_tag_registry)
-    mcp.tool()(get_lane_registry)
-    mcp.tool()(warm_cache)
-    mcp.tool()(cache_status)
