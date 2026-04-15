@@ -19,7 +19,7 @@ from codecks_cli.config import _PROJECT_ROOT
 # Checkbox operations
 # ---------------------------------------------------------------------------
 
-_UNCHECKED_RE = re.compile(r"^(\s*- \[)\](.*)$")
+_UNCHECKED_RE = re.compile(r"^(\s*- \[) ?\](.*)$")
 _CHECKED_RE = re.compile(r"^(\s*- \[)x\](.*)$")
 
 
@@ -123,7 +123,7 @@ def tick_all_checkboxes(client: CodecksClient, card_id: str) -> dict:
         return {"ok": False, "error": "Card has no content.", "error_code": "NO_CONTENT"}
 
     already_checked = len(re.findall(r"^\s*- \[x\]", content, re.MULTILINE))
-    total_unchecked = len(re.findall(r"^\s*- \[\]", content, re.MULTILINE))
+    total_unchecked = len(re.findall(r"^\s*- \[ ?\]", content, re.MULTILINE))
 
     if total_unchecked == 0:
         return {
@@ -134,7 +134,7 @@ def tick_all_checkboxes(client: CodecksClient, card_id: str) -> dict:
             "changed": False,
         }
 
-    new_content = re.sub(r"^(\s*- \[)\]", r"\1x]", content, flags=re.MULTILINE)
+    new_content = re.sub(r"^(\s*- \[) ?\]", r"\1x]", content, flags=re.MULTILINE)
     client.update_cards(card_ids=[card_id], content=new_content)
 
     return {

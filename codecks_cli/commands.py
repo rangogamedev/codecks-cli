@@ -862,3 +862,99 @@ def cmd_undo(ns):
 
     result = undo_last_mutation(_get_client())
     output(result, fmt=ns.format)
+
+
+# ---------------------------------------------------------------------------
+# Agent bootstrap commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_agent_init(ns):
+    """Composite startup for AI agents.
+
+    Returns account + overview + decks + tags + lanes in one JSON response
+    (~2KB), replacing 4+ separate CLI calls.
+    """
+    from codecks_cli._operations import quick_overview
+    from codecks_cli.lanes import LANES
+    from codecks_cli.tags import HERO_TAGS, LANE_TAGS, TAGS
+
+    client = _get_client()
+    account = client.get_account()
+    overview = quick_overview(client, project=getattr(ns, "project", None))
+    decks = client.list_decks()
+
+    result = {
+        "ok": True,
+        "account": account,
+        "overview": overview,
+        "decks": decks,
+        "tags": [
+            {
+                "name": t.name,
+                "display_name": t.display_name,
+                "category": t.category,
+                "description": t.description,
+            }
+            for t in TAGS
+        ],
+        "lanes": [
+            {
+                "name": la.name,
+                "display_name": la.display_name,
+                "required": la.required,
+                "cli_help": la.cli_help,
+            }
+            for la in LANES
+        ],
+        "hero_tags": list(HERO_TAGS),
+        "lane_tags": {k: list(v) for k, v in LANE_TAGS.items()},
+    }
+    output(result, fmt=ns.format)
+
+
+def cmd_lanes(ns):
+    """List lane definitions (deck categories) from the local registry."""
+    from codecks_cli.lanes import LANES
+    from codecks_cli.tags import LANE_TAGS
+
+    lanes = []
+    for la in LANES:
+        entry = {
+            "name": la.name,
+            "display_name": la.display_name,
+            "required": la.required,
+            "keywords": list(la.keywords),
+            "default_checklist": list(la.default_checklist),
+            "tags": list(la.tags),
+            "cli_help": la.cli_help,
+        }
+        if la.name in LANE_TAGS:
+            entry["lane_tags"] = list(LANE_TAGS[la.name])
+        lanes.append(entry)
+
+    output({"ok": True, "lanes": lanes, "count": len(lanes)}, fmt=ns.format)
+
+
+def cmd_tags_registry(ns):
+    """List full tag definitions from the local registry."""
+    from codecks_cli.tags import HERO_TAGS, LANE_TAGS, TAGS
+
+    tags = [
+        {
+            "name": t.name,
+            "display_name": t.display_name,
+            "category": t.category,
+            "description": t.description,
+        }
+        for t in TAGS
+    ]
+
+    result = {
+        "ok": True,
+        "tags": tags,
+        "count": len(tags),
+        "hero_tags": list(HERO_TAGS),
+        "lane_tags": {k: list(v) for k, v in LANE_TAGS.items()},
+    }
+    output(result, fmt=ns.format)

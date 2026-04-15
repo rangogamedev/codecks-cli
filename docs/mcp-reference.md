@@ -38,6 +38,17 @@ Add to `.mcp.json` or MCP settings:
 
 Use the same command (`codecks-mcp`) with your IDE's MCP configuration. The server uses stdio transport.
 
+> **New to codecks-cli?** See [docs/ai-agent-guide.md](ai-agent-guide.md) for the full setup walkthrough and CLI-first patterns. The CLI is the recommended default for AI agents — MCP is an optional enhancement.
+
+## Prompt Surface
+
+The MCP server exposes two prompts that connected clients can discover via `prompts/list`:
+
+- `pm-session` — the full CLI-first PM playbook (session flow, batch ops, error recovery, safety rules)
+- `setup-guide` — compact setup and orientation guide for first-time users
+
+Use prompts when your MCP client supports them. Use the CLI directly when you want the smallest possible context footprint.
+
 ## Critical: Call session_start() First
 
 **Every session must begin with `session_start()`.** It returns everything an agent needs in a single call:
@@ -75,6 +86,9 @@ Minimize token consumption with these patterns:
 | `standup(summary_only=True)` | Counts only |
 | `quick_overview()` | Aggregate counts, no card details |
 | `get_card(include_content=False)` | Metadata only |
+| `partition_cards(max_cards_per_group=10)` | ~8KB vs ~88KB (default cap, priority-sorted) |
+| `team_dashboard(summary_only=True)` | ~2KB vs ~45KB (counts only, no card arrays) |
+| `list_activity(limit=5)` | ~2.8KB (strips orphaned entity refs + account key) |
 | `_card_summary()` internal format | 7-field compact representation |
 
 ## Snapshot Cache
@@ -152,8 +166,8 @@ For multi-agent workflows where multiple AI agents work on the same Codecks boar
 | Tool | Purpose |
 |------|---------|
 | `team_status()` | All agents and their active cards |
-| `team_dashboard(project?)` | Combined health + agent workload + unclaimed in-progress |
-| `partition_cards(by='lane'\|'owner', project?)` | Divide work with claim annotations |
+| `team_dashboard(project?, summary_only?)` | Combined health + agent workload + unclaimed in-progress. `summary_only=True` for counts only. |
+| `partition_cards(by, project?, max_cards_per_group?)` | Divide work with claim annotations. Default cap 10 cards/group (0=unlimited). Priority-sorted. |
 
 ### Lead + Worker Pattern
 

@@ -11,6 +11,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 4 local tools (session_start, workflow preferences)
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
+  _prompts.py       — 2 MCP prompts (pm-session, setup-guide)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
 52 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).
@@ -22,6 +23,7 @@ Requires: py -m pip install .[mcp]
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli.mcp_server import (
+    _prompts,
     _tools_admin,
     _tools_comments,
     _tools_local,
@@ -40,9 +42,12 @@ mcp = FastMCP(
         "STARTUP: Call session_start() first — returns account, standup, "
         "preferences, project context (deck names, tags, lane/tag registries), "
         "playbook rules, and removed_tools migration guide in one call.\n"
-        "TOKEN EFFICIENCY: Use summary_only=True on pm_focus/standup for "
-        "counts-only (~2KB vs ~65KB). list_cards omits content by default. "
-        "Use quick_overview() for aggregate counts (no card details).\n"
+        "TOKEN EFFICIENCY: Default to summary_only=True on pm_focus/standup/team_dashboard "
+        "unless you need card details (~2KB vs ~65KB). "
+        "get_card(include_content=False) for metadata checks. "
+        "list_cards omits content by default. "
+        "quick_overview() for aggregate counts (no card details). "
+        "partition_cards caps at 10 cards/group by default (set max_cards_per_group=0 for all).\n"
         "SEARCH+UPDATE: Use find_and_update() to search cards then apply "
         "updates without manually copying UUIDs.\n"
         "TEAMS: Use claim_card/release_card to coordinate multi-agent work. "
@@ -58,6 +63,7 @@ mcp = FastMCP(
 
 for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team, _tools_admin]:
     _mod.register(mcp)
+_prompts.register(mcp)
 
 # ---------------------------------------------------------------------------
 # Re-exports for backward compatibility (tests import via mcp_mod.xxx)
@@ -207,7 +213,6 @@ from codecks_cli.mcp_server._tools_write import (
     remove_from_hand,
     scaffold_feature,
     split_features,
-    tick_all_checkboxes,
     tick_checkboxes,
     unarchive_card,
     undo,
