@@ -174,3 +174,46 @@ preferences, communication detail level.
 | Unassigned work | `cards --owner none --status not_started --agent` |
 | Milestone review | `cards --milestone MVP --agent` |
 | Batch close | `cards --deck Code --status started --ids-only \| done --stdin --agent` |
+
+## Agent Team Coordination
+
+Multi-agent workflows where a lead agent coordinates worker agents.
+
+### Lead Agent Startup
+
+1. Call `session_start()` or `codecks-cli agent-init --agent`
+2. Call `partition --by lane --agent` or `partition --by owner --agent`
+3. Assign card batches to worker agents (via SendMessage with card UUIDs)
+4. Call `team_dashboard()` periodically to monitor health + workload
+
+### Worker Agent Protocol
+
+1. Receive card assignment from lead (list of UUIDs + context)
+2. Call `claim_card(card_id, agent_name)` before starting on any card
+3. Do your work (`update_cards`, `mark_started`, `create_comment`, etc.)
+4. Call `release_card(card_id, agent_name, summary="what you did")` when done
+5. If unsure what's available, call `team_status()` to see all claims
+
+### Conflict Resolution
+
+- `claim_card` returns `{ok: false, conflict_agent: "other-agent"}` if already claimed
+- Pick a different card — do not retry the same one
+- If handoff is needed: lead calls `delegate_card(card_id, from_agent, to_agent)`
+
+### Monitoring (Lead Agent)
+
+| Goal | Tool |
+|------|------|
+| Full health + workload | `team_dashboard()` |
+| Who's doing what | `team_status()` |
+| Work by lane | `partition_cards(by='lane')` |
+| Work by owner | `partition_cards(by='owner')` |
+| Dropped work | Check `unclaimed_in_progress` in `team_dashboard()` |
+
+### Parallel Independent Pattern
+
+When agents work independently without a lead:
+1. Each agent calls `session_start()` (skips cache if already warm)
+2. Each agent claims cards before working on them
+3. Use `team_status()` to avoid conflicts
+4. No delegation needed — agents self-coordinate via claims

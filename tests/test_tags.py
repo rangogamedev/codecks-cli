@@ -133,8 +133,10 @@ class TestSyncFromApi:
 
         original = tags.TAGS
         try:
-            with patch("codecks_cli.api.query") as mock_query, \
-                 patch("codecks_cli.api.warn_if_empty"):
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
                 mock_query.return_value = {
                     "masterTag": {
                         "t1": {"name": "new-tag", "color": "#ff0000"},
@@ -154,8 +156,10 @@ class TestSyncFromApi:
 
         original = tags.TAGS
         try:
-            with patch("codecks_cli.api.query") as mock_query, \
-                 patch("codecks_cli.api.warn_if_empty"):
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
                 mock_query.return_value = {
                     "masterTag": {
                         "t1": {"name": "code", "color": "#000"},  # already exists
@@ -171,8 +175,7 @@ class TestSyncFromApi:
 
         from codecks_cli import tags
 
-        with patch("codecks_cli.api.query") as mock_query, \
-             patch("codecks_cli.api.warn_if_empty"):
+        with patch("codecks_cli.api.query") as mock_query, patch("codecks_cli.api.warn_if_empty"):
             mock_query.return_value = {"masterTag": {}}
             count = tags.sync_from_api()
             assert count == 0

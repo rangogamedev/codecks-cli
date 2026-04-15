@@ -484,8 +484,7 @@ def list_activity(limit=20):
         for entity_key in ("card", "user", "deck"):
             if entity_key in result:
                 result[entity_key] = {
-                    k: v for k, v in result[entity_key].items()
-                    if k in referenced_ids
+                    k: v for k, v in result[entity_key].items() if k in referenced_ids
                 }
     return result
 

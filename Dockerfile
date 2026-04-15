@@ -15,10 +15,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     "mypy>=1.11" \
-    "pytest>=8.3" \
+    "pytest>=9.0.3" \
     "pytest-cov>=5.0" \
-    "ruff>=0.6" \
-    "mcp[cli]>=1.6.0"
+    "ruff>=0.15.10" \
+    "mcp[cli]>=1.27.0"
 
 # --- Runtime stage ---
 ARG PYTHON_VERSION=3.12

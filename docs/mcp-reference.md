@@ -38,6 +38,17 @@ Add to `.mcp.json` or MCP settings:
 
 Use the same command (`codecks-mcp`) with your IDE's MCP configuration. The server uses stdio transport.
 
+> **New to codecks-cli?** See [docs/ai-agent-guide.md](ai-agent-guide.md) for the full setup walkthrough and CLI-first patterns. The CLI is the recommended default for AI agents — MCP is an optional enhancement.
+
+## Prompt Surface
+
+The MCP server exposes two prompts that connected clients can discover via `prompts/list`:
+
+- `pm-session` — the full CLI-first PM playbook (session flow, batch ops, error recovery, safety rules)
+- `setup-guide` — compact setup and orientation guide for first-time users
+
+Use prompts when your MCP client supports them. Use the CLI directly when you want the smallest possible context footprint.
+
 ## Critical: Call session_start() First
 
 **Every session must begin with `session_start()`.** It returns everything an agent needs in a single call:

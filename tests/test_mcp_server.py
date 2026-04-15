@@ -2566,9 +2566,7 @@ class TestFindAndUpdate:
 
     def test_phase2_dry_run_returns_preview(self):
         """dry_run=True should return preview without calling update_cards."""
-        result = mcp_mod.find_and_update(
-            search="x", confirm_ids=[_C1], priority="a", dry_run=True
-        )
+        result = mcp_mod.find_and_update(search="x", confirm_ids=[_C1], priority="a", dry_run=True)
         assert result["ok"] is True
         assert result["phase"] == "preview"
         assert result["would_update"] == 1
@@ -2579,9 +2577,7 @@ class TestFindAndUpdate:
         with patch("codecks_cli.mcp_server._core.CodecksClient") as MockClient:
             client = _mock_client(update_cards={"ok": True})
             MockClient.return_value = client
-            mcp_mod.find_and_update(
-                search="x", confirm_ids=[_C1], status="done", dry_run=True
-            )
+            mcp_mod.find_and_update(search="x", confirm_ids=[_C1], status="done", dry_run=True)
             client.update_cards.assert_not_called()
 
 
@@ -3109,9 +3105,7 @@ class TestBatchUpdateBodies:
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_updates_bodies_successfully(self, MockClient):
-        client = _mock_client(
-            update_cards={"ok": True, "updated": 1, "failed": 0, "fields": {}}
-        )
+        client = _mock_client(update_cards={"ok": True, "updated": 1, "failed": 0, "fields": {}})
         MockClient.return_value = client
         updates = [{"card_id": _C1, "body": "New body"}]
         result = mcp_mod.batch_update_bodies(updates=json.dumps(updates))

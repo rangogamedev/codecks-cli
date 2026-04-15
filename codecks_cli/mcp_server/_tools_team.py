@@ -289,7 +289,7 @@ def _cap_and_summarize(cards: list[dict], cap: int | None) -> tuple[list[dict], 
     sorted_cards = sorted(
         cards,
         key=lambda c: (
-            _PRIORITY_ORDER.get(c.get("priority"), 3),
+            _PRIORITY_ORDER.get(c.get("priority") or "", 3),
             "",  # stable secondary sort
         ),
     )

@@ -686,7 +686,9 @@ def tick_checkboxes(
 
     if not isinstance(item_list, list) or not builtins.all(isinstance(i, str) for i in item_list):
         return _finalize_tool_result(
-            _contract_error("items must be a JSON array of strings.", "error", error_code="INVALID_INPUT")
+            _contract_error(
+                "items must be a JSON array of strings.", "error", error_code="INVALID_INPUT"
+            )
         )
 
     if not item_list:
@@ -946,7 +948,9 @@ def batch_delete_cards(card_ids: list[str]) -> dict:
     if isinstance(ids, dict):
         return ids
     deleted, results = _batch_single_card_op(ids, "delete_card", "deleted", "Delete failed.")
-    return _finalize_tool_result({"ok": True, "deleted": deleted, "total": len(ids), "results": results})
+    return _finalize_tool_result(
+        {"ok": True, "deleted": deleted, "total": len(ids), "results": results}
+    )
 
 
 def batch_archive_cards(card_ids: list[str]) -> dict:
@@ -963,7 +967,9 @@ def batch_archive_cards(card_ids: list[str]) -> dict:
     if isinstance(ids, dict):
         return ids
     archived, results = _batch_single_card_op(ids, "archive_card", "archived", "Archive failed.")
-    return _finalize_tool_result({"ok": True, "archived": archived, "total": len(ids), "results": results})
+    return _finalize_tool_result(
+        {"ok": True, "archived": archived, "total": len(ids), "results": results}
+    )
 
 
 def batch_unarchive_cards(card_ids: list[str]) -> dict:
@@ -978,7 +984,9 @@ def batch_unarchive_cards(card_ids: list[str]) -> dict:
     ids = _validate_batch_ids(card_ids)
     if isinstance(ids, dict):
         return ids
-    unarchived, results = _batch_single_card_op(ids, "unarchive_card", "unarchived", "Unarchive failed.")
+    unarchived, results = _batch_single_card_op(
+        ids, "unarchive_card", "unarchived", "Unarchive failed."
+    )
 
     return _finalize_tool_result(
         {
