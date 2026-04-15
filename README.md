@@ -6,17 +6,25 @@
 ![CI](https://github.com/rangogamedev/codecks-cli/actions/workflows/test.yml/badge.svg)
 [![codecov](https://codecov.io/gh/rangogamedev/codecks-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/rangogamedev/codecks-cli)
 
+![Claude Code](https://img.shields.io/badge/Claude_Code-supported-blue)
+![Cursor](https://img.shields.io/badge/Cursor-supported-blue)
+![Windsurf](https://img.shields.io/badge/Windsurf-supported-blue)
+
 Game developers should be making games, not managing task boards.
 
 codecks-cli gives your AI agent project management tools for [Codecks.io](https://codecks.io) — standups, feature scaffolding, sprint health, batch operations, and multi-agent coordination. Your agent handles the admin. You focus on the game.
 
 Also works as a standalone CLI and Python API. Zero runtime dependencies.
 
+### What is Codecks?
+
+[Codecks](https://codecks.io) is a card-based project management tool built for game studios — think Trello meets collectible card games. It organizes work into decks (boards), cards (tasks), and supports effort estimation, milestones, and team workflows. Codecks has no official API or CLI — codecks-cli fills that gap.
+
 ## Agent Quick Start
 
 ```bash
-pip install codecks-cli
-codecks-cli setup                # interactive token wizard (runs in your terminal)
+pip install git+https://github.com/rangogamedev/codecks-cli.git
+codecks-cli setup                # walks you through tokens — no DevTools needed
 codecks-cli agent-init --agent   # verify: returns account + project context
 ```
 
@@ -24,7 +32,7 @@ Your agent can now use `codecks-cli <command> --agent` via Bash. No special prom
 
 Want a plug-and-play PM skill? Copy `examples/skills/pm/SKILL.md` to `.claude/commands/pm.md` and use `/pm`.
 
-Want MCP tools too? `pip install codecks-cli[mcp]` — see [docs/ai-agent-guide.md](docs/ai-agent-guide.md).
+Want MCP tools too? `pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"` — see [docs/ai-agent-guide.md](docs/ai-agent-guide.md).
 
 ## What Your Agent Can Do
 
@@ -78,15 +86,11 @@ All three interfaces wrap the same `CodecksClient` library. The CLI formats outp
 - **Snapshot caching** — MCP reads in <50ms with selective invalidation
 - **1000+ tests** — full offline test suite, no live API calls
 
-## Token Architecture
+## Setup
 
-| Token | Used for | How to get it |
-|-------|----------|---------------|
-| `CODECKS_TOKEN` | Read + write | Browser cookies (`at` value) |
-| `CODECKS_REPORT_TOKEN` | Creating cards | `codecks-cli generate-token` |
-| `CODECKS_ACCESS_KEY` | Generating report tokens | Codecks Settings > Integrations |
+Run `codecks-cli setup` — it walks you through everything interactively. No manual token hunting required.
 
-Run `codecks-cli setup` for guided configuration, or see `.env.example` for manual setup.
+If you prefer manual setup, see `.env.example` for the configuration format and [docs/ai-agent-guide.md](docs/ai-agent-guide.md#token-architecture) for details on each token.
 
 ## Documentation
 
@@ -100,7 +104,6 @@ Run `codecks-cli setup` for guided configuration, or see `.env.example` for manu
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Architecture, dev setup, testing, release process |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 
 ## Community
 
