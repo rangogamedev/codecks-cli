@@ -23,7 +23,6 @@ from codecks_cli.mcp_server._core import (
     _is_cache_valid,
     _load_cache_from_disk,
     _register_agent,
-    _slim_card_list,
     _unregister_agent_card,
     _validate_uuid,
 )
@@ -281,9 +280,7 @@ def partition_cards(
     return partition_by_lane(project=project, cap=cap)
 
 
-def _cap_and_summarize(
-    cards: list[dict], cap: int | None
-) -> tuple[list[dict], int, bool]:
+def _cap_and_summarize(cards: list[dict], cap: int | None) -> tuple[list[dict], int, bool]:
     """Sort by priority+recency, cap, and summarize cards for partition output.
 
     Returns (summarized_cards, total_in_group, truncated).

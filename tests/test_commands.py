@@ -12,6 +12,7 @@ from codecks_cli import config
 from codecks_cli.commands import (
     cmd_account,
     cmd_activity,
+    cmd_agent_init,
     cmd_archive,
     cmd_card,
     cmd_cards,
@@ -24,11 +25,13 @@ from codecks_cli.commands import (
     cmd_feature,
     cmd_gdd_sync,
     cmd_hand,
+    cmd_lanes,
     cmd_overview,
     cmd_pm_focus,
     cmd_projects,
     cmd_split_features,
     cmd_standup,
+    cmd_tags_registry,
     cmd_unarchive,
     cmd_update,
 )
@@ -1591,9 +1594,7 @@ class TestCmdAccount:
 class TestCmdProjects:
     @patch("codecks_cli.commands._get_client")
     def test_projects_json(self, mock_get, capsys):
-        mock_get.return_value.list_projects.return_value = [
-            {"name": "Tea Shop", "deck_count": 5}
-        ]
+        mock_get.return_value.list_projects.return_value = [{"name": "Tea Shop", "deck_count": 5}]
         ns = argparse.Namespace(format="json")
         cmd_projects(ns)
         out = capsys.readouterr().out
@@ -1651,3 +1652,101 @@ class TestCmdDelete:
         )
         cmd_delete(ns)
         mock_get.return_value.delete_card.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Agent bootstrap commands
+# ---------------------------------------------------------------------------
+
+
+class TestCmdAgentInit:
+    @patch("codecks_cli.commands._get_client")
+    def test_agent_init_returns_composite(self, mock_get, capsys):
+        """agent-init returns account + overview + decks + tags + lanes in one JSON."""
+        mock_client = mock_get.return_value
+        mock_client.get_account.return_value = {"name": "TestUser", "id": "u1"}
+        mock_client.list_cards.return_value = {"cards": []}
+        mock_client.list_decks.return_value = [{"name": "Backlog", "card_count": 10}]
+
+        ns = argparse.Namespace(format="json", project=None)
+        cmd_agent_init(ns)
+        out = capsys.readouterr().out
+        data = json.loads(out)
+
+        assert data["ok"] is True
+        assert data["account"]["name"] == "TestUser"
+        assert "overview" in data
+        assert "total_cards" in data["overview"]
+        assert data["decks"][0]["name"] == "Backlog"
+        assert len(data["tags"]) > 0
+        assert len(data["lanes"]) > 0
+        assert "hero_tags" in data
+        assert "lane_tags" in data
+
+    @patch("codecks_cli.commands._get_client")
+    def test_agent_init_tags_have_descriptions(self, mock_get, capsys):
+        mock_client = mock_get.return_value
+        mock_client.get_account.return_value = {"name": "X"}
+        mock_client.list_cards.return_value = {"cards": []}
+        mock_client.list_decks.return_value = []
+
+        ns = argparse.Namespace(format="json", project=None)
+        cmd_agent_init(ns)
+        data = json.loads(capsys.readouterr().out)
+
+        tag = next(t for t in data["tags"] if t["name"] == "hero")
+        assert "description" in tag
+        assert tag["category"] == "system"
+
+    @patch("codecks_cli.commands._get_client")
+    def test_agent_init_lanes_have_cli_help(self, mock_get, capsys):
+        mock_client = mock_get.return_value
+        mock_client.get_account.return_value = {"name": "X"}
+        mock_client.list_cards.return_value = {"cards": []}
+        mock_client.list_decks.return_value = []
+
+        ns = argparse.Namespace(format="json", project=None)
+        cmd_agent_init(ns)
+        data = json.loads(capsys.readouterr().out)
+
+        lane = next(la for la in data["lanes"] if la["name"] == "code")
+        assert lane["required"] is True
+        assert "cli_help" in lane
+
+
+class TestCmdLanes:
+    def test_lanes_returns_registry(self, capsys):
+        ns = argparse.Namespace(format="json")
+        cmd_lanes(ns)
+        data = json.loads(capsys.readouterr().out)
+
+        assert data["ok"] is True
+        assert data["count"] > 0
+        names = [la["name"] for la in data["lanes"]]
+        assert "code" in names
+        assert "design" in names
+
+    def test_lanes_include_keywords(self, capsys):
+        ns = argparse.Namespace(format="json")
+        cmd_lanes(ns)
+        data = json.loads(capsys.readouterr().out)
+
+        code_lane = next(la for la in data["lanes"] if la["name"] == "code")
+        assert len(code_lane["keywords"]) > 0
+        assert len(code_lane["default_checklist"]) > 0
+
+
+class TestCmdTagsRegistry:
+    def test_tags_registry_returns_all(self, capsys):
+        ns = argparse.Namespace(format="json")
+        cmd_tags_registry(ns)
+        data = json.loads(capsys.readouterr().out)
+
+        assert data["ok"] is True
+        assert data["count"] > 0
+        assert "hero_tags" in data
+        assert "lane_tags" in data
+
+        hero = next(t for t in data["tags"] if t["name"] == "hero")
+        assert hero["category"] == "system"
+        assert "description" in hero

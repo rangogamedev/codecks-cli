@@ -11,6 +11,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 4 local tools (session_start, workflow preferences)
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
+  _prompts.py       — 2 MCP prompts (pm-session, setup-guide)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
 52 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).
@@ -22,6 +23,7 @@ Requires: py -m pip install .[mcp]
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli.mcp_server import (
+    _prompts,
     _tools_admin,
     _tools_comments,
     _tools_local,
@@ -61,6 +63,7 @@ mcp = FastMCP(
 
 for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team, _tools_admin]:
     _mod.register(mcp)
+_prompts.register(mcp)
 
 # ---------------------------------------------------------------------------
 # Re-exports for backward compatibility (tests import via mcp_mod.xxx)
