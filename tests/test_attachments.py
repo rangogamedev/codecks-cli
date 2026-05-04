@@ -181,7 +181,7 @@ def test_upload_report_files_uses_upload_urls(mock_raw):
     source.write_text("hello", encoding="utf-8")
     attachment = prepare_attachment_files([str(source)])[0]
 
-    result = upload_report_files([attachment], [{"signedUrl": "https://s3.example", "fields": {}}])
+    result = upload_report_files([attachment], [{"url": "https://s3.example", "fields": {}}])
 
     assert result["ok"] is True
     assert result["attached"] == 1

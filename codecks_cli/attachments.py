@@ -106,8 +106,16 @@ def build_multipart_body(
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
-def _upload_to_signed_url(attachment: AttachmentFile, upload_info: dict[str, object]) -> None:
-    signed_url = upload_info.get("signedUrl") or upload_info.get("signed_url")
+def _upload_to_url(
+    attachment: AttachmentFile,
+    upload_info: dict[str, object],
+    *,
+    url_keys: tuple[str, ...],
+) -> None:
+    signed_url = next(
+        (upload_info.get(key) for key in url_keys if isinstance(upload_info.get(key), str)),
+        None,
+    )
     if not isinstance(signed_url, str) or not signed_url:
         raise CliError(f"[ERROR] Upload URL missing for attachment '{attachment.file_name}'.")
     fields = upload_info.get("fields") or {}
@@ -117,6 +125,10 @@ def _upload_to_signed_url(attachment: AttachmentFile, upload_info: dict[str, obj
         )
     body, content_type = build_multipart_body(attachment, fields)
     raw_http_request(signed_url, data=body, headers={"Content-Type": content_type}, method="POST")
+
+
+def _upload_to_signed_url(attachment: AttachmentFile, upload_info: dict[str, object]) -> None:
+    _upload_to_url(attachment, upload_info, url_keys=("signedUrl", "signed_url"))
 
 
 def _file_result(attachment: AttachmentFile) -> dict[str, object]:
@@ -142,7 +154,7 @@ def upload_report_files(
     for attachment, upload_info in zip(attachments, upload_urls, strict=False):
         if not isinstance(upload_info, dict):
             raise CliError(f"[ERROR] Invalid upload info for attachment '{attachment.file_name}'.")
-        _upload_to_signed_url(attachment, upload_info)
+        _upload_to_url(attachment, upload_info, url_keys=("url", "signedUrl", "signed_url"))
         uploaded.append(_file_result(attachment))
 
     return {"ok": True, "attached": len(uploaded), "failed": 0, "files": uploaded}
