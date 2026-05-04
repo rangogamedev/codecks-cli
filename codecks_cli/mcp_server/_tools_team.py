@@ -280,9 +280,7 @@ def partition_cards(
     return partition_by_lane(project=project, cap=cap)
 
 
-def _cap_and_summarize(
-    cards: list[dict], cap: int | None
-) -> tuple[list[dict], int, bool]:
+def _cap_and_summarize(cards: list[dict], cap: int | None) -> tuple[list[dict], int, bool]:
     """Sort by priority+recency, cap, and summarize cards for partition output.
 
     Returns (summarized_cards, total_in_group, truncated).

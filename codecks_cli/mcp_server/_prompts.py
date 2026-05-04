@@ -1,62 +1,65 @@
-"""Prompt helpers for MCP clients.
+"""MCP prompts — discoverable guides for connected agents.
 
-Prompts are an enhancement layer for MCP-native editors. The CLI remains the
-recommended default for low-token agent workflows.
+Agents call prompts/list to see these, then prompts/get to load the full
+content.  The pm-session prompt reads pm_playbook.md at call time so it
+always reflects the latest version.
 """
 
-from collections.abc import Callable
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-_PLAYBOOK_PATH = _ROOT / "pm_playbook.md"
+
+def _load_playbook() -> str:
+    """Read pm_playbook.md from the package directory."""
+    playbook = Path(__file__).resolve().parent.parent / "pm_playbook.md"
+    if playbook.is_file():
+        return playbook.read_text(encoding="utf-8")
+    return "PM playbook not found. Run `codecks-cli agent-init --agent` to get started."
 
 
-def _read_playbook() -> str:
-    """Read the packaged PM playbook, with a small fallback on failure."""
-    try:
-        return _PLAYBOOK_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        return (
-            "PM playbook is unavailable.\n"
-            f"Error: {exc}\n"
-            "Fallback: start with `codecks-cli agent-init --agent`."
-        )
+SETUP_GUIDE = """\
+# codecks-cli Quick Setup
+
+1. Install: `pip install codecks-cli`
+2. Configure tokens: `codecks-cli setup` (interactive wizard in your terminal)
+3. Verify: `codecks-cli agent-init --agent`
+
+That's it. Use `codecks-cli <command> --agent` for any PM operation.
+
+## Optional: MCP server
+
+`pip install codecks-cli[mcp]` adds 53 MCP tools with caching and team
+coordination. Add to your editor's MCP config:
+
+```json
+{"mcpServers": {"codecks": {"command": "codecks-mcp", "args": []}}}
+```
+
+## Token guide
+
+| Token | Where to get it |
+|-------|-----------------|
+| CODECKS_ACCOUNT | Your team subdomain (myteam.codecks.io) |
+| CODECKS_TOKEN | Browser DevTools > Cookies > `at` value |
+| CODECKS_ACCESS_KEY | Codecks > Settings > Integrations |
+| CODECKS_REPORT_TOKEN | `codecks-cli generate-token` |
+
+Tokens go in `.env` (gitignored). Never paste tokens in chat.
+"""
 
 
-def pm_session() -> str:
-    """CLI-first PM session prompt for connected MCP clients."""
-    return _read_playbook()
+def register(mcp):
+    """Register MCP prompts on the FastMCP instance."""
 
+    @mcp.prompt("pm-session")
+    def pm_session_prompt() -> str:
+        """Full PM session guide — CLI-first session flow, execution patterns,
+        error recovery, batch ops, and safety rules. Load this at the start of
+        any PM session for best results."""
+        return _load_playbook()
 
-def setup_guide() -> str:
-    """Compact setup prompt for connected MCP clients."""
-    return (
-        "Set up codecks-cli with a CLI-first workflow.\n\n"
-        "1. Install: `py -m pip install codecks-cli`\n"
-        "2. Configure auth: `codecks-cli setup`\n"
-        "3. Verify: `codecks-cli agent-init --agent`\n"
-        '4. Optional MCP: `py -m pip install "codecks-cli[mcp]"`\n\n'
-        "Rules:\n"
-        "- Never ask the user to paste tokens into chat.\n"
-        "- Prefer `codecks-cli setup` over manual secret entry in conversation.\n"
-        "- Use the CLI first for routine PM work.\n"
-        "- Use MCP when you need cache-heavy reads, prompts, or team coordination.\n"
-    )
-
-
-def _register_prompt(mcp: object, name: str, fn: Callable[[], str]) -> None:
-    """Register a prompt if the FastMCP instance supports prompt decorators."""
-    prompt = getattr(mcp, "prompt", None)
-    if prompt is None:
-        return
-    try:
-        decorator = prompt(name=name)
-    except TypeError:
-        decorator = prompt()
-    decorator(fn)
-
-
-def register(mcp: object) -> None:
-    """Register prompts with the FastMCP instance when supported."""
-    _register_prompt(mcp, "pm-session", pm_session)
-    _register_prompt(mcp, "setup-guide", setup_guide)
+    @mcp.prompt("setup-guide")
+    def setup_guide_prompt() -> str:
+        """Quick setup guide — install, configure tokens, verify connection.
+        Use when a user asks how to set up codecks-cli or connects for the
+        first time."""
+        return SETUP_GUIDE

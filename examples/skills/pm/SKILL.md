@@ -1,61 +1,96 @@
-# PM Skill
+---
+name: pm
+description: CLI-first PM session for Codecks — standups, card management, feature scaffolding, sprint health.
+---
 
-Use this skill for day-to-day Codecks project management with a CLI-first
-workflow.
+# PM Session (CLI-First)
 
-## Startup
+Run Codecks PM operations using `codecks-cli` via Bash for the smallest token
+footprint. Falls back to MCP tools only for team coordination or batch creates.
 
-Always begin with:
+## Session Bootstrap
 
 ```bash
 codecks-cli agent-init --agent
 ```
 
-This gives you the project context, tag registry, and lane registry in one call.
+If this fails with `[SETUP_NEEDED]` or `[TOKEN_EXPIRED]`, ask the user to run
+`codecks-cli setup` or refresh their browser token.
 
-## Default Workflow
+## Common Workflows
 
-1. Use `standup`, `pm-focus`, or `overview` to scope the problem.
-2. Use `cards` to get the exact target set.
-3. Use `card` when you need detail on one item.
-4. Mutate with the smallest command that solves the task.
-5. Verify with a follow-up read.
-
-## Preferred Commands
-
+**Daily standup:**
 ```bash
 codecks-cli standup --agent
-codecks-cli pm-focus --agent
-codecks-cli cards --status started --agent
-codecks-cli card <uuid> --agent
-codecks-cli update <uuid> --status done --agent
 ```
 
-## Batch Patterns
-
+**Sprint health check:**
 ```bash
-codecks-cli cards --status blocked --ids-only | codecks-cli done --stdin --agent
-codecks-cli cards --deck Backlog --ids-only | codecks-cli hand --stdin --agent
-codecks-cli cards --deck Code --status started --ids-only | codecks-cli update --stdin --status in_review --agent
+codecks-cli pm-focus --agent
 ```
 
-Use `@last` when the previous listing already contains the exact target set.
+**Aggregate overview (cheapest health check):**
+```bash
+codecks-cli overview --agent
+```
+
+**Find and update cards:**
+```bash
+codecks-cli cards --status blocked --sort priority --agent
+codecks-cli update <uuid> --status in_review --agent
+```
+
+**Batch close via pipes:**
+```bash
+codecks-cli cards --deck Code --status started --ids-only | codecks-cli done --stdin --agent
+```
+
+**Chain with @last:**
+```bash
+codecks-cli cards --deck Backlog --limit 10 --agent
+codecks-cli done @last --agent
+```
+
+**Scaffold a feature:**
+```bash
+codecks-cli feature "Feature Name" \
+  --hero-deck Features --code-deck Code --design-deck Design \
+  --priority b --agent
+```
+
+**Hand management:**
+```bash
+codecks-cli hand --agent                   # current hand
+codecks-cli hand <uuid1> <uuid2> --agent   # add cards
+codecks-cli unhand <uuid> --agent          # remove card
+```
+
+## Error Recovery
+
+| Prefix | Action |
+|--------|--------|
+| `[SETUP_NEEDED]` | Ask user to run `codecks-cli setup` |
+| `[TOKEN_EXPIRED]` | Ask user to refresh browser token |
+| `[ERROR]` | Fix arguments, retry once |
+| HTTP 429 | Wait 5s, retry once |
+
+Re-read cards before retrying any mutation. For doc cards, never set status,
+priority, or effort.
 
 ## Safety Rules
 
-- Use full UUIDs for mutations.
-- Re-read after every mutation workflow.
-- Do not set `dueAt`.
-- Do not change doc-card status, priority, or effort.
-- Explain skipped Art or Audio lanes when decomposing features.
+- Full 36-char UUIDs for all mutations.
+- Never set `dueAt`.
+- `--dry-run` to preview mutations.
+- Never close a Hero before its sub-cards are done.
+- Re-read after mutations; never mutate from stale data.
 
-## When To Use MCP
+## When to Use MCP Instead
 
-Prefer MCP only when you need:
+If MCP tools are available, prefer them for:
+- Team coordination (claim/release/delegate)
+- Batch creates (up to 20 cards per call)
+- Repeated reads with cache (<50ms)
+- `find_and_update()` (search + update in one call)
 
-- `session_start()` in an MCP-native setup
-- `find_and_update()`
-- claim/release/delegate coordination
-- snapshot-cached repeated reads
-
-Otherwise, stay on the CLI for smaller context and simpler workflows.
+Otherwise, the CLI handles everything a PM session needs.

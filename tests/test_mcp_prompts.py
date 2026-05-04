@@ -16,18 +16,18 @@ def _load_prompts_module():
 
 def test_pm_session_reads_playbook():
     mod = _load_prompts_module()
-    text = mod.pm_session()
+    text = mod._load_playbook()
     assert "Session Start" in text
     assert "standup" in text
-    assert "get_account" in text
+    assert "codecks-cli agent-init --agent" in text
 
 
 def test_setup_guide_mentions_cli_first_and_setup():
     mod = _load_prompts_module()
-    text = mod.setup_guide()
+    text = mod.SETUP_GUIDE
     assert "codecks-cli setup" in text
     assert "codecks-cli agent-init --agent" in text
-    assert "Use the CLI first" in text
+    assert "Use `codecks-cli <command> --agent`" in text
 
 
 def test_register_uses_prompt_names_when_available():
@@ -43,5 +43,5 @@ def test_register_uses_prompt_names_when_available():
             return decorator
 
     mod.register(FakeMCP())
-    assert ("pm-session", "pm_session") in seen
-    assert ("setup-guide", "setup_guide") in seen
+    assert ("pm-session", "pm_session_prompt") in seen
+    assert ("setup-guide", "setup_guide_prompt") in seen

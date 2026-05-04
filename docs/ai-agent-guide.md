@@ -1,89 +1,96 @@
 # AI Agent Guide
 
-`codecks-cli` is built so AI agents can manage Codecks with either a lean CLI
-workflow or an MCP-connected workflow. The recommended default is CLI first.
+How to use codecks-cli with AI agents — CLI-first for token efficiency, MCP as
+an optional enhancement.
 
 ## How It Works
 
-All interfaces share the same `CodecksClient` core:
-
-```text
-CLI -> commands.py -> CodecksClient -> Codecks API
-MCP -> mcp_server/* -> CodecksClient -> Codecks API
+```
+Agent (Claude, Cursor, Windsurf, etc.)
+  │
+  ├── CLI: codecks-cli <command> --agent     (Bash, lean JSON, no deps)
+  │
+  └── MCP: codecks-mcp (53 tools)           (optional, adds caching + teams)
+        │
+        └── CodecksClient (34 methods)
+              │
+              └── Codecks HTTP API
 ```
 
-CLI is smaller in context and easier to compose with shell pipes. MCP adds
-snapshot caching, coordination tools, and prompt delivery.
+Both the CLI and MCP server wrap the same `CodecksClient` library. The CLI
+outputs compact JSON in `--agent` mode. The MCP server adds snapshot caching,
+guardrails, and team coordination on top.
+
+## Why CLI-First?
+
+MCP loads 53 tool schemas into agent context (~5,300 tokens) before any work
+happens. The CLI: an agent knows `codecks-cli <command> --agent` plus a
+command reference table — about 200 tokens of tool knowledge. That is a 25x
+difference in baseline context cost.
+
+Use MCP when you need cache-heavy reads, team coordination, batch creates, or
+`find_and_update()`.
 
 ## 3-Minute Setup
 
-1. Install the package:
-
 ```bash
-py -m pip install codecks-cli
+pip install codecks-cli          # CLI only, zero runtime deps
+codecks-cli setup                # interactive token wizard (runs in terminal)
+codecks-cli agent-init --agent   # verify: returns account + project context
 ```
 
-2. Run the interactive setup:
-
-```bash
-codecks-cli setup
-```
-
-3. Verify the connection:
-
-```bash
-codecks-cli agent-init --agent
-```
+That's it. Your agent can now use `codecks-cli <command> --agent` via Bash.
 
 ## CLI Quick Reference
 
-```bash
-codecks-cli agent-init --agent
-codecks-cli standup --agent
-codecks-cli pm-focus --agent
-codecks-cli cards --status started --agent
-codecks-cli card <uuid> --agent
-codecks-cli update <uuid> --status done --agent
-codecks-cli lanes --agent
-codecks-cli tags-registry --agent
-```
+| Command | Purpose |
+|---------|---------|
+| `agent-init` | One-call bootstrap: account + overview + decks + tags + lanes |
+| `standup` | Done, in-progress, blocked, hand snapshot |
+| `pm-focus` | Sprint health: blocked, stale, unassigned, suggested next |
+| `overview` | Aggregate counts only (~500 bytes) |
+| `cards --status X` | List cards with filters |
+| `card <uuid>` | Single card detail |
+| `create "Title" --deck X` | Create a card |
+| `update <uuid> --status X` | Update card properties |
+| `done <uuid>` | Mark done |
+| `start <uuid>` | Mark started |
+| `feature "Title" --hero-deck X --code-deck Y` | Scaffold Hero + sub-cards |
+| `hand` / `unhand` | Manage personal work queue |
+| `lanes` | Lane registry (no token needed) |
+| `tags-registry` | Tag registry (no token needed) |
+| `commands --format json` | Agent self-discovery: all commands + args |
 
-Pipe-friendly patterns:
+All commands accept `--agent` for JSON output and `--dry-run` for previewing
+mutations.
+
+### Pipe Workflows
 
 ```bash
 codecks-cli cards --status blocked --ids-only | codecks-cli done --stdin --agent
-codecks-cli cards --deck Backlog --ids-only | codecks-cli hand --stdin --agent
-codecks-cli cards --status started --limit 10 --agent
-codecks-cli done @last --agent
+codecks-cli cards --deck Backlog --limit 10 --agent && codecks-cli done @last --agent
 ```
 
-## CLI vs MCP
+## Token Architecture
 
-### Use CLI When
+| Token | Purpose | Where to get it | Expires? |
+|-------|---------|-----------------|----------|
+| `CODECKS_TOKEN` | Read + write | Browser DevTools > Cookies > `at` value | With browser session |
+| `CODECKS_REPORT_TOKEN` | Create cards | `codecks-cli generate-token` | Never (until disabled) |
+| `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations | Never |
 
-- you want the lowest token cost
-- you can run shell commands directly
-- the task is a normal PM workflow
-- you want to use pipes, `--stdin`, `--ids-only`, or `@last`
+Tokens go in `.env` (gitignored). Never paste tokens in agent chat — use
+`codecks-cli setup` or edit `.env` directly.
 
-### Use MCP When
-
-- your editor already has the MCP server connected
-- you want `session_start()`
-- you want `find_and_update()`
-- you need snapshot-cached repeated reads
-- you need claim/release/delegate coordination
-- you want prompts like `pm-session` or `setup-guide`
-
-## MCP Setup
-
-Install the extra:
+## MCP Setup (Optional)
 
 ```bash
-py -m pip install "codecks-cli[mcp]"
+pip install codecks-cli[mcp]
 ```
 
 ### Claude Code
+
+Add to `.claude/settings.json` or project `.mcp.json`:
 
 ```json
 {
@@ -98,45 +105,56 @@ py -m pip install "codecks-cli[mcp]"
 
 ### Cursor
 
-Use the same `command` and `args` values in Cursor's MCP configuration.
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "codecks": {
+      "command": "codecks-mcp",
+      "args": []
+    }
+  }
+}
+```
 
 ### Windsurf
 
-Use the same `command` and `args` values in Windsurf's MCP configuration.
+Add to your Windsurf MCP configuration with the same JSON structure.
 
-## Security
+### MCP Prompts
 
-- Never ask users to paste tokens into chat.
-- Prefer `codecks-cli setup` for first-time configuration.
-- Keep secrets in `.env`.
-- If a token appears in chat, recommend rotating it.
+The MCP server exposes two prompts that agents can discover via `prompts/list`:
 
-## Customizing
+- `pm-session` — the full CLI-first PM playbook
+- `setup-guide` — compact setup and orientation guide
 
-Start from the examples:
+## Customizing Your Agent
 
-- [examples/skills/setup/SKILL.md](../examples/skills/setup/SKILL.md)
-- [examples/skills/pm/SKILL.md](../examples/skills/pm/SKILL.md)
-- [examples/game-dev-agent.md](../examples/game-dev-agent.md)
+The base workflow covers any project. To add domain-specific patterns:
 
-Teams often customize:
+1. Start with the PM skill: `examples/skills/pm/SKILL.md`
+2. Add project-specific lanes, templates, or sync workflows
+3. See `examples/game-dev-agent.md` for a real-world game-dev example
 
-- project naming conventions
-- lane usage rules
-- GDD sync workflows
-- hand management habits
-- when to prefer CLI over MCP
+## CLI vs MCP Decision Guide
+
+| Scenario | Use CLI | Use MCP |
+|----------|---------|---------|
+| Daily standup | `standup --agent` | `session_start()` + `standup()` |
+| Batch close 10 cards | `--ids-only \| done --stdin` | `find_and_update()` |
+| Create 15 cards | CLI one at a time | `batch_create_cards` |
+| Team coordination | `claim`/`release` | `claim_card`/`delegate_card`/`team_dashboard` |
+| Repeated reads | Fresh API each call | Cache hit <50ms |
+| Token budget | ~200 tokens baseline | ~5,200 tokens baseline |
 
 ## Troubleshooting
 
-- `[SETUP_NEEDED]`: run `codecks-cli setup`
-- `[TOKEN_EXPIRED]`: refresh the browser-session token
-- missing deck/project names: verify account and org in `.env`
-- CLI works but MCP does not: install the `mcp` extra and confirm editor config
-
-## Next Reads
-
-- [docs/cli-reference.md](cli-reference.md)
-- [docs/mcp-reference.md](mcp-reference.md)
-- [AGENTS.md](../AGENTS.md)
-- [DEVELOPMENT.md](../DEVELOPMENT.md)
+| Problem | Fix |
+|---------|-----|
+| `[SETUP_NEEDED]` | Run `codecks-cli setup` |
+| `[TOKEN_EXPIRED]` | Refresh `CODECKS_TOKEN` from browser cookies |
+| MCP server not found | Run `pip install codecks-cli[mcp]` then `codecks-mcp` |
+| `invalid choice` for a command | Ensure you installed the latest version |
+| 429 rate limit | Wait 5s, retry. CLI auto-retries reads. |
+| Card mutation returns error | Re-read the card first; the UUID may be stale |

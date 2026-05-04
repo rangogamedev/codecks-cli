@@ -11,6 +11,7 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 4 local tools (session_start, workflow preferences)
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
+  _prompts.py       — 2 MCP prompts (pm-session, setup-guide)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
 53 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).

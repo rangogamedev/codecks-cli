@@ -881,9 +881,7 @@ class TestResolveMilestoneId:
         from codecks_cli.cards import resolve_milestone_id
 
         mock_milestones.return_value = {}  # not in .env
-        mock_query.return_value = {
-            "milestone": {"m1": {"id": "m1", "name": "Gamma"}}
-        }
+        mock_query.return_value = {"milestone": {"m1": {"id": "m1", "name": "Gamma"}}}
         with patch("codecks_cli.config.save_env_value"):
             assert resolve_milestone_id("Gamma") == "m1"
 

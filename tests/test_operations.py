@@ -3,11 +3,7 @@
 Covers: tick_checkboxes (items mode), quick_overview, claims coordination.
 """
 
-import json
-import os
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from codecks_cli._operations import (
     _load_claims,
@@ -18,7 +14,6 @@ from codecks_cli._operations import (
     tick_all_checkboxes,
     tick_checkboxes,
 )
-
 
 # ---------------------------------------------------------------------------
 # tick_checkboxes (items mode)

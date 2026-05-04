@@ -12,6 +12,7 @@ from codecks_cli.api import _check_token
 from codecks_cli.commands import (
     cmd_account,
     cmd_activity,
+    cmd_agent_init,
     cmd_archive,
     cmd_attach,
     cmd_cache,
@@ -36,6 +37,7 @@ from codecks_cli.commands import (
     cmd_gdd_sync,
     cmd_generate_token,
     cmd_hand,
+    cmd_lanes,
     cmd_milestones,
     cmd_overview,
     cmd_partition,
@@ -47,6 +49,7 @@ from codecks_cli.commands import (
     cmd_standup,
     cmd_start,
     cmd_tags,
+    cmd_tags_registry,
     cmd_team_status,
     cmd_tick_all,
     cmd_tick_checkboxes,
@@ -346,6 +349,14 @@ def build_parser():
     # --- setup ---
     sub.add_parser("setup").set_defaults(func=None)
 
+    # --- agent-init (composite startup for AI agents) ---
+    p = sub.add_parser(
+        "agent-init",
+        help="Agent bootstrap: account + overview + decks + tags + lanes in one call",
+    )
+    p.add_argument("--project", help="Filter overview to a specific project")
+    p.set_defaults(func=cmd_agent_init)
+
     # --- query ---
     p = sub.add_parser("query")
     p.add_argument("json_query")
@@ -365,6 +376,18 @@ def build_parser():
     sub.add_parser("projects").set_defaults(func=cmd_projects)
     sub.add_parser("milestones").set_defaults(func=cmd_milestones)
     sub.add_parser("tags").set_defaults(func=cmd_tags)
+
+    # --- tags-registry (full tag definitions from local registry) ---
+    sub.add_parser(
+        "tags-registry",
+        help="Full tag definitions including descriptions",
+    ).set_defaults(func=cmd_tags_registry)
+
+    # --- lanes (deck category definitions) ---
+    sub.add_parser(
+        "lanes",
+        help="Lane definitions (deck categories) with keywords and checklists",
+    ).set_defaults(func=cmd_lanes)
 
     # --- cards ---
     p = sub.add_parser("cards")
@@ -699,6 +722,8 @@ NO_TOKEN_COMMANDS = {
     "feedback",
     "claim",
     "release",
+    "lanes",
+    "tags-registry",
 }
 
 

@@ -1,124 +1,152 @@
-# Setup Skill
+---
+name: codecks-setup
+description: Interactive setup wizard for codecks-cli — installs the tool, configures tokens securely, optionally sets up MCP and the PM agent skill.
+---
 
-Use this skill to get `codecks-cli` working for a user without leaking secrets
-into chat history. The CLI should work on its own first. MCP is optional.
+# codecks-cli Setup Wizard
 
-## Goal
+## Phase 1: Detect current state
 
-Leave the user with a working `codecks-cli` install and a verified
-`codecks-cli agent-init --agent` call.
-
-## Rules
-
-- Never ask the user to paste tokens into chat.
-- Prefer `codecks-cli setup` over manual `.env` editing.
-- If the user pastes a token into chat, warn them and suggest rotating it.
-- Treat MCP as an optional enhancement, not a requirement.
-
-## Phase 1: Detect Current State
-
-Check these in order and skip anything already complete:
-
-1. `codecks-cli --version`
-2. Check whether `.env` exists
-3. Verify auth with `codecks-cli agent-init --agent`
-4. Check whether the user already has MCP configured
-5. Check whether they already have a PM skill or prompt file
-
-If `agent-init` succeeds, report that the tool is already set up and move to
-orientation.
-
-## Phase 2: Install The Tool
-
-If the CLI is missing:
+Before asking anything, check what is already set up:
 
 ```bash
-py -m pip install codecks-cli
+codecks-cli --version 2>/dev/null          # installed?
+ls .env 2>/dev/null                        # env file exists?
+codecks-cli agent-init --agent 2>/dev/null # tokens work?
 ```
 
-If the user also wants MCP:
+If `agent-init` succeeds, skip to Phase 5 (choose agent experience).
+If the tool is not installed, start at Phase 2.
+Otherwise start at Phase 3.
+
+## Phase 2: Install
 
 ```bash
-py -m pip install "codecks-cli[mcp]"
+pip install codecks-cli        # CLI only, zero runtime deps
+# or
+pip install codecks-cli[mcp]   # CLI + MCP server (optional)
 ```
 
-## Phase 3: Configure Tokens
+## Phase 3: Configure tokens
 
-Recommended path:
+Offer the user a choice:
+
+**Option A — "Run the setup wizard" (recommended)**
+
+Run `codecks-cli setup` in the terminal. This is the built-in interactive
+wizard that collects tokens in the terminal — not through the chat. The agent
+just starts the command and waits for it to finish.
+
+**Option B — "I'll configure .env myself"**
+
+Copy `.env.example` to `.env` if it does not exist, then print this guide:
+
+| Token | What it does | Where to get it | Expires? |
+|-------|-------------|-----------------|----------|
+| `CODECKS_ACCOUNT` | Team subdomain | The `myteam` part of `myteam.codecks.io` | Never |
+| `CODECKS_TOKEN` | Read + write access | Browser DevTools (F12) > Application > Cookies > `at` value | With browser session |
+| `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations > User Reporting | Never |
+| `CODECKS_REPORT_TOKEN` | Create cards | Run `codecks-cli generate-token` after setting access key | Never (until disabled) |
+
+Tell the user: "Open `.env` in your editor, fill in the values, and let me
+know when you're done."
+
+### Security rules
+
+- **NEVER** ask the user to paste tokens in the chat.
+- **NEVER** use AskUserQuestion for token or key input.
+- If the user accidentally pastes a token in chat, warn them to rotate it.
+- Prefer `codecks-cli setup` (terminal wizard) over manual `.env` editing.
+
+## Phase 4: Verify and secure
 
 ```bash
-codecks-cli setup
+codecks-cli agent-init --agent   # test connection
 ```
 
-This keeps token entry inside the terminal instead of the agent conversation.
+If it fails, diagnose: token expired? account name wrong? missing .env?
 
-Manual fallback:
-
-1. Ensure `.env` exists.
-2. Tell the user to fill in values locally.
-3. Never request the values in chat.
-
-Minimum token guide:
-
-| Token | Purpose |
-|---|---|
-| `CODECKS_ACCOUNT` | Team/account slug |
-| `CODECKS_TOKEN` | Read + write session token |
-| `CODECKS_ACCESS_KEY` | Generate report tokens |
-| `CODECKS_REPORT_TOKEN` | Stable card creation token |
-
-## Phase 4: Verify
-
-Run:
+Then run security checks silently:
 
 ```bash
-codecks-cli agent-init --agent
+grep -q ".env" .gitignore          # .env is gitignored?
+grep -rn "CODECKS_TOKEN\|CODECKS_ACCESS_KEY" --include="*.py" --include="*.md"  # leaked?
 ```
 
-If it works, report:
+Warn immediately if any check fails.
 
-- account/team context
-- total cards
-- deck summary
+## Phase 5: Choose your agent experience
 
-If it fails:
+The tool now works. Ask the user what they want:
 
-- `[SETUP_NEEDED]` means `.env` is incomplete
-- `[TOKEN_EXPIRED]` means the session token needs refresh
-- `[ERROR]` means inspect the message and fix the specific configuration issue
+**Option 1 — "I'll use my own agent"**
 
-## Phase 5: Offer Workflow Options
+Done. The CLI is ready. Any agent can run `codecks-cli <command> --agent` via
+Bash. Point them to `AGENTS.md` for API pitfalls and `docs/ai-agent-guide.md`
+for the full reference.
 
-### Option 1: CLI Only
+**Option 2 — "Give me the PM agent"**
 
-Tell the user they can use any agent that can run shell commands:
+Copy `examples/skills/pm/SKILL.md` to `.claude/commands/pm.md`:
 
 ```bash
-codecks-cli standup --agent
-codecks-cli cards --status started --agent
+mkdir -p .claude/commands
+cp examples/skills/pm/SKILL.md .claude/commands/pm.md
 ```
 
-### Option 2: PM Skill
+"You now have `/pm` — a ready-to-use PM session skill."
 
-Point them to `examples/skills/pm/SKILL.md` and help them copy or adapt it for
-their editor.
+For Cursor users, print the key sections for pasting into `.cursorrules`.
+For Windsurf users, same for `.windsurfrules`.
 
-### Option 3: MCP Too
+**Option 3 — "Set up MCP too"**
 
-If they want richer integrations, add the MCP server config for their editor
-after the CLI is already working.
+Install the MCP extra if not already present:
+
+```bash
+pip install codecks-cli[mcp]
+```
+
+Then write the MCP config for their editor:
+
+Claude Code (`.claude/settings.json` or project `.mcp.json`):
+```json
+{
+  "mcpServers": {
+    "codecks": {
+      "command": "codecks-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Cursor (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "codecks": {
+      "command": "codecks-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Note: "MCP adds 53 tools with caching and team coordination, but loads more
+context tokens. CLI is leaner. Use both — CLI for routine ops, MCP for
+advanced features."
 
 ## Phase 6: Orientation
 
-Show them the board:
+Show the user their board:
 
 ```bash
 codecks-cli standup --agent
 codecks-cli overview --agent
 ```
 
-Then suggest one next step:
-
-- run a daily standup
-- start a PM session
-- configure MCP if they need caching or coordination
+Suggest next steps based on their choice:
+- Option 1: "Try asking your agent to run `codecks-cli standup`."
+- Option 2: "Try `/pm` to start a PM session."
+- Option 3: "Try asking your agent to call `session_start()`."
