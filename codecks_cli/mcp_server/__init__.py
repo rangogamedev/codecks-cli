@@ -7,13 +7,13 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _core.py          — Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
   _security.py      — Injection detection, sanitization, input validation
   _tools_read.py    — 11 query/dashboard tools (cache-aware)
-  _tools_write.py   — 18 mutation/hand/scaffolding/undo tools
+  _tools_write.py   — 19 mutation/hand/scaffolding/undo tools
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 4 local tools (session_start, workflow preferences)
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
-52 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).
+53 tools total (down from 55 in v0.4.0, consolidated in v0.5.0).
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
@@ -33,7 +33,7 @@ from codecks_cli.mcp_server import (
 mcp = FastMCP(
     "codecks",
     instructions=(
-        "Codecks project management tools (52 tools). "
+        "Codecks project management tools (53 tools). "
         "All card IDs must be full 36-char UUIDs. "
         "Doc cards: no status/priority/effort. "
         "Rate limit: 40 req/5s.\n"
@@ -196,6 +196,7 @@ from codecks_cli.mcp_server._tools_team import (
 from codecks_cli.mcp_server._tools_write import (
     add_to_hand,
     archive_card,
+    attach_files,
     batch_archive_cards,
     batch_create_cards,
     batch_delete_cards,

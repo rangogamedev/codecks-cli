@@ -23,7 +23,6 @@ from codecks_cli.mcp_server._core import (
     _is_cache_valid,
     _load_cache_from_disk,
     _register_agent,
-    _slim_card_list,
     _unregister_agent_card,
     _validate_uuid,
 )
@@ -292,7 +291,7 @@ def _cap_and_summarize(
     sorted_cards = sorted(
         cards,
         key=lambda c: (
-            _PRIORITY_ORDER.get(c.get("priority"), 3),
+            _PRIORITY_ORDER.get(str(c.get("priority") or "").lower(), 3),
             "",  # stable secondary sort
         ),
     )

@@ -74,7 +74,8 @@ codecks_api.py          <- entry point (thin wrapper)
 codecks_cli/
   cli.py                <- argparse parser, dispatch
   commands.py           <- cmd_*() CLI handlers
-  client.py             <- CodecksClient: 33 public methods
+  client.py             <- CodecksClient: 34 public methods
+  attachments.py        <- File validation and S3 multipart upload helpers
   scaffolding.py        <- scaffold_feature(), split_features()
   cards.py              <- Card CRUD, hand, conversations
   api.py                <- HTTP layer (retries, timeouts, tokens)
@@ -103,14 +104,14 @@ codecks_cli/
     _activity.py         format_activity_table, format_activity_diff
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
-  mcp_server/           <- 52 MCP tools (package, 6 tool modules)
+  mcp_server/           <- 53 MCP tools (package, 6 tool modules)
     __init__.py          FastMCP init, registration, re-exports
     __main__.py          py -m codecks_cli.mcp_server entry
     _core.py             Client cache, dispatcher, snapshot cache
     _security.py         Injection detection, sanitization
     _repository.py       CardRepository (O(1) indexed lookups)
     _tools_read.py       11 query/dashboard tools
-    _tools_write.py      21 mutation/hand/scaffolding/batch tools
+    _tools_write.py      22 mutation/hand/scaffolding/batch tools
     _tools_comments.py   5 comment CRUD tools
     _tools_local.py      4 session/preference tools
     _tools_team.py       6 team coordination tools

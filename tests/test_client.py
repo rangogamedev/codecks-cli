@@ -3,6 +3,7 @@ Mocks at cards.*/api.* boundary. Asserts on returned dicts, not stdout.
 """
 
 from datetime import UTC
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -345,6 +346,45 @@ class TestCreateCard:
         assert result["card_id"] == "new-id"
         assert result["title"] == "Test Card"
 
+    @patch("codecks_cli.client.upload_report_files")
+    @patch("codecks_cli.client.prepare_attachment_files")
+    @patch("codecks_cli.scaffolding.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_create_card_uploads_files(self, mock_create, mock_list, mock_prepare, mock_upload):
+        mock_list.return_value = {"card": {}}
+        mock_prepare.return_value = [SimpleNamespace(file_name="mockup.png")]
+        mock_create.return_value = {"cardId": "new-id", "uploadUrls": [{"signedUrl": "s3"}]}
+        mock_upload.return_value = {"ok": True, "attached": 1, "failed": 0, "files": []}
+        client = _client()
+
+        result = client.create_card("Test Card", files=["mockup.png"])
+
+        assert result["ok"] is True
+        assert result["attachments"]["attached"] == 1
+        mock_prepare.assert_called_once_with(["mockup.png"])
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["file_names"] == ["mockup.png"]
+        mock_upload.assert_called_once_with(mock_prepare.return_value, [{"signedUrl": "s3"}])
+
+    @patch("codecks_cli.client.upload_report_files")
+    @patch("codecks_cli.client.prepare_attachment_files")
+    @patch("codecks_cli.scaffolding.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_create_card_upload_failure_mentions_retry(
+        self, mock_create, mock_list, mock_prepare, mock_upload
+    ):
+        mock_list.return_value = {"card": {}}
+        mock_prepare.return_value = [SimpleNamespace(file_name="mockup.png")]
+        mock_create.return_value = {"cardId": "new-id", "uploadUrls": [{"signedUrl": "s3"}]}
+        mock_upload.side_effect = CliError("[ERROR] upload failed")
+        client = _client()
+
+        with pytest.raises(CliError) as exc_info:
+            client.create_card("Test Card", files=["mockup.png"])
+
+        assert "new-id" in str(exc_info.value)
+        assert "attach" in str(exc_info.value)
+
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")
     def test_missing_card_id_raises(self, mock_create, mock_list):
@@ -440,6 +480,24 @@ class TestCreateCard:
         client = _client()
         result = client.create_card("Solo Card")
         assert result["parent"] is None
+
+
+class TestAttachFiles:
+    @patch("codecks_cli.client.attach_files_to_card")
+    def test_attach_files_uses_discovered_user(self, mock_attach):
+        mock_attach.return_value = {
+            "ok": True,
+            "card_id": "c1",
+            "attached": 1,
+            "failed": 0,
+            "files": [],
+        }
+        client = _client()
+
+        result = client.attach_files("c1", ["mockup.png"])
+
+        assert result["attached"] == 1
+        mock_attach.assert_called_once_with("c1", ["mockup.png"], user_id="fake-user-id")
 
 
 # ---------------------------------------------------------------------------

@@ -34,7 +34,7 @@ Always use Context7 MCP for library/API docs. Skip the resolve step with these I
 
 ## MCP Servers (`.claude/settings.json`)
 
-- `codecks` — this project's own MCP server (52 tools, Codecks API access)
+- `codecks` — this project's own MCP server (53 tools, Codecks API access)
 - `context7` — live documentation lookup
 - `github` — GitHub issues/PRs integration
 

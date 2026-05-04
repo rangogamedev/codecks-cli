@@ -28,6 +28,7 @@ def create_card(
     priority: Literal["a", "b", "c"] | None = None,
     owner: str | None = None,
     effort: str | None = None,
+    files: list[str] | None = None,
 ) -> dict:
     """Create a new card. Set deck/project to place it. Use parent to nest as sub-card.
 
@@ -46,6 +47,7 @@ def create_card(
         priority: Card priority (a=high, b=medium, c=low). Applied after creation.
         owner: Card owner name (e.g. 'Thomas'). Applied after creation.
         effort: Effort estimate (integer string). Applied after creation.
+        files: Local file paths to attach during creation.
 
     Returns:
         Dict with ok, card_id, title, and applied priority/owner.
@@ -70,8 +72,39 @@ def create_card(
             priority=priority,
             owner=owner,
             effort=effort,
+            files=files,
         )
     )
+
+
+def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
+    """Attach local file(s) to an existing card.
+
+    Args:
+        card_id: Full 36-char UUID.
+        files: Local file paths visible to the MCP server process.
+        dry_run: If True, validate the card ID and preview without uploading.
+
+    Returns:
+        Dict with ok, card_id, attached, failed, and files.
+    """
+    try:
+        _validate_uuid(card_id)
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    if dry_run:
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "action": "attach_files",
+                "card_id": card_id,
+                "file_count": len(files),
+                "files": files,
+                "message": f"Would attach {len(files)} file(s) to card {card_id}",
+            }
+        )
+    return _finalize_tool_result(_call("attach_files", card_id=card_id, files=files))
 
 
 def update_cards(
@@ -686,7 +719,9 @@ def tick_checkboxes(
 
     if not isinstance(item_list, list) or not builtins.all(isinstance(i, str) for i in item_list):
         return _finalize_tool_result(
-            _contract_error("items must be a JSON array of strings.", "error", error_code="INVALID_INPUT")
+            _contract_error(
+                "items must be a JSON array of strings.", "error", error_code="INVALID_INPUT"
+            )
         )
 
     if not item_list:
@@ -946,7 +981,9 @@ def batch_delete_cards(card_ids: list[str]) -> dict:
     if isinstance(ids, dict):
         return ids
     deleted, results = _batch_single_card_op(ids, "delete_card", "deleted", "Delete failed.")
-    return _finalize_tool_result({"ok": True, "deleted": deleted, "total": len(ids), "results": results})
+    return _finalize_tool_result(
+        {"ok": True, "deleted": deleted, "total": len(ids), "results": results}
+    )
 
 
 def batch_archive_cards(card_ids: list[str]) -> dict:
@@ -963,7 +1000,9 @@ def batch_archive_cards(card_ids: list[str]) -> dict:
     if isinstance(ids, dict):
         return ids
     archived, results = _batch_single_card_op(ids, "archive_card", "archived", "Archive failed.")
-    return _finalize_tool_result({"ok": True, "archived": archived, "total": len(ids), "results": results})
+    return _finalize_tool_result(
+        {"ok": True, "archived": archived, "total": len(ids), "results": results}
+    )
 
 
 def batch_unarchive_cards(card_ids: list[str]) -> dict:
@@ -978,7 +1017,9 @@ def batch_unarchive_cards(card_ids: list[str]) -> dict:
     ids = _validate_batch_ids(card_ids)
     if isinstance(ids, dict):
         return ids
-    unarchived, results = _batch_single_card_op(ids, "unarchive_card", "unarchived", "Unarchive failed.")
+    unarchived, results = _batch_single_card_op(
+        ids, "unarchive_card", "unarchived", "Unarchive failed."
+    )
 
     return _finalize_tool_result(
         {
@@ -1151,6 +1192,7 @@ def undo() -> dict:
 def register(mcp):
     """Register all write tools with the FastMCP instance."""
     mcp.tool()(create_card)
+    mcp.tool()(attach_files)
     mcp.tool()(update_cards)
     mcp.tool()(mark_done)
     mcp.tool()(mark_started)

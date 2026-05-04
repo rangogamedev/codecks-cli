@@ -13,6 +13,7 @@ from codecks_cli.commands import (
     cmd_account,
     cmd_activity,
     cmd_archive,
+    cmd_attach,
     cmd_card,
     cmd_cards,
     cmd_comment,
@@ -558,6 +559,54 @@ class TestCreateParent:
         cmd_create(ns)
         captured = capsys.readouterr()
         assert "parent='parent-uuid'" in captured.out
+
+
+class TestAttachments:
+    @patch("codecks_cli.commands._get_client")
+    def test_create_passes_files_to_client(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.create_card.return_value = {
+            "ok": True,
+            "card_id": "new-card-id",
+            "title": "Card With File",
+            "deck": None,
+            "doc": False,
+            "attachments": {"attached": 1, "failed": 0, "files": []},
+        }
+        ns = argparse.Namespace(
+            title="Card With File",
+            content=None,
+            severity=None,
+            deck=None,
+            project=None,
+            doc=False,
+            format="json",
+            allow_duplicate=False,
+            parent=None,
+            files=["mockup.png"],
+        )
+
+        cmd_create(ns)
+
+        assert mock_client.create_card.call_args.kwargs["files"] == ["mockup.png"]
+
+    @patch("codecks_cli.commands._get_client")
+    def test_attach_calls_client_and_outputs_result(self, mock_get_client, capsys):
+        mock_client = mock_get_client.return_value
+        mock_client.attach_files.return_value = {
+            "ok": True,
+            "card_id": "card-1",
+            "attached": 2,
+            "failed": 0,
+            "files": [],
+        }
+        ns = argparse.Namespace(card_id="card-1", files=["a.png", "b.txt"], format="json")
+
+        cmd_attach(ns)
+
+        mock_client.attach_files.assert_called_once_with("card-1", ["a.png", "b.txt"])
+        out = json.loads(capsys.readouterr().out)
+        assert out["attached"] == 2
 
 
 class TestUpdateValidation:
@@ -1591,9 +1640,7 @@ class TestCmdAccount:
 class TestCmdProjects:
     @patch("codecks_cli.commands._get_client")
     def test_projects_json(self, mock_get, capsys):
-        mock_get.return_value.list_projects.return_value = [
-            {"name": "Tea Shop", "deck_count": 5}
-        ]
+        mock_get.return_value.list_projects.return_value = [{"name": "Tea Shop", "deck_count": 5}]
         ns = argparse.Namespace(format="json")
         cmd_projects(ns)
         out = capsys.readouterr().out

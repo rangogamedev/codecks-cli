@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Attachment support: `create --file`, new `attach` command, `CodecksClient.attach_files()`, and MCP `attach_files` tool using stdlib multipart uploads.
+
 ## [0.5.1] - 2026-04-12
 
 ### Added

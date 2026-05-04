@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Mypy modules — keep in sync with CLAUDE.md
 MYPY_TARGETS = [
     "codecks_cli/api.py",
+    "codecks_cli/attachments.py",
     "codecks_cli/cards.py",
     "codecks_cli/client.py",
     "codecks_cli/commands.py",

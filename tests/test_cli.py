@@ -292,6 +292,19 @@ class TestBuildParser:
         assert ns.deck == "Inbox"
         assert ns.doc is True
         assert ns.allow_duplicate is False
+        assert ns.files is None
+
+    def test_create_file_flags(self):
+        ns = self.parser.parse_args(
+            ["create", "My Card", "--file", "mockup.png", "--file", "notes.txt"]
+        )
+        assert ns.files == ["mockup.png", "notes.txt"]
+
+    def test_attach_command(self):
+        ns = self.parser.parse_args(["attach", "card-1", "mockup.png", "notes.txt"])
+        assert ns.command == "attach"
+        assert ns.card_id == "card-1"
+        assert ns.files == ["mockup.png", "notes.txt"]
 
     def test_create_allow_duplicate_flag(self):
         ns = self.parser.parse_args(["create", "My Card", "--allow-duplicate"])

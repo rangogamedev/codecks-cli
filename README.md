@@ -13,8 +13,8 @@ Three interfaces to [Codecks.io](https://codecks.io) project management — a CL
 [Codecks](https://codecks.io) is a project management tool popular with game developers, but it has no official CLI or public API client. codecks-cli fills that gap:
 
 - **For humans** — manage cards, run standups, and track sprints from your terminal
-- **For scripts** — typed Python API with 33 methods, JSON output by default
-- **For AI agents** — 52 MCP tools with snapshot caching, batch operations, and multi-agent coordination (requires optional `mcp` extra)
+- **For scripts** — typed Python API with 34 methods, JSON output by default
+- **For AI agents** — 53 MCP tools with snapshot caching, batch operations, and multi-agent coordination (requires optional `mcp` extra)
 - **Zero runtime dependencies** — the CLI and Python API use stdlib only. The MCP server adds one optional extra (`mcp[cli]`)
 
 ## Installation
@@ -82,12 +82,12 @@ All three interfaces — CLI, Python API, and MCP server — wrap the same `Code
 ```
 CLI (codecks-cli)  ─┐
 Python API         ─┤── CodecksClient ── Codecks HTTP API
-MCP Server         ─┘   (33 methods)
+MCP Server         ─┘   (34 methods)
 ```
 
 ## Features
 
-- **Card management** — create, update, archive, delete with filtering by status, priority, deck, owner, milestone, tags, and text search
+- **Card management** — create, update, attach files, archive, delete with filtering by status, priority, deck, owner, milestone, tags, and text search
 - **Feature scaffolding** — create Hero cards with linked Code/Design/Art/Audio sub-cards in one command
 - **Daily standups** — snapshot of done, in-progress, blocked, and in-hand cards
 - **Sprint health** — PM focus dashboard with blocked, stale, unassigned, and in-review cards
@@ -104,6 +104,7 @@ MCP Server         ─┘   (33 methods)
 codecks-cli cards --status started --format table   # filter and display cards
 codecks-cli card <id>                                # single card details
 codecks-cli create "New task" --deck "Backlog"       # create a card
+codecks-cli attach <id> mockup.png                   # attach a local file
 codecks-cli update <id> --status done --effort 3     # update card properties
 codecks-cli standup --days 3 --format table          # standup report
 codecks-cli pm-focus --format table                  # sprint health dashboard
@@ -121,11 +122,11 @@ cards = client.list_cards(status="started", sort="priority")
 result = client.create_card(title="Fix bug", deck="Backlog")
 ```
 
-33 methods with keyword-only args and flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
+34 methods with keyword-only args and flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
 
 ## MCP Server
 
-52 tools for AI agents — read, write, batch, comments, team coordination, and admin operations. Key features:
+53 tools for AI agents — read, write, batch, comments, team coordination, and admin operations. Key features:
 
 - **One-call startup** — `session_start()` returns everything an agent needs
 - **Token diet** — `summary_only` modes on dashboards, content omitted by default

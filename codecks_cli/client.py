@@ -20,7 +20,13 @@ from codecks_cli.api import (
     _check_token,
     query,
 )
+from codecks_cli.attachments import (
+    attach_files_to_card,
+    prepare_attachment_files,
+    upload_report_files,
+)
 from codecks_cli.cards import (
+    _get_user_id,
     add_to_hand,
     archive_card,
     bulk_status,
@@ -788,6 +794,7 @@ class CodecksClient:
         priority: str | None = None,
         owner: str | None = None,
         effort: str | int | None = None,
+        files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create a new card.
 
@@ -803,11 +810,13 @@ class CodecksClient:
             priority: Card priority (a, b, c). Set via post-create update.
             owner: Card owner (by name). Set via post-create update.
             effort: Card effort estimate. Set via post-create update.
+            files: Local file paths to attach during creation.
 
         Returns:
             dict with ok=True, card_id, and title.
         """
         warnings = _guard_duplicate_title(title, allow_duplicate=allow_duplicate, context="card")
+        attachments = prepare_attachment_files(files) if files else []
 
         # Resolve deck/project BEFORE creating the card to avoid orphaned cards
         placed_in = None
@@ -826,13 +835,27 @@ class CodecksClient:
                 hint = f" Available: {', '.join(available)}" if available else ""
                 raise CliError(f"[ERROR] Project '{project}' not found.{hint}")
 
-        result = create_card(title, content, severity)
+        file_names = [attachment.file_name for attachment in attachments] or None
+        result = create_card(title, content, severity, file_names=file_names)
         card_id = result.get("cardId", "")
         if not card_id:
             raise CliError(
                 "[ERROR] Card creation failed: API response missing "
                 f"'cardId'. Response: {str(result)[:200]}"
             )
+
+        attachment_result = None
+        if attachments:
+            try:
+                upload_urls = result.get("uploadUrls") or result.get("upload_urls") or []
+                if not isinstance(upload_urls, list):
+                    raise CliError("[ERROR] Card creation response included invalid uploadUrls.")
+                attachment_result = upload_report_files(attachments, upload_urls)
+            except CliError as e:
+                raise CliError(
+                    f"[ERROR] Card {card_id} was created, but attachment upload failed: {e}\n"
+                    f"[ERROR] Retry attachments with: codecks-cli attach {card_id} <file...>"
+                ) from e
 
         post_update = dict(pre_resolved)
         if doc:
@@ -864,7 +887,21 @@ class CodecksClient:
         }
         if warnings:
             result_dict["warnings"] = warnings
+        if attachment_result is not None:
+            result_dict["attachments"] = attachment_result
         return result_dict
+
+    def attach_files(self, card_id: str, files: list[str]) -> dict[str, Any]:
+        """Attach local files to an existing card.
+
+        Args:
+            card_id: Card UUID.
+            files: Local file paths to upload and attach.
+
+        Returns:
+            dict with ok, card_id, attached, failed, and files.
+        """
+        return attach_files_to_card(card_id, files, user_id=_get_user_id())  # type: ignore[return-value]
 
     def update_cards(
         self,

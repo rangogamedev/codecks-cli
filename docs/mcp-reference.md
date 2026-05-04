@@ -1,6 +1,6 @@
 # MCP Server Reference
 
-The MCP (Model Context Protocol) server exposes 52 tools for AI agents, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 53 tools for AI agents, enabling full Codecks management from within an AI conversation.
 
 ## Setup
 
@@ -50,12 +50,12 @@ Use the same command (`codecks-mcp`) with your IDE's MCP configuration. The serv
 
 This also warms the snapshot cache, making subsequent reads near-instant (<50ms).
 
-## Tool Inventory (52 tools)
+## Tool Inventory (53 tools)
 
 | Category | Count | Tools |
 |----------|-------|-------|
 | **Read** | 11 | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
-| **Write** | 12 | `create_card`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
+| **Write** | 13 | `create_card`, `attach_files`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
 | **Batch** | 5 | `batch_create_cards`, `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards`, `batch_update_bodies` |
 | **Hand** | 3 | `list_hand`, `add_to_hand`, `remove_from_hand` |
 | **Comments** | 5 | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
