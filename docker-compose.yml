@@ -2,13 +2,12 @@
 # Usage: docker compose run --rm <service> [args...]
 
 x-common: &common
-  build: .
+  build:
+    context: .
+    target: runtime
   image: codecks-cli
   volumes:
     - .:/app
-  env_file:
-    - path: .env
-      required: false
   working_dir: /app
   security_opt:
     - no-new-privileges:true
@@ -22,12 +21,20 @@ services:
   # Run any CLI command: docker compose run --rm cli cards --format table
   cli:
     <<: *common
+    env_file:
+      - path: .env
+        required: false
     entrypoint: ["python", "codecks_api.py"]
 
   # Run tests: docker compose run --rm test
   test:
     <<: *common
-    command: ["pytest", "tests/", "-v", "--basetemp", "/tmp/pytest-docker"]
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /tmp && pytest /app/tests -v --rootdir /app --basetemp /tmp/pytest-docker",
+      ]
 
   # Full quality gate: docker compose run --rm quality
   quality:
@@ -39,7 +46,8 @@ services:
         echo "=== Ruff lint ===" && ruff check . &&
         echo "=== Ruff format ===" && ruff format --check . &&
         echo "=== Mypy ===" && python scripts/quality_gate.py --mypy-only &&
-        echo "=== Pytest ===" && pytest tests/ -v --basetemp /tmp/pytest-docker &&
+        echo "=== Pytest ===" &&
+        cd /tmp && pytest /app/tests -v --rootdir /app --basetemp /tmp/pytest-docker &&
         echo "=== All checks passed ==="
 
   # Lint only: docker compose run --rm lint
@@ -55,12 +63,18 @@ services:
   # MCP server (stdio): docker compose run --rm mcp
   mcp:
     <<: *common
+    env_file:
+      - path: .env
+        required: false
     command: ["python", "-m", "codecks_cli.mcp_server"]
     stdin_open: true
 
   # MCP server (HTTP): docker compose up mcp-http
   mcp-http:
     <<: *common
+    env_file:
+      - path: .env
+        required: false
     command: ["python", "scripts/run_mcp_http.py"]
     ports:
       - "${MCP_HTTP_PORT:-8808}:8808"
@@ -75,6 +89,13 @@ services:
   # Interactive shell: docker compose run --rm shell
   shell:
     <<: *common
+    build:
+      context: .
+      target: agent
+    profiles: ["dev"]
+    env_file:
+      - path: .env
+        required: false
     entrypoint: ["/bin/bash"]
     stdin_open: true
     tty: true

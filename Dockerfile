@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # --- Runtime stage ---
 ARG PYTHON_VERSION=3.12
-FROM python:${PYTHON_VERSION}-slim
+FROM python:${PYTHON_VERSION}-slim AS runtime
 
 # Non-root user for safety
 RUN groupadd -r codecks && useradd -r -g codecks -m codecks
@@ -40,6 +40,17 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-deps -e .
 
+# Switch to non-root user
+USER codecks
+
+# Default command: show help
+CMD ["python", "codecks_api.py"]
+
+# --- Optional agent shell stage ---
+FROM runtime AS agent
+
+USER root
+
 # Node.js 22 LTS + Claude Code for in-container AI dev
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl && \
@@ -50,6 +61,3 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Switch to non-root user
 USER codecks
-
-# Default command: show help
-CMD ["python", "codecks_api.py"]

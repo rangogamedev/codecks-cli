@@ -2,4 +2,4 @@
 # Open an interactive bash shell inside the Docker container.
 set -e
 cd "$(dirname "$0")/.."
-docker compose run --rm shell "$@"
+docker compose run --build --rm shell "$@"

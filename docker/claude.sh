@@ -4,5 +4,6 @@
 set -e
 cd "$(dirname "$0")/.."
 docker compose run --rm \
+  --build \
   -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   shell claude "$@"

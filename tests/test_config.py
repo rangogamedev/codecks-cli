@@ -74,6 +74,15 @@ class TestLoadEnv:
         result = config.load_env()
         assert result == {}
 
+    def test_unreadable_file_uses_fallback(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        env_file.write_text("CODECKS_TOKEN=from-file\n")
+        monkeypatch.setattr(config, "ENV_PATH", str(env_file))
+        monkeypatch.setenv("CODECKS_TOKEN", "from-environ")
+        with patch("builtins.open", side_effect=PermissionError("denied")):
+            result = config.load_env()
+        assert result["CODECKS_TOKEN"] == "from-environ"
+
     def test_empty_file(self, tmp_path, monkeypatch):
         env_file = tmp_path / ".env"
         env_file.write_text("")

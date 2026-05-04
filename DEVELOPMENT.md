@@ -60,7 +60,7 @@ py scripts/quality_gate.py --mypy-only   # type check
 pwsh -File scripts/run-tests.ps1         # 1000+ tests
 
 # All at once
-py scripts/quality_gate.py               # lint + types + tests
+py scripts/quality_gate.py               # lint + types + docs validation + tests
 
 # Auto-fix lint issues
 py -m ruff check . --fix
@@ -212,6 +212,7 @@ Run everything in a sandboxed Linux container — no Python install needed on th
 
 - Source is volume-mounted — edits reflect instantly, no rebuild needed
 - `.env` is mounted at runtime via `env_file:`, never baked into the image
+- Default builds use the lightweight Python runtime; shell/Claude scripts build the optional agent image on demand
 - `PYTHON_VERSION=3.14 ./docker/build.sh` to build with a different Python version
 - `MCP_HTTP_PORT=9000 ./docker/mcp-http.sh` to override the HTTP port
 
@@ -276,7 +277,7 @@ Version is maintained in **two files** (must stay in sync):
 ## CI/CD
 
 GitHub Actions (`.github/workflows/test.yml`):
-- **Quality checks** — ruff lint, ruff format, mypy, pytest
+- **Quality checks** — ruff lint, ruff format, mypy, docs validation, pytest
 - **Matrix** — Python 3.12, 3.14
 - **Coverage** — uploaded to Codecov
 - **Docker smoke test** — builds and runs tests in container
@@ -290,7 +291,7 @@ Automated docs backup (`.github/workflows/backup-docs.yml`):
 ```bash
 # Project info
 py scripts/project_meta.py          # metadata JSON
-py scripts/validate_docs.py         # check for stale doc counts
+py scripts/validate_docs.py         # standalone stale doc-count check
 
 # Quick iteration
 py -m ruff check . --fix && py -m ruff format .   # auto-fix + format

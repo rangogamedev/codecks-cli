@@ -64,6 +64,8 @@ exclude = [
   ".venv",
   "__pycache__",
   "build",
+  "contract_tmp",
+  "tmp_pytest_*",
 ]
 
 [tool.ruff.lint]
