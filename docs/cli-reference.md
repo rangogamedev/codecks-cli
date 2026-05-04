@@ -20,6 +20,7 @@ Run commands with `codecks-cli <command>` (or `py codecks_api.py <command>` if n
 | `pm-focus` | Sprint health dashboard |
 | `overview` | Compact project overview (aggregate counts) |
 | `create` | Create a card |
+| `attach` | Attach local file(s) to a card |
 | `feature` | Scaffold Hero + sub-cards |
 | `split-features` | Batch-split feature cards into discipline sub-cards |
 | `update` | Update card properties |
@@ -135,6 +136,9 @@ codecks-cli create "New feature idea" --project "My Project"
 # Create as sub-card
 codecks-cli create "Sub-task" --parent <parent-card-id>
 
+# Create with attachments
+codecks-cli create "UI concept" --file mockup.png --file notes.txt
+
 # Bypass duplicate-title protection
 codecks-cli create "Fix login bug" --allow-duplicate
 ```
@@ -189,6 +193,14 @@ codecks-cli update <id> --hero none           # detach
 # Combine multiple updates
 codecks-cli update <id> --status started --priority a --effort 3
 ```
+
+## Attachments
+
+```bash
+codecks-cli attach <card-id> mockup.png notes.txt
+```
+
+Attachment paths must point to local readable files. The CLI refuses known local credential/cache files such as `.env`, `.gdd_tokens.json`, `.pm_store.db*`, and `.pm_claims.json`.
 
 ## Hand Management
 
@@ -352,22 +364,25 @@ client = CodecksClient()  # validates token on init
 cards = client.list_cards(status="started", sort="priority")
 
 # Create a card
-result = client.create_card(title="Fix login bug", deck="Backlog")
+result = client.create_card(title="Fix login bug", deck="Backlog", files=["mockup.png"])
 
 # Update cards
 client.update_cards(card_ids=["abc-123"], status="done", priority="a")
+
+# Attach files to an existing card
+client.attach_files(card_id="abc-123", files=["mockup.png"])
 
 # Standup report
 report = client.standup(days=3, project="My Project")
 ```
 
-### 33 Methods
+### 34 Methods
 
 | Category | Methods |
 |----------|---------|
 | **Read** | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `prefetch_snapshot` |
 | **Hand** | `list_hand`, `add_to_hand`, `remove_from_hand` |
-| **Mutations** | `create_card`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
+| **Mutations** | `create_card`, `attach_files`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **Admin** | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck_admin` |
 | **Raw API** | `raw_query`, `raw_dispatch` |

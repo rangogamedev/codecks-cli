@@ -133,7 +133,7 @@ Cursor (`.cursor/mcp.json`):
 }
 ```
 
-Note: "MCP adds 52 tools with caching and team coordination, but loads more
+Note: "MCP adds 53 tools with caching and team coordination, but loads more
 context tokens. CLI is leaner. Use both — CLI for routine ops, MCP for
 advanced features."
 

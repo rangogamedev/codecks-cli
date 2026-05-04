@@ -27,7 +27,7 @@ That's it. Use `codecks-cli <command> --agent` for any PM operation.
 
 ## Optional: MCP server
 
-`pip install codecks-cli[mcp]` adds 52 MCP tools with caching and team
+`pip install codecks-cli[mcp]` adds 53 MCP tools with caching and team
 coordination. Add to your editor's MCP config:
 
 ```json

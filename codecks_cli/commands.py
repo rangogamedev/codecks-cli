@@ -209,6 +209,7 @@ def cmd_create(ns):
     if _dry_run_guard("create card", f"title='{ns.title}'"):
         return
     fmt = ns.format
+    files = getattr(ns, "files", None)
     result = _get_client().create_card(
         ns.title,
         content=ns.content,
@@ -218,6 +219,7 @@ def cmd_create(ns):
         doc=ns.doc,
         allow_duplicate=getattr(ns, "allow_duplicate", False),
         parent=getattr(ns, "parent", None),
+        files=files,
     )
     for w in result.get("warnings", []):
         print(f"[WARN] {w}", file=sys.stderr)
@@ -228,7 +230,16 @@ def cmd_create(ns):
         detail += ", type=doc"
     if result.get("parent"):
         detail += f", parent='{result['parent']}'"
+    attachments = result.get("attachments")
+    if isinstance(attachments, dict):
+        detail += f", attachments={attachments.get('attached', 0)}"
     mutation_response("Created", result["card_id"], detail, fmt=fmt)
+
+
+def cmd_attach(ns):
+    if _dry_run_guard("attach file(s)", f"card={ns.card_id}, files={ns.files}"):
+        return
+    output(_get_client().attach_files(ns.card_id, ns.files), fmt=ns.format)
 
 
 def cmd_feature(ns):

@@ -4,6 +4,8 @@ from codecks_cli.client import CodecksClient
 from codecks_cli.config import VERSION
 from codecks_cli.exceptions import CliError, SetupError
 from codecks_cli.types import (
+    AttachFilesResult,
+    AttachmentRow,
     CardDetail,
     CardListResult,
     CardRow,
@@ -28,6 +30,8 @@ __all__ = [
     "CardListResult",
     "CardRow",
     "CardStats",
+    "AttachFilesResult",
+    "AttachmentRow",
     "CreateCardResult",
     "DeckRow",
     "HandResult",

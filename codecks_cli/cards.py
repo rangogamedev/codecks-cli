@@ -591,14 +591,14 @@ def compute_card_stats(cards_dict):
 # ---------------------------------------------------------------------------
 
 
-def create_card(title, content=None, severity=None):
+def create_card(title, content=None, severity=None, file_names=None):
     """Create a card using the Report Token (stable, no expiry).
     First line of content becomes the card title."""
     if content:
         full_content = title + "\n\n" + content
     else:
         full_content = title
-    return report_request(full_content, severity=severity)
+    return report_request(full_content, severity=severity, file_names=file_names)
 
 
 def update_card(card_id, **kwargs):

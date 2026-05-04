@@ -293,6 +293,74 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
     raise CliError(_error_envelope("Request failed.", request_id=request_id))
 
 
+def raw_http_request(url, data=None, headers=None, method="POST"):
+    """Make a raw HTTP request and return response bytes.
+
+    Used for S3-style upload endpoints that do not return JSON.
+    """
+    request_id = (headers or {}).get("X-Request-Id")
+    safe_url = _sanitize_url_for_log(url)
+    sampled = _is_sampled_request(request_id)
+    timeout = max(1, config.HTTP_TIMEOUT_SECONDS)
+    start = time.perf_counter()
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    if sampled:
+        _log_http_event(
+            phase="request",
+            method=method,
+            url=safe_url,
+            request_id=request_id,
+            timeout_seconds=timeout,
+        )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(config.HTTP_MAX_RESPONSE_BYTES + 1)
+            if len(raw) > config.HTTP_MAX_RESPONSE_BYTES:
+                raise CliError(
+                    "[ERROR] Response too large from upload endpoint "
+                    f"(>{config.HTTP_MAX_RESPONSE_BYTES} bytes)."
+                )
+            if sampled:
+                _log_http_event(
+                    phase="response",
+                    method=method,
+                    url=safe_url,
+                    status=getattr(resp, "status", 200),
+                    bytes=len(raw),
+                    latency_ms=round((time.perf_counter() - start) * 1000, 2),
+                    request_id=request_id,
+                )
+            return raw
+    except urllib.error.HTTPError as e:
+        error_body = (
+            e.read(config.HTTP_MAX_RESPONSE_BYTES).decode("utf-8", errors="replace") if e.fp else ""
+        )
+        raise CliError(
+            _error_envelope(
+                f"Upload HTTP {e.code}: {e.reason}",
+                status=e.code,
+                retryable=e.code in _RETRYABLE_HTTP_CODES,
+                detail=_sanitize_error(error_body),
+            )
+        ) from e
+    except TimeoutError as e:
+        raise CliError(
+            _error_envelope(
+                f"Upload timed out after {timeout} seconds.",
+                request_id=request_id,
+                retryable=False,
+            )
+        ) from e
+    except urllib.error.URLError as e:
+        raise CliError(
+            _error_envelope(
+                f"Upload connection failed: {e.reason}",
+                request_id=request_id,
+                retryable=False,
+            )
+        ) from e
+
+
 def session_request(path="/", data=None, method="POST", idempotent=False):
     """Make an authenticated request using the session token (at cookie).
     Used for reading data and dispatch mutations."""
@@ -331,7 +399,7 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
         ) from e
 
 
-def report_request(content, severity=None, email=None):
+def report_request(content, severity=None, email=None, file_names=None):
     """Create a card via the Report Token endpoint (stable, no expiry)."""
     if not config.REPORT_TOKEN:
         raise CliError(
@@ -342,6 +410,8 @@ def report_request(content, severity=None, email=None):
         payload["severity"] = severity
     if email:
         payload["userEmail"] = email
+    if file_names:
+        payload["fileNames"] = file_names
     # NOTE: Token in URL query param is required by Codecks API design.
     # Mitigate by treating report tokens as rotatable credentials.
     url = f"{config.BASE_URL}/user-report/v1/create-report?token={config.REPORT_TOKEN}"

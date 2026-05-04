@@ -19,6 +19,8 @@ from codecks_cli.api import (
     dispatch,
     generate_report_token,
     query,
+    raw_http_request,
+    report_request,
     session_request,
     warn_if_empty,
 )
@@ -151,6 +153,37 @@ class TestSessionRequest429:
         assert headers["Accept"] == "application/json"
         assert "X-Request-Id" in headers
         assert headers["X-Request-Id"]
+
+
+class TestReportRequestAttachments:
+    @patch("codecks_cli.api._http_request")
+    def test_sends_file_names_when_provided(self, mock_http):
+        mock_http.return_value = {"cardId": "c1", "uploadUrls": []}
+
+        report_request("Title", file_names=["mockup.png", "notes.txt"])
+
+        payload = mock_http.call_args.args[1]
+        assert payload["content"] == "Title"
+        assert payload["fileNames"] == ["mockup.png", "notes.txt"]
+
+
+class TestRawHttpRequest:
+    @patch("codecks_cli.api.urllib.request.urlopen")
+    def test_sends_raw_body_and_returns_bytes(self, mock_urlopen):
+        mock_resp = mock_urlopen.return_value.__enter__.return_value
+        mock_resp.read.return_value = b"ok"
+
+        result = raw_http_request(
+            "https://s3.example/upload",
+            data=b"raw-body",
+            headers={"Content-Type": "multipart/form-data"},
+            method="POST",
+        )
+
+        assert result == b"ok"
+        req = mock_urlopen.call_args.args[0]
+        assert req.data == b"raw-body"
+        assert req.get_method() == "POST"
 
 
 class TestHttpRetries:

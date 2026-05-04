@@ -10,9 +10,9 @@ Agent (Claude, Cursor, Windsurf, etc.)
   │
   ├── CLI: codecks-cli <command> --agent     (Bash, lean JSON, no deps)
   │
-  └── MCP: codecks-mcp (52 tools)           (optional, adds caching + teams)
+  └── MCP: codecks-mcp (53 tools)           (optional, adds caching + teams)
         │
-        └── CodecksClient (33 methods)
+        └── CodecksClient (34 methods)
               │
               └── Codecks HTTP API
 ```
@@ -23,7 +23,7 @@ guardrails, and team coordination on top.
 
 ## Why CLI-First?
 
-MCP loads 52 tool schemas into agent context (~5,200 tokens) before any work
+MCP loads 53 tool schemas into agent context (~5,300 tokens) before any work
 happens. The CLI: an agent knows `codecks-cli <command> --agent` plus a
 command reference table — about 200 tokens of tool knowledge. That is a 25x
 difference in baseline context cost.

@@ -142,6 +142,7 @@ class CreateCardResult(TypedDict, total=False):
     deck: str | None
     doc: bool
     warnings: list[str]
+    attachments: "AttachFilesResult"
 
 
 class UpdateCardsResult(TypedDict, total=False):
@@ -156,6 +157,21 @@ class HandResult(TypedDict, total=False):
     added: int
     removed: int
     data: dict
+
+
+class AttachmentRow(TypedDict):
+    file_name: str
+    size: int
+    type: str
+
+
+class AttachFilesResult(TypedDict, total=False):
+    ok: bool
+    card_id: str
+    attached: int
+    failed: int
+    files: list[AttachmentRow]
+    failures: list[dict[str, str]]
 
 
 # ---------------------------------------------------------------------------

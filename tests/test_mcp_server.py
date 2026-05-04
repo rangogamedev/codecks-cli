@@ -242,6 +242,28 @@ class TestMutationTools:
         assert result["ok"] is True
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_attach_files(self, MockClient):
+        client = _mock_client(
+            attach_files={"ok": True, "card_id": _C1, "attached": 1, "failed": 0, "files": []}
+        )
+        MockClient.return_value = client
+        result = mcp_mod.attach_files(_C1, ["mockup.png"])
+        assert result["attached"] == 1
+        client.attach_files.assert_called_once_with(card_id=_C1, files=["mockup.png"])
+
+    def test_attach_files_dry_run(self):
+        result = mcp_mod.attach_files(_C1, ["mockup.png", "notes.txt"], dry_run=True)
+        assert result["ok"] is True
+        assert result["dry_run"] is True
+        assert result["action"] == "attach_files"
+        assert result["file_count"] == 2
+
+    def test_attach_files_validates_uuid(self):
+        result = mcp_mod.attach_files(_BAD, ["mockup.png"], dry_run=True)
+        assert result["ok"] is False
+        assert "36-char UUID" in result["error"]
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_scaffold_feature(self, MockClient):
         MockClient.return_value = _mock_client(
             scaffold_feature={"ok": True, "hero": {"id": "h1"}, "subcards": []}

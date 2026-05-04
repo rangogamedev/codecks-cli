@@ -83,14 +83,14 @@ client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```
 
-33 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
+34 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
 
 ## MCP Server
 
 - **Install**: `py -m pip install .[mcp]`
 - **Run**: `py -m codecks_cli.mcp_server` (stdio transport)
 - **Startup**: Call `session_start()` first in every session.
-- 52 tools across 6 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
+- 53 tools across 6 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
 
 ## Testing
 
@@ -127,6 +127,7 @@ Use `py codecks_api.py <cmd> --help` for flags. Full reference: [docs/cli-refere
 - `card`: `--no-content`, `--no-conversations` (metadata-only)
 - `update`: `--continue-on-error` (partial batch). Effort: positive int or `"null"`
 - `create`: `--parent <id>` (sub-cards)
+- `attach`: attach local file(s) to an existing card
 - `split-features`: batch-split into Code/Design/Art/Audio (use `--dry-run` first)
 
 ### Agent Mode

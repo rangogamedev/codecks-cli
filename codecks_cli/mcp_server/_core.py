@@ -556,6 +556,7 @@ _load_claims()
 _CACHE_INVALIDATION_MAP: dict[str, list[str]] = {
     "add_to_hand": ["hand", "pm_focus", "standup"],
     "remove_from_hand": ["hand", "pm_focus", "standup"],
+    "attach_files": ["cards_result", "pm_focus", "standup"],
     "create_card": ["cards_result", "pm_focus", "standup"],
     "update_cards": ["cards_result", "pm_focus", "standup"],
     "mark_done": ["cards_result", "pm_focus", "standup"],
@@ -834,6 +835,7 @@ _ALLOWED_METHODS = {
     "list_hand",
     "add_to_hand",
     "remove_from_hand",
+    "attach_files",
     "create_card",
     "update_cards",
     "mark_done",
@@ -862,6 +864,7 @@ _MUTATION_METHODS = {
     "split_features",
     "add_to_hand",
     "remove_from_hand",
+    "attach_files",
     "create_comment",
     "reply_comment",
     "close_comment",

@@ -14,6 +14,7 @@ from codecks_cli.commands import (
     cmd_activity,
     cmd_agent_init,
     cmd_archive,
+    cmd_attach,
     cmd_cache,
     cmd_card,
     cmd_cards,
@@ -128,6 +129,8 @@ Commands:
     --doc                   Create as a doc card (no workflow states)
     --allow-duplicate       Bypass exact duplicate-title protection
     --parent <id>           Nest as sub-card under parent card ID
+    --file <path>           Attach a local file (repeatable)
+  attach <id> <file...>   - Attach local file(s) to an existing card
   feature <title>         - Scaffold Hero + lane sub-cards (no Journey mode)
     --hero-deck <name>      Hero destination deck (required)
     --code-deck <name>      Code sub-card deck (required)
@@ -432,7 +435,14 @@ def build_parser():
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
     p.add_argument("--parent")
+    p.add_argument("--file", dest="files", action="append")
     p.set_defaults(func=cmd_create)
+
+    # --- attach ---
+    p = sub.add_parser("attach")
+    p.add_argument("card_id")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(func=cmd_attach)
 
     # --- update ---
     p = sub.add_parser("update")

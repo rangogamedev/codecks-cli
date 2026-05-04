@@ -47,7 +47,7 @@ Want MCP tools too? `pip install "codecks-cli[mcp] @ git+https://github.com/rang
 
 The CLI is the recommended default for AI agents:
 
-- **25x leaner context** than loading 52 MCP tool schemas
+- **25x leaner context** than loading 53 MCP tool schemas
 - JSON output with `--agent` flag
 - Pipe-friendly batch workflows (`--ids-only`, `--stdin`, `@last`)
 - No MCP dependency needed for routine PM work
@@ -60,6 +60,7 @@ MCP adds caching, team coordination, and richer editor integrations when you nee
 codecks-cli cards --format table
 codecks-cli standup --format table
 codecks-cli create "Fix login bug" --deck Backlog
+codecks-cli attach <uuid> mockup.png
 ```
 
 See [docs/cli-reference.md](docs/cli-reference.md) for the full command reference.
@@ -69,14 +70,14 @@ See [docs/cli-reference.md](docs/cli-reference.md) for the full command referenc
 ```
 CLI (codecks-cli)  ─┐
 Python API         ─┤── CodecksClient ── Codecks HTTP API
-MCP Server         ─┘   (33 methods)
+MCP Server         ─┘   (34 methods)
 ```
 
 All three interfaces wrap the same `CodecksClient` library. The CLI formats output for terminals, the API returns dicts, and the MCP server adds caching, guardrails, and team coordination.
 
 ## Features
 
-- **Card management** — create, update, archive, delete with filtering by status, priority, deck, owner, milestone, tags, and text search
+- **Card management** — create, update, attach files, archive, delete with filtering by status, priority, deck, owner, milestone, tags, and text search
 - **Feature scaffolding** — Hero cards with linked Code/Design/Art/Audio sub-cards
 - **Daily standups** — done, in-progress, blocked, and in-hand snapshot
 - **Sprint health** — blocked, stale, unassigned, and suggested next cards
