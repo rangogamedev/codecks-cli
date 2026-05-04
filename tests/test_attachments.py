@@ -1,5 +1,6 @@
 """Tests for attachment validation, multipart upload helpers, and workflows."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -10,9 +11,19 @@ from codecks_cli.exceptions import CliError
 
 
 def _scratch_dir() -> Path:
-    path = Path(".sandbox_tmp") / f"attachments-{uuid4().hex}"
-    path.mkdir(parents=True, exist_ok=False)
-    return path
+    candidates = [Path(".sandbox_tmp")] if os.name == "nt" else [Path("/tmp"), Path(".sandbox_tmp")]
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            path = candidate / f"codecks-attachments-{uuid4().hex}"
+            path.mkdir(parents=True, exist_ok=False)
+            probe = path / ".write-probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            return path
+        except OSError:
+            continue
+    raise RuntimeError("No writable scratch directory available for attachment tests.")
 
 
 def test_prepare_files_rejects_duplicate_basenames():
