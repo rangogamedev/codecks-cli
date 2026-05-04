@@ -22,6 +22,7 @@ Requires: py -m pip install .[mcp]
 from mcp.server.fastmcp import FastMCP
 
 from codecks_cli.mcp_server import (
+    _prompts,
     _tools_admin,
     _tools_comments,
     _tools_local,
@@ -61,6 +62,7 @@ mcp = FastMCP(
 
 for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team, _tools_admin]:
     _mod.register(mcp)
+_prompts.register(mcp)
 
 # ---------------------------------------------------------------------------
 # Re-exports for backward compatibility (tests import via mcp_mod.xxx)
