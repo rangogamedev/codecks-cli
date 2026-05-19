@@ -42,6 +42,11 @@ def get_workflow_preferences(agent_name: str | None = None) -> dict:
         agent_name: If set, returns agent-specific prefs merged with global.
             If None, returns only global observations (backward compat).
     """
+    if agent_name is not None:
+        try:
+            agent_name = _validate_input(agent_name, "agent_name")
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
     try:
         with open(_PREFS_PATH, encoding="utf-8") as f:
             data = json.load(f)
@@ -81,6 +86,8 @@ def save_workflow_preferences(observations: list[str], agent_name: str | None = 
     """
     try:
         observations = _validate_preferences(observations)
+        if agent_name is not None:
+            agent_name = _validate_input(agent_name, "agent_name")
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
 
@@ -544,6 +551,12 @@ def session_start(agent_name: str | None = None) -> dict:
         lane_names, card_count, hand_size), and cache metadata.
     """
     from codecks_cli.mcp_server import _core
+
+    if agent_name is not None:
+        try:
+            agent_name = _validate_input(agent_name, "agent_name")
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
 
     # Step 1: Ensure cache is warm
     try:

@@ -164,6 +164,7 @@ _INPUT_LIMITS = {
     "description": 50_000,
     "feedback_message": 1000,
     "feedback_context": 500,
+    "agent_name": 200,
 }
 
 

@@ -1987,6 +1987,30 @@ class TestAgentScopedPreferences:
         finally:
             _tools_local._PLANNING_DIR = original
 
+    def test_save_workflow_preferences_rejects_oversized_agent_name(self, tmp_path):
+        """agent_name is bounded so a hostile caller cannot wedge an enormous dict key."""
+        original = _tools_local._PREFS_PATH
+        try:
+            _tools_local._PREFS_PATH = str(tmp_path / "prefs.json")
+            huge = "a" * 201
+            result = mcp_mod.save_workflow_preferences(["obs"], agent_name=huge)
+            assert result.get("ok") is False
+            assert "agent_name" in result.get("error", "")
+        finally:
+            _tools_local._PREFS_PATH = original
+
+    def test_get_workflow_preferences_rejects_oversized_agent_name(self, tmp_path):
+        original = _tools_local._PREFS_PATH
+        try:
+            _tools_local._PREFS_PATH = str(tmp_path / "prefs.json")
+            mcp_mod.save_workflow_preferences(["obs"])  # so the file exists
+            huge = "a" * 201
+            result = mcp_mod.get_workflow_preferences(agent_name=huge)
+            assert result.get("ok") is False
+            assert "agent_name" in result.get("error", "")
+        finally:
+            _tools_local._PREFS_PATH = original
+
 
 # ---------------------------------------------------------------------------
 # Error contract (retryable + error_code)

@@ -8,6 +8,9 @@ on:
       - ".claude/commands/*.md"
   workflow_dispatch: # allow manual trigger
 
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest

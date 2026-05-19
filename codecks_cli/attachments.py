@@ -31,7 +31,12 @@ class AttachmentFile:
 
 
 def _is_sensitive_file(path: Path) -> bool:
-    name = path.name.lower()
+    # Resolve symlinks so a `link.txt -> .env` rename cannot bypass the basename match.
+    try:
+        resolved = path.resolve(strict=False)
+    except OSError:
+        resolved = path
+    name = resolved.name.lower()
     return any(fnmatch.fnmatch(name, pattern.lower()) for pattern in _SENSITIVE_FILE_PATTERNS)
 
 

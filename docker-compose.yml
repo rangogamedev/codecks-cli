@@ -9,6 +9,7 @@ x-common: &common
   volumes:
     - .:/app
   working_dir: /app
+  read_only: true
   security_opt:
     - no-new-privileges:true
   cap_drop:
@@ -16,6 +17,8 @@ x-common: &common
   pids_limit: 256
   tmpfs:
     - /tmp:size=64M
+    # codecks home — writable for tooling (ruff/pip XDG caches if invoked).
+    - /home/codecks:size=16M
 
 services:
   # Run any CLI command: docker compose run --rm cli cards --format table

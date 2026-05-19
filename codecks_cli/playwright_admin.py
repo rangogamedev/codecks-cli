@@ -343,8 +343,10 @@ class PlaywrightAdmin:
 
         sel = self._selectors.get("archive_deck", {})
         try:
-            # Find the deck by name and open its context menu
-            deck_el = self._page.locator(f"text={deck_name}")
+            # Find the deck by name and open its context menu.
+            # get_by_text(..., exact=True) escapes special chars; the prior
+            # f"text={deck_name}" pattern could break on quotes / metacharacters.
+            deck_el = self._page.get_by_text(deck_name, exact=True)
             deck_el.first.click(button="right")
             self._page.wait_for_timeout(500)
 
