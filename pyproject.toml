@@ -25,10 +25,10 @@ dev = [
   "mypy>=1.11",
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
-  "ruff>=0.15.10",
+  "ruff>=0.15.13",
 ]
 mcp = [
-  "mcp[cli]>=1.27.0",
+  "mcp[cli]>=1.27.1",
 ]
 admin = [
   "playwright>=1.40",
