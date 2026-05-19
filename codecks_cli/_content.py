@@ -37,8 +37,18 @@ def serialize_content(title: str, body: str) -> str:
 
 
 def replace_body(content: str | None, new_body: str) -> str:
-    """Keep existing title, replace body."""
+    """Keep existing title, replace body.
+
+    If ``new_body`` itself begins with the existing title line (a common
+    artifact of round-tripping content from ``get_card``), the leading
+    title-echo is consumed instead of being re-prepended. This prevents
+    silent title duplication when callers pass back the full content
+    string they previously read.
+    """
     title, _ = parse_content(content)
+    if title and (new_body.startswith(title + "\n") or new_body == title):
+        _, body_only = parse_content(new_body)
+        return serialize_content(title, body_only)
     return serialize_content(title, new_body)
 
 

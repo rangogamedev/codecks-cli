@@ -79,6 +79,33 @@ class TestReplaceBody:
     def test_title_only_original(self):
         assert replace_body("Just Title", "New body") == "Just Title\n\nNew body"
 
+    def test_strips_leading_title_echo(self):
+        # Body that already begins with the title-echo line — common when an
+        # agent round-trips content read from get_card. Title must not duplicate.
+        original = "Same Title\nold body"
+        new_body = "Same Title\n\nactual body"
+        assert replace_body(original, new_body) == "Same Title\n\nactual body"
+
+    def test_strips_title_echo_without_blank_line(self):
+        # Body begins with title followed by a single newline (no blank line).
+        original = "Same Title\nold body"
+        new_body = "Same Title\nactual body"
+        assert replace_body(original, new_body) == "Same Title\n\nactual body"
+
+    def test_just_title_clears_body(self):
+        # Body is exactly the title — caller intends an empty body.
+        assert replace_body("Same Title\nold body", "Same Title") == "Same Title"
+
+    def test_different_title_in_body_not_stripped(self):
+        # Body begins with a different string than the existing title — guard
+        # must not over-trigger.
+        result = replace_body("Old Title\nold body", "New Title\n\nbody")
+        assert result == "Old Title\n\nNew Title\n\nbody"
+
+    def test_no_existing_title_passes_body_through(self):
+        # No existing title: body is preserved as-is via serialize semantics.
+        assert replace_body(None, "Just body") == "\n\nJust body"
+
 
 class TestReplaceTitle:
     def test_basic(self):

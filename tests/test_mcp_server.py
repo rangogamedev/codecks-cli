@@ -2063,6 +2063,26 @@ class TestUpdateCardBody:
         result = mcp_mod.update_card_body(card_id=_BAD, body="New body")
         assert result["ok"] is False
 
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_body_with_leading_title_echo_not_duplicated(self, MockClient):
+        # Regression for issue #25: body that begins with the title-echo line
+        # (the natural shape returned by get_card) must not produce duplicated
+        # title text in the stored content.
+        client = _mock_client(
+            get_card={
+                "id": _C1,
+                "title": "Phase E: MVP",
+                "content": "Phase E: MVP\n\nOld body",
+            },
+            update_cards={"ok": True, "updated": 1, "per_card": [{"card_id": _C1, "ok": True}]},
+        )
+        MockClient.return_value = client
+        mcp_mod.update_card_body(card_id=_C1, body="Phase E: MVP\n\nTracking container...")
+        client.update_cards.assert_called_once()
+        content_sent = client.update_cards.call_args.kwargs.get("content", "")
+        assert content_sent == "Phase E: MVP\n\nTracking container..."
+        assert content_sent.count("Phase E: MVP") == 1
+
 
 # ---------------------------------------------------------------------------
 # UUID short-ID hints (Task 1)
@@ -3133,6 +3153,31 @@ class TestBatchUpdateBodies:
         result = mcp_mod.batch_update_bodies(updates=json.dumps(updates))
         assert result["ok"] is True
         assert result["updated"] == 1
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_body_with_leading_title_echo_not_duplicated(self, MockClient):
+        # Regression for issue #25: batch path shares replace_body, so a body
+        # that begins with the title-echo line must not produce duplication.
+        client = MagicMock()
+        client.get_card.return_value = {
+            "id": _C1,
+            "title": "Phase E: MVP",
+            "content": "Phase E: MVP\n\nOld body",
+        }
+        client.update_cards.return_value = {
+            "ok": True,
+            "updated": 1,
+            "per_card": [{"card_id": _C1, "ok": True}],
+        }
+        MockClient.return_value = client
+        result = mcp_mod.batch_update_bodies(
+            updates=json.dumps([{"card_id": _C1, "body": "Phase E: MVP\n\nNew body text"}])
+        )
+        assert result["ok"] is True
+        client.update_cards.assert_called_once()
+        content_sent = client.update_cards.call_args.kwargs.get("content", "")
+        assert content_sent == "Phase E: MVP\n\nNew body text"
+        assert content_sent.count("Phase E: MVP") == 1
 
 
 class TestTickCheckboxes:

@@ -973,8 +973,13 @@ class CodecksClient:
                 raise CliError("[ERROR] --content can only be used with a single card.")
 
             if title is not None and content is not None:
-                # Both provided: combine new title with new content
-                update_kwargs["content"] = serialize_content(title, content)
+                # Both provided: combine new title with new content, but if
+                # content already starts with the new title, treat content as
+                # already-serialized full content (avoids title duplication).
+                if content.startswith(title + "\n") or content == title:
+                    update_kwargs["content"] = content
+                else:
+                    update_kwargs["content"] = serialize_content(title, content)
             elif title is not None:
                 # Title only: replace first line, preserve existing body
                 card_data = get_card(card_ids[0])

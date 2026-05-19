@@ -652,6 +652,24 @@ class TestUpdateCards:
         assert call_kwargs["content"] == "New Title\n\nNew body"
 
     @patch("codecks_cli.client.update_card")
+    def test_title_and_content_with_title_echo_not_duplicated(self, mock_update):
+        """When content already begins with the new title, do not duplicate it."""
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], title="New Title", content="New Title\n\nNew body")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "New Title\n\nNew body"
+
+    @patch("codecks_cli.client.update_card")
+    def test_title_and_content_equal_to_title_not_duplicated(self, mock_update):
+        """When content equals the new title exactly, store the title alone."""
+        mock_update.return_value = {}
+        client = _client()
+        client.update_cards(["c1"], title="New Title", content="New Title")
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["content"] == "New Title"
+
+    @patch("codecks_cli.client.update_card")
     @patch("codecks_cli.client.get_card")
     def test_title_only_preserves_existing_body(self, mock_get, mock_update):
         """Title-only update should replace first line but keep existing body."""

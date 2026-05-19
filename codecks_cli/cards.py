@@ -593,9 +593,18 @@ def compute_card_stats(cards_dict):
 
 def create_card(title, content=None, severity=None, file_names=None):
     """Create a card using the Report Token (stable, no expiry).
-    First line of content becomes the card title."""
+    First line of content becomes the card title.
+
+    If ``content`` already begins with the title (followed by newline) or
+    equals it exactly, it is used as-is rather than re-prepended — this
+    prevents accidental title duplication when callers pass back content
+    that already includes the title-echo line.
+    """
     if content:
-        full_content = title + "\n\n" + content
+        if content.startswith(title + "\n") or content == title:
+            full_content = content
+        else:
+            full_content = title + "\n\n" + content
     else:
         full_content = title
     return report_request(full_content, severity=severity, file_names=file_names)
