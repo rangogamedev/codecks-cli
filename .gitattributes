@@ -1,4 +1,12 @@
-# Force LF line endings for Docker and shell scripts (prevents Windows CRLF issues)
+# Normalize all text files to LF — stops WSL/Windows checkouts from
+# silently flipping line endings on cross-mount operations.
+* text=auto eol=lf
+
+# Files that must NOT be LF
+*.bat text eol=crlf
+
+# Explicit pins for files that must be LF (redundant under the default
+# above, kept for documentation).
 Dockerfile        text eol=lf
 docker-compose.yml text eol=lf
 docker/*.sh       text eol=lf
