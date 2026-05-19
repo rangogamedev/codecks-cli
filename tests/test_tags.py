@@ -179,3 +179,28 @@ class TestSyncFromApi:
             mock_query.return_value = {"masterTag": {}}
             count = tags.sync_from_api()
             assert count == 0
+
+    def test_sync_skips_non_dict_entries(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
+                mock_query.return_value = {
+                    "masterTag": {
+                        "t1": "not-a-dict",
+                        "t2": None,
+                        "t3": {"name": "real-tag", "color": "#abc"},
+                    }
+                }
+                count = tags.sync_from_api()
+                assert count == 1
+                names = [t.name for t in tags.TAGS]
+                assert "real-tag" in names
+        finally:
+            tags.TAGS = original
