@@ -908,6 +908,27 @@ class TestMutationHelpers:
         assert result["cardId"] == "new-1"
         mock_request.assert_called_once()
 
+    @patch("codecks_cli.cards.report_request")
+    def test_create_card_content_with_title_echo_not_duplicated(self, mock_request):
+        # Regression for issue #25: when content already begins with the
+        # title-echo line, do not re-prepend the title.
+        from codecks_cli.cards import create_card
+
+        mock_request.return_value = {"cardId": "new-1"}
+        create_card("X", "X\n\nBody content", None)
+        sent_content = mock_request.call_args.args[0]
+        assert sent_content == "X\n\nBody content"
+        assert sent_content.count("X") == 1
+
+    @patch("codecks_cli.cards.report_request")
+    def test_create_card_content_equal_to_title_not_duplicated(self, mock_request):
+        from codecks_cli.cards import create_card
+
+        mock_request.return_value = {"cardId": "new-1"}
+        create_card("Just A Title", "Just A Title", None)
+        sent_content = mock_request.call_args.args[0]
+        assert sent_content == "Just A Title"
+
     @patch("codecks_cli.cards.session_request")
     def test_update_card_dispatch(self, mock_request):
         from codecks_cli.cards import update_card

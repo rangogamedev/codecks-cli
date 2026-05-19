@@ -38,6 +38,8 @@ def create_card(
     Args:
         title: Card title (max 500 chars).
         content: Card body/description (max 10000 chars). Use ``- []`` for checkboxes.
+            May be raw body text, OR the full content string (starting with a
+            title-echo line) — the title is deduplicated either way.
         deck: Destination deck name.
         project: Project name.
         severity: Card severity level, or 'null' to clear.
@@ -521,7 +523,10 @@ def update_card_body(card_id: str, body: str) -> dict:
 
     Args:
         card_id: Full 36-char UUID.
-        body: New body text (replaces everything after the title line).
+        body: New body text (replaces everything after the title line). May be
+            raw body, OR the full content string copied from ``get_card``
+            (starting with a title-echo line) — the title is deduplicated
+            either way, so round-tripping is safe.
 
     Returns:
         Dict with ok and update result.
@@ -554,7 +559,10 @@ def batch_update_bodies(
     individual update_card_body calls for bulk enrichment after scaffolding.
 
     Args:
-        updates: JSON array of {card_id, body} objects. Max 20 per call.
+        updates: JSON array of {card_id, body} objects. Max 20 per call. Each
+            ``body`` may be raw body text or the full content string from
+            ``get_card`` (starting with a title-echo line) — title is
+            deduplicated either way.
 
     Returns:
         Dict with ok, updated count, results per card, and any errors.

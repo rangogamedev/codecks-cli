@@ -383,6 +383,12 @@ def get_card(
 ) -> dict:
     """Get full card details (content, checklist, sub-cards, conversations, hand status).
 
+    The returned ``content`` field is the raw stored string from the Codecks
+    API and always begins with the card title as line 1 followed by the body
+    (i.e. ``"<title>\\n\\n<body>"``). When passing this back to
+    ``update_card_body`` or ``update_cards`` the title-echo is recognized
+    and not duplicated, so callers may forward content round-trip safely.
+
     Args:
         include_content: False to strip body (keeps title) for metadata-only checks.
         include_conversations: False to skip comment thread resolution.
