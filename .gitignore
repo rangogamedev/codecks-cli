@@ -23,6 +23,8 @@ build/
 dist/
 *.egg-info/
 .claude/
+.agents/
+.codex/
 .pytest_cache/
 .coverage
 coverage.xml
@@ -31,4 +33,6 @@ htmlcov/
 .tmp-codex/
 .sandbox_tmp/
 pip_temp_run/
+contract_tmp/
+tmp_pytest_*/
 nul

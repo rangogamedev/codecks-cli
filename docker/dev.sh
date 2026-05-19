@@ -10,4 +10,4 @@ if [ "$1" = "--build" ] || ! docker image inspect codecks-cli >/dev/null 2>&1; t
 fi
 
 echo "Starting interactive shell (source is volume-mounted, edits reflect instantly)..."
-docker compose run --rm shell
+docker compose run --build --rm shell

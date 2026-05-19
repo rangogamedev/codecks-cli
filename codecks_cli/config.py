@@ -19,12 +19,15 @@ ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
 def load_env():
     env = {}
     if os.path.exists(ENV_PATH):
-        with open(ENV_PATH) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, val = line.split("=", 1)
-                    env[key.strip()] = val.strip()
+        try:
+            with open(ENV_PATH) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, val = line.split("=", 1)
+                        env[key.strip()] = val.strip()
+        except OSError:
+            pass
     # Fallback to os.environ for known keys (supports Docker env_file / env vars).
     # .env file values take precedence when present.
     for key in (

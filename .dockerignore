@@ -12,6 +12,7 @@
 __pycache__/
 *.pyc
 *.pyo
+.venv/
 build/
 dist/
 *.egg-info/
@@ -20,6 +21,8 @@ dist/
 .tmp-codex/
 .sandbox_tmp/
 pip_temp_run/
+contract_tmp/
+tmp_pytest_*/
 
 # IDE / editor
 .claude/

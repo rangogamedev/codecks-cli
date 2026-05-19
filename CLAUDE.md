@@ -45,9 +45,9 @@ Always use Context7 MCP for library/API docs. Skip the resolve step with these I
 
 ## Scripts (`scripts/`)
 
-- `py scripts/quality_gate.py` — all checks (ruff, mypy, pytest). `--skip-tests`, `--fix`, `--mypy-only`.
+- `py scripts/quality_gate.py` — all checks (ruff, mypy, docs validation, pytest). `--skip-tests`, `--fix`, `--coverage`, `--docker-smoke`, `--mypy-only`.
 - `py scripts/project_meta.py` — project metadata JSON.
-- `py scripts/validate_docs.py` — checks docs for stale counts. `--fix` auto-repairs.
+- `py scripts/validate_docs.py` — standalone stale doc-count check. `--fix` auto-repairs.
 
 ## Git & Versioning
 

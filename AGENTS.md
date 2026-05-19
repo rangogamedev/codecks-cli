@@ -11,7 +11,7 @@ Python CLI + library + MCP server for managing Codecks project cards. Zero runti
 - **Test**: `pwsh -File scripts/run-tests.ps1` (1000+ tests, no API calls)
 - **Lint**: `py -m ruff check .` | **Format**: `py -m ruff format --check .`
 - **Type check**: `py scripts/quality_gate.py --mypy-only`
-- **All checks**: `py scripts/quality_gate.py`
+- **All checks**: `py scripts/quality_gate.py` (ruff, mypy, docs validation, pytest)
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.12, 3.14)
 - **Version**: `VERSION` in `codecks_cli/config.py` (keep in sync with `pyproject.toml`)
 

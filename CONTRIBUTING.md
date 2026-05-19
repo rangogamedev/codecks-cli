@@ -10,7 +10,7 @@ For architecture details, see [DEVELOPMENT.md](DEVELOPMENT.md). For agent instru
 git clone https://github.com/rangogamedev/codecks-cli.git
 cd codecks-cli
 uv sync --extra dev          # or: py -m pip install -e .[dev]
-py scripts/quality_gate.py   # lint + type check + 1000+ tests
+py scripts/quality_gate.py   # lint + type check + docs validation + 1000+ tests
 ```
 
 ## Project Principles
