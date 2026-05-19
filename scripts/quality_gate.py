@@ -174,8 +174,13 @@ def check_pytest(coverage: bool = False) -> dict:
     if coverage:
         cmd.extend(["--cov=codecks_cli", "--cov-report=xml"])
     env = os.environ.copy()
-    temp_root_str = str(temp_root)
-    env.update({"TEMP": temp_root_str, "TMP": temp_root_str, "TMPDIR": temp_root_str})
+    # Windows-native runs benefit from keeping temp on the project NTFS volume.
+    # Linux/macOS (including WSL, which reports sys.platform == "linux") must
+    # use the system temp dir — pointing TMPDIR at a WSL bind-mount path
+    # breaks pytest's capture system (FileNotFoundError on tmpfile.truncate).
+    if sys.platform == "win32":
+        temp_root_str = str(temp_root)
+        env.update({"TEMP": temp_root_str, "TMP": temp_root_str, "TMPDIR": temp_root_str})
     r = _run(cmd, env=env)
     duration = round(time.monotonic() - t0, 1)
 
