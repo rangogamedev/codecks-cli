@@ -662,6 +662,78 @@ class TestUpdateCards:
         call_kwargs = mock_update.call_args[1]
         assert call_kwargs["content"] == "New Title\n\nExisting body"
 
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.resolve_deck_id")
+    def test_moves_card_to_deck(self, mock_resolve, mock_update):
+        mock_resolve.return_value = "deck-uuid"
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], deck="Features")
+        assert result["fields"]["deckId"] == "deck-uuid"
+        mock_resolve.assert_called_once_with("Features", project=None)
+
+    @patch("codecks_cli.client.update_card")
+    def test_milestone_none_clears(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], milestone="none")
+        assert result["fields"]["milestoneId"] is None
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client.resolve_milestone_id")
+    def test_milestone_resolves_by_name(self, mock_resolve, mock_update):
+        mock_resolve.return_value = "ms-uuid"
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], milestone="v1.0")
+        assert result["fields"]["milestoneId"] == "ms-uuid"
+        mock_resolve.assert_called_once_with("v1.0")
+
+    @patch("codecks_cli.client.update_card")
+    def test_hero_none_detaches(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], hero="none")
+        assert result["fields"]["parentCardId"] is None
+
+    @patch("codecks_cli.client.update_card")
+    def test_hero_sets_parent_card_id(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], hero="parent-uuid")
+        assert result["fields"]["parentCardId"] == "parent-uuid"
+
+    @patch("codecks_cli.client.update_card")
+    @patch("codecks_cli.client._resolve_owner_id")
+    def test_owner_resolves_by_name(self, mock_resolve, mock_update):
+        mock_resolve.return_value = "user-uuid"
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], owner="alice")
+        assert result["fields"]["assigneeId"] == "user-uuid"
+        mock_resolve.assert_called_once_with("alice")
+
+    @patch("codecks_cli.client.update_card")
+    def test_tags_list_sets_master_tags(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], tags="bug, ui, frontend")
+        assert result["fields"]["masterTags"] == ["bug", "ui", "frontend"]
+
+    @patch("codecks_cli.client.update_card")
+    def test_doc_true_sets_is_doc(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], doc="true")
+        assert result["fields"]["isDoc"] is True
+
+    @patch("codecks_cli.client.update_card")
+    def test_doc_false_clears_is_doc(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], doc="false")
+        assert result["fields"]["isDoc"] is False
+
 
 # ---------------------------------------------------------------------------
 # mark_done / mark_started
@@ -1325,3 +1397,182 @@ class TestDeckFuzzyMatch:
         mock_decks.return_value = {"deck": {}}
         with pytest.raises(CliError, match="not found"):
             resolve_deck_id("anything")
+
+
+# ---------------------------------------------------------------------------
+# get_card — short-ID prefix matching (client.py:367-376)
+# ---------------------------------------------------------------------------
+
+
+class TestGetCardShortId:
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_short_id_prefix_match_resolves(self, mock_get, mock_enrich, mock_hand, mock_extract):
+        """Passing a short ID should match by prefix when no exact match exists."""
+        full_uuid = "uuid-abc-1234567890"
+        mock_get.return_value = {
+            "card": {full_uuid: {"title": "Card", "status": "started"}},
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        detail = client.get_card("uuid-abc")
+        assert detail["id"] == full_uuid
+        assert detail["title"] == "Card"
+
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_short_id_no_match_hints_full_uuid(
+        self, mock_get, mock_enrich, mock_hand, mock_extract
+    ):
+        """No prefix match for a short ID should mention the UUID hint."""
+        mock_get.return_value = {
+            "card": {"some-other-card-uuid": {"title": "Other"}},
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        with pytest.raises(CliError, match="full 36-character UUID"):
+            client.get_card("abcd1234")
+
+    @patch("codecks_cli.client.extract_hand_card_ids")
+    @patch("codecks_cli.client.list_hand")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.get_card")
+    def test_full_uuid_no_match_no_hint(self, mock_get, mock_enrich, mock_hand, mock_extract):
+        """A 36-character ID that doesn't match should NOT include the UUID hint."""
+        mock_get.return_value = {
+            "card": {"some-other-card-uuid": {"title": "Other"}},
+            "user": {},
+        }
+        mock_hand.return_value = {}
+        mock_extract.return_value = set()
+        client = _client()
+        full_length_missing_id = "x" * 36
+        with pytest.raises(CliError) as exc_info:
+            client.get_card(full_length_missing_id)
+        assert "full 36-character UUID" not in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# create_card — project not found error path (client.py:828-836)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateCardProjectLookup:
+    @patch("codecks_cli.client.load_project_names")
+    @patch("codecks_cli.client.get_project_deck_ids")
+    @patch("codecks_cli.client.list_decks")
+    @patch("codecks_cli.scaffolding.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_project_not_found_lists_available(
+        self, mock_create, mock_list, mock_decks, mock_get_ids, mock_load_names
+    ):
+        mock_list.return_value = {"card": {}}
+        mock_decks.return_value = {"deck": {}}
+        mock_get_ids.return_value = set()
+        mock_load_names.return_value = {"id1": "ProjectA", "id2": "ProjectB"}
+        client = _client()
+        with pytest.raises(CliError) as exc_info:
+            client.create_card("Test Card", project="Nonexistent")
+        assert "Nonexistent" in str(exc_info.value)
+        assert "ProjectA" in str(exc_info.value)
+        assert "ProjectB" in str(exc_info.value)
+        mock_create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Admin wrappers (client.py:1299-1394)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminWrappers:
+    @patch("codecks_cli.admin.create_project")
+    def test_create_project_returns_pass_through(self, mock_create):
+        mock_create.return_value = {"ok": True, "project_name": "P1", "source": "admin"}
+        client = _client()
+        result = client.create_project("P1")
+        assert result == {"ok": True, "project_name": "P1", "source": "admin"}
+        mock_create.assert_called_once_with("P1")
+
+    @patch("codecks_cli.admin.create_project")
+    def test_create_project_failure_skips_warm(self, mock_create):
+        mock_create.return_value = {"ok": False, "error": "boom"}
+        client = _client()
+        with patch.object(client, "_warm_after_admin") as mock_warm:
+            result = client.create_project("P1")
+        assert result["ok"] is False
+        mock_warm.assert_not_called()
+
+    @patch("codecks_cli.admin.create_project")
+    def test_create_project_success_warms_cache(self, mock_create):
+        mock_create.return_value = {"ok": True, "project_name": "P1", "source": "admin"}
+        client = _client()
+        with patch.object(client, "_warm_after_admin") as mock_warm:
+            client.create_project("P1")
+        mock_warm.assert_called_once_with()
+
+    @patch("codecks_cli.admin.create_deck")
+    def test_create_deck_passes_project(self, mock_create):
+        mock_create.return_value = {"ok": True, "deck_name": "D", "project_name": "P"}
+        client = _client()
+        result = client.create_deck("D", project="P")
+        assert result["ok"] is True
+        mock_create.assert_called_once_with("D", project="P")
+
+    @patch("codecks_cli.admin.create_milestone")
+    def test_create_milestone_passes_target_date(self, mock_create):
+        mock_create.return_value = {"ok": True, "milestone_name": "v1"}
+        client = _client()
+        result = client.create_milestone("v1", target_date="2026-06-01")
+        assert result["ok"] is True
+        mock_create.assert_called_once_with("v1", target_date="2026-06-01")
+
+    @patch("codecks_cli.tags.sync_from_api")
+    @patch("codecks_cli.admin.create_tag")
+    def test_create_tag_success_syncs_registry(self, mock_create, mock_sync):
+        mock_create.return_value = {"ok": True, "tag_name": "ui"}
+        client = _client()
+        client.create_tag("ui", color="#abc")
+        mock_create.assert_called_once_with("ui", color="#abc")
+        mock_sync.assert_called_once_with()
+
+    @patch("codecks_cli.tags.sync_from_api")
+    @patch("codecks_cli.admin.create_tag")
+    def test_create_tag_sync_failure_swallowed(self, mock_create, mock_sync):
+        mock_create.return_value = {"ok": True, "tag_name": "ui"}
+        mock_sync.side_effect = RuntimeError("registry sync failed")
+        client = _client()
+        result = client.create_tag("ui")
+        assert result["ok"] is True
+
+    @patch("codecks_cli.admin.archive_deck")
+    def test_archive_deck_admin_pass_through(self, mock_archive):
+        mock_archive.return_value = {"ok": True, "deck_name": "Old", "source": "admin"}
+        client = _client()
+        result = client.archive_deck_admin("Old")
+        assert result["ok"] is True
+        mock_archive.assert_called_once_with("Old")
+
+    def test_warm_after_admin_clears_config_cache(self):
+        from codecks_cli import config
+
+        client = _client()
+        with patch.object(config, "_cache") as mock_cache:
+            client._warm_after_admin()
+            mock_cache.clear.assert_called_once_with()
+
+    def test_warm_after_admin_swallows_cache_error(self):
+        from codecks_cli import config
+
+        client = _client()
+        with patch.object(config, "_cache") as mock_cache:
+            mock_cache.clear.side_effect = RuntimeError("cache gone")
+            # Should not raise
+            client._warm_after_admin()

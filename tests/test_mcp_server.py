@@ -3224,3 +3224,162 @@ class TestCommentErrorPaths:
         MockClient.return_value = client
         result = mcp_mod.reopen_comment(thread_id=_C1, card_id=_C2)
         assert result.get("ok") is False
+
+
+# ---------------------------------------------------------------------------
+# main() entrypoint (mcp_server/__init__.py:225-227)
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def test_main_invokes_mcp_run(self):
+        """main() should call mcp.run() (stdio transport entrypoint)."""
+        with patch.object(mcp_mod.mcp, "run") as mock_run:
+            mcp_mod.main()
+        mock_run.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
+# _suggest_valid_values helper (_core.py:976-999)
+# ---------------------------------------------------------------------------
+
+
+class TestSuggestValidValues:
+    def test_deck_not_found_lists_available_decks(self):
+        # Populate the in-memory deck registry
+        _core._repo._deck_name_to_id = {"Features": "d1", "code": "d2", "Audio": "d3"}
+        try:
+            result = _core._suggest_valid_values("Deck 'whatever' not found")
+            assert "Available decks: Audio, code, Features" in result
+        finally:
+            _core._repo._deck_name_to_id = {}
+
+    def test_milestone_not_found_lists_available_milestones(self):
+        prior = _core._snapshot_cache
+        _core._snapshot_cache = {
+            "milestones": [
+                {"name": "v0.5"},
+                {"name": "v1.0"},
+                "not-a-dict",  # exercises isinstance filter
+            ]
+        }
+        try:
+            result = _core._suggest_valid_values("Milestone 'v9' not found")
+            assert "Available milestones: v0.5, v1.0" in result
+        finally:
+            _core._snapshot_cache = prior
+
+    def test_owner_not_found_lists_available_owners(self):
+        _core._repo._by_owner = {"alice": ["c1"], "bob": ["c2"]}
+        try:
+            result = _core._suggest_valid_values("Owner 'charlie' not found")
+            assert "Available owners: alice, bob" in result
+        finally:
+            _core._repo._by_owner = {}
+
+    def test_no_match_returns_empty(self):
+        result = _core._suggest_valid_values("Generic error with no keywords")
+        assert result == ""
+
+    def test_deck_keyword_but_empty_registry_returns_empty(self):
+        _core._repo._deck_name_to_id = {}
+        result = _core._suggest_valid_values("Deck unknown")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# _call dispatcher — error handlers (_core.py:934-973)
+# ---------------------------------------------------------------------------
+
+
+class TestCallErrorHandlers:
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_setup_error_returns_setup_envelope(self, mock_get_client):
+        client = MagicMock()
+        client.get_account.side_effect = SetupError("Missing CODECKS_TOKEN")
+        mock_get_client.return_value = client
+        result = _core._call("get_account")
+        assert result["ok"] is False
+        assert result["error_code"] == "SETUP_ERROR"
+        assert result["retryable"] is False
+        assert "Missing CODECKS_TOKEN" in result["error"]
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_cli_error_enriched_with_deck_suggestions(self, mock_get_client):
+        client = MagicMock()
+        client.list_cards.side_effect = CliError("Deck 'nope' not found")
+        mock_get_client.return_value = client
+        _core._repo._deck_name_to_id = {"Features": "d1", "Audio": "d2"}
+        try:
+            result = _core._call("list_cards")
+        finally:
+            _core._repo._deck_name_to_id = {}
+        assert result["ok"] is False
+        assert result["error_code"] == "CLI_ERROR"
+        assert "Deck 'nope' not found" in result["error"]
+        assert "Available decks: Audio, Features" in result["error"]
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_cli_error_without_suggestion_unchanged(self, mock_get_client):
+        client = MagicMock()
+        client.list_cards.side_effect = CliError("Some other CLI error")
+        mock_get_client.return_value = client
+        result = _core._call("list_cards")
+        assert result["ok"] is False
+        assert result["error_code"] == "CLI_ERROR"
+        assert result["error"] == "Some other CLI error"
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_connection_error_marked_retryable(self, mock_get_client):
+        client = MagicMock()
+        client.list_cards.side_effect = ConnectionError("DNS fail")
+        mock_get_client.return_value = client
+        result = _core._call("list_cards")
+        assert result["ok"] is False
+        assert result["error_code"] == "NETWORK_ERROR"
+        assert result["retryable"] is True
+        assert "DNS fail" in result["error"]
+        assert "partially completed" in result["error"]
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_timeout_error_marked_retryable(self, mock_get_client):
+        client = MagicMock()
+        client.get_account.side_effect = TimeoutError("read timed out")
+        mock_get_client.return_value = client
+        result = _core._call("get_account")
+        assert result["error_code"] == "NETWORK_ERROR"
+        assert result["retryable"] is True
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_os_error_marked_retryable(self, mock_get_client):
+        client = MagicMock()
+        client.get_account.side_effect = OSError("socket broken")
+        mock_get_client.return_value = client
+        result = _core._call("get_account")
+        assert result["error_code"] == "NETWORK_ERROR"
+        assert result["retryable"] is True
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_generic_exception_marked_unexpected(self, mock_get_client):
+        client = MagicMock()
+        client.get_account.side_effect = RuntimeError("something weird")
+        mock_get_client.return_value = client
+        result = _core._call("get_account")
+        assert result["ok"] is False
+        assert result["error_code"] == "UNEXPECTED_ERROR"
+        assert result["retryable"] is True
+        assert "something weird" in result["error"]
+
+    @patch("codecks_cli.mcp_server._core._get_client")
+    def test_undoable_mutation_swallows_snapshot_failure(self, mock_get_client):
+        """If snapshot_before_mutation fails, the mutation still proceeds."""
+        client = MagicMock()
+        client.update_cards.return_value = {"ok": True, "updated": 1}
+        mock_get_client.return_value = client
+        with patch(
+            "codecks_cli._operations.snapshot_before_mutation",
+            side_effect=RuntimeError("snapshot died"),
+        ):
+            result = _core._call("update_cards", card_ids=["c1"], status="done")
+        assert result["ok"] is True
+        client.update_cards.assert_called_once_with(card_ids=["c1"], status="done")
