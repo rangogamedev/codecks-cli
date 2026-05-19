@@ -2,8 +2,9 @@
 # Build:  docker compose build
 # Run:    docker compose run --rm test
 
-ARG PYTHON_VERSION=3.12
-FROM python:${PYTHON_VERSION}-slim AS builder
+# Base image digest-pinned for supply-chain integrity.
+# Dependabot updates the tag + digest together when a new python:3.12-slim ships.
+FROM python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461 AS builder
 
 WORKDIR /build
 
@@ -21,8 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     "mcp[cli]>=1.27.1"
 
 # --- Runtime stage ---
-ARG PYTHON_VERSION=3.12
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461 AS runtime
 
 # Non-root user for safety
 RUN groupadd -r codecks && useradd -r -g codecks -m codecks
@@ -51,10 +51,16 @@ FROM runtime AS agent
 
 USER root
 
-# Node.js 22 LTS + Claude Code for in-container AI dev
+# Node.js 22 LTS + Claude Code for in-container AI dev.
+# NodeSource setup script is downloaded to a file (not piped) so a partial
+# transfer or interception cannot inject commands. The script itself is not
+# integrity-checked (NodeSource does not publish per-release hashes); the
+# `agent` stage is dev-only (profiles: ["dev"]) and never used in CI/runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    curl -fsSL -o /tmp/nodesource_setup.sh https://deb.nodesource.com/setup_22.x && \
+    bash /tmp/nodesource_setup.sh && \
+    rm /tmp/nodesource_setup.sh && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 RUN npm install -g @anthropic-ai/claude-code

@@ -184,6 +184,23 @@ def test_attach_files_reports_partial_failure_with_context(mock_raw, mock_sessio
     assert "upload denied" in result["failures"][0]["error"]
 
 
+def test_prepare_files_rejects_symlink_to_sensitive_file():
+    """Sensitive-file denylist must follow symlinks so a renamed link cannot bypass."""
+    from codecks_cli.attachments import prepare_attachment_files
+
+    scratch = _scratch_dir()
+    target = scratch / ".env"
+    target.write_text("CODECKS_TOKEN=secret", encoding="utf-8")
+    link = scratch / "innocent.txt"
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation not supported on this platform/user")
+
+    with pytest.raises(CliError, match="Refusing to attach sensitive local file"):
+        prepare_attachment_files([str(link)])
+
+
 @patch("codecks_cli.attachments.raw_http_request")
 def test_upload_report_files_uses_upload_urls(mock_raw):
     from codecks_cli.attachments import prepare_attachment_files, upload_report_files
