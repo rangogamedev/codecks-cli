@@ -23,6 +23,8 @@ build/
 dist/
 *.egg-info/
 .claude/
+.agents/
+.codex/
 .pytest_cache/
 .coverage
 coverage.xml
