@@ -16,9 +16,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install \
     "mypy>=1.11" \
     "pytest>=9.0.3" \
-    "pytest-cov>=5.0" \
-    "ruff>=0.15.10" \
-    "mcp[cli]>=1.27.0"
+    "pytest-cov>=7.1.0" \
+    "ruff>=0.15.13" \
+    "mcp[cli]>=1.27.1"
 
 # --- Runtime stage ---
 ARG PYTHON_VERSION=3.12
