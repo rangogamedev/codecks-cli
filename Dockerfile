@@ -4,7 +4,7 @@
 
 # Base image digest-pinned for supply-chain integrity.
 # Dependabot updates the tag + digest together when a new python:3.12-slim ships.
-FROM python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461 AS builder
+FROM python:3.14-slim@sha256:a7185a8e40af01bf891414a4df16ef10fc6000cee460a404a13da9029fe41604 AS builder
 
 WORKDIR /build
 
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     "mcp[cli]>=1.27.1"
 
 # --- Runtime stage ---
-FROM python:3.12-slim@sha256:401f6e1a67dad31a1bd78e9ad22d0ee0a3b52154e6bd30e90be696bb6a3d7461 AS runtime
+FROM python:3.14-slim@sha256:a7185a8e40af01bf891414a4df16ef10fc6000cee460a404a13da9029fe41604 AS runtime
 
 # Non-root user for safety
 RUN groupadd -r codecks && useradd -r -g codecks -m codecks
