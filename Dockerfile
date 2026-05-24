@@ -3,7 +3,7 @@
 # Run:    docker compose run --rm test
 
 # Base image digest-pinned for supply-chain integrity.
-# Dependabot updates the tag + digest together when a new python:3.12-slim ships.
+# Dependabot updates the tag + digest together when a new Python slim image ships.
 FROM python:3.14-slim@sha256:a7185a8e40af01bf891414a4df16ef10fc6000cee460a404a13da9029fe41604 AS builder
 
 WORKDIR /build
