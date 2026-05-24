@@ -213,7 +213,7 @@ Run everything in a sandboxed Linux container — no Python install needed on th
 - Source is volume-mounted — edits reflect instantly, no rebuild needed
 - `.env` is mounted at runtime via `env_file:`, never baked into the image
 - Default builds use the lightweight Python runtime; shell/Claude scripts build the optional agent image on demand
-- `PYTHON_VERSION=3.14 ./docker/build.sh` to build with a different Python version
+- To change the container Python version, update the digest-pinned base image in `Dockerfile`
 - `MCP_HTTP_PORT=9000 ./docker/mcp-http.sh` to override the HTTP port
 
 ### Security Hardening
