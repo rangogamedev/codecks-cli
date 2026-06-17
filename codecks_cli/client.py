@@ -1298,7 +1298,7 @@ class CodecksClient:
         return get_conversations(card_id)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
-    # Admin operations (Playwright-backed, with API cache)
+    # Admin operations (dispatch API, with cache warming)
     # ------------------------------------------------------------------
 
     def create_project(self, name: str) -> dict[str, Any]:
@@ -1376,7 +1376,7 @@ class CodecksClient:
         return result
 
     def archive_deck_admin(self, deck: str) -> dict[str, Any]:
-        """Archive a deck (reversible, via Playwright admin).
+        """Archive a deck (reversible, via dispatch API).
 
         Args:
             deck: Deck name to archive.
