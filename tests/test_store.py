@@ -1,8 +1,11 @@
 """Tests for SQLite storage layer (CardStore).
 
-All tests use :memory: SQLite — no disk I/O.
+Most tests use :memory: SQLite — no disk I/O. The file-permission test below
+deliberately uses a real on-disk DB under tmp_path.
 """
 
+import os
+import stat
 import threading
 
 import pytest
@@ -70,6 +73,29 @@ class TestSchema:
         assert "meta" in names
         assert "claims" in names
         assert "query_cache" in names
+
+
+# ---------------------------------------------------------------------------
+# File permissions
+# ---------------------------------------------------------------------------
+
+
+class TestFilePermissions:
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+    def test_db_file_is_owner_only(self, tmp_path):
+        """A file-backed store restricts the DB to 0o600 (owner-only)."""
+        db_path = tmp_path / "store.db"
+        s = CardStore(str(db_path))
+        try:
+            mode = stat.S_IMODE(db_path.stat().st_mode)
+            assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+        finally:
+            s.close()
+
+    def test_memory_store_does_not_raise(self):
+        """In-memory store skips chmod cleanly (no file to restrict)."""
+        s = CardStore(":memory:")
+        s.close()
 
 
 # ---------------------------------------------------------------------------

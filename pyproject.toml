@@ -26,6 +26,9 @@ dev = [
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
   "ruff>=0.15.13",
+  # pip-audit scans installed deps against the PyPI/OSV advisory DBs.
+  # Wired into CI and `quality_gate.py --audit` (see scripts/quality_gate.py).
+  "pip-audit>=2.7.3",
   # mcp[cli] provides the MCP SDK's `mcp dev`/Inspector dev console.
   # Shipped installs use the slim base `mcp` (see the `mcp` extra below).
   "mcp[cli]>=1.27.1",

@@ -5,6 +5,7 @@ SQLite for faster queries, FTS search, and persistence across restarts.
 """
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import UTC, datetime
@@ -31,6 +32,15 @@ class CardStore:
         self._db_path = db_path
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        # Restrict the on-disk DB to owner-only. It mirrors private card content
+        # (titles, bodies, owner names), so match the 0o600 treatment given to
+        # .env / .gdd_tokens.json / .gdd_cache.md. No-op for in-memory DBs and
+        # on platforms without POSIX permissions (e.g. Windows).
+        if db_path != ":memory:":
+            try:
+                os.chmod(db_path, 0o600)
+            except (OSError, NotImplementedError):
+                pass
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")

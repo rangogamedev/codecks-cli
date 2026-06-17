@@ -65,6 +65,10 @@ py scripts/quality_gate.py               # lint + types + docs validation + test
 # Auto-fix lint issues
 py -m ruff check . --fix
 py -m ruff format .
+
+# Dependency CVE scan (network access; pip-audit ships in the .[dev] extra)
+py scripts/quality_gate.py --audit       # or run directly: pip-audit
+pip-audit --ignore-vuln <ADVISORY_ID>    # escape hatch for an advisory with no fix yet
 ```
 
 ## Architecture
@@ -117,7 +121,7 @@ codecks_cli/
     _tools_admin.py      5 admin tools (dispatch API)
   pm_playbook.md        <- Agent-agnostic PM methodology
   py.typed              <- PEP 561 type marker
-tests/                  <- 1000+ pytest tests across 20 files (no live API calls)
+tests/                  <- 1000+ pytest tests across 23 files (no live API calls)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, shell, dev, logs)
 ```
 
@@ -279,6 +283,7 @@ GitHub Actions (`.github/workflows/test.yml`):
 - **Quality checks** — ruff lint, ruff format, mypy, docs validation, pytest
 - **Matrix** — Python 3.12, 3.14
 - **Coverage** — uploaded to Codecov
+- **Dependency audit** — `pip-audit` scans installed deps against the PyPI/OSV advisory DBs (blocking; `--ignore-vuln <ID>` to unblock an unfixable advisory)
 - **Docker smoke test** — builds and runs tests in container
 - **Docs validation** — `validate_docs.py` checks for stale counts
 
