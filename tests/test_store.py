@@ -83,12 +83,21 @@ class TestSchema:
 class TestFilePermissions:
     @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
     def test_db_file_is_owner_only(self, tmp_path):
-        """A file-backed store restricts the DB to 0o600 (owner-only)."""
+        """The DB and its WAL sidecars are all restricted to 0o600 (owner-only).
+
+        The sidecars only inherit 0o600 because the chmod runs *before* the WAL
+        pragma; asserting them here guards that ordering against regression.
+        """
         db_path = tmp_path / "store.db"
         s = CardStore(str(db_path))
         try:
-            mode = stat.S_IMODE(db_path.stat().st_mode)
-            assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+            s.upsert_cards([_make_card()])  # force a WAL write -> creates -wal/-shm
+            files = [db_path, db_path.with_name("store.db-wal"), db_path.with_name("store.db-shm")]
+            present = [f for f in files if f.exists()]
+            assert db_path in present
+            for f in present:
+                mode = stat.S_IMODE(f.stat().st_mode)
+                assert mode == 0o600, f"{f.name}: expected 0o600, got {oct(mode)}"
         finally:
             s.close()
 

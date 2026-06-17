@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -252,15 +253,17 @@ def check_pip_audit() -> dict:
     packages (the local codecks-cli) are skipped by pip-audit and do not fail.
     """
     t0 = time.monotonic()
-    cmd = [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "-f", "json"]
-    try:
-        r = _run(cmd, timeout=300)
-    except FileNotFoundError:
+    # `python -m pip_audit` does not raise FileNotFoundError when the module is
+    # absent (the interpreter exists); it exits non-zero with empty stdout.
+    # Detect the missing tool up front so --audit degrades to a clean skip.
+    if importlib.util.find_spec("pip_audit") is None:
         return {
             "status": "skip",
             "reason": "pip-audit not installed (py -m pip install .[dev])",
             "duration_s": round(time.monotonic() - t0, 1),
         }
+    cmd = [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "-f", "json"]
+    r = _run(cmd, timeout=300)
     duration = round(time.monotonic() - t0, 1)
 
     vulns = 0
