@@ -16,7 +16,7 @@ from codecks_cli.mcp_server._security import _validate_input
 
 
 def _run_admin(func, *args, **kwargs):
-    """Call an admin function (sync, may use Playwright) and return its result."""
+    """Call a sync admin function (dispatch API) and return its result."""
     result = func(*args, **kwargs)
     if result.get("ok"):
         _invalidate_cache()

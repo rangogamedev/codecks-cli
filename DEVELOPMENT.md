@@ -91,7 +91,6 @@ codecks_cli/
   lanes.py              <- Lane registry (LaneDefinition, LANES)
   store.py              <- SQLite storage layer (.pm_store.db)
   admin.py              <- Admin commands (project/deck/milestone/tag CRUD)
-  endpoint_cache.py     <- API endpoint discovery cache
   planning.py           <- File-based planning tools
   gdd.py                <- Google OAuth2, GDD sync
   setup_wizard.py       <- Interactive .env bootstrap
@@ -115,7 +114,7 @@ codecks_cli/
     _tools_comments.py   5 comment CRUD tools
     _tools_local.py      4 session/preference tools
     _tools_team.py       6 team coordination tools
-    _tools_admin.py      5 admin tools (Playwright-backed)
+    _tools_admin.py      5 admin tools (dispatch API)
   pm_playbook.md        <- Agent-agnostic PM methodology
   py.typed              <- PEP 561 type marker
 tests/                  <- 1000+ pytest tests across 20 files (no live API calls)

@@ -12,14 +12,18 @@ WORKDIR /build
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# All third-party deps (dev + MCP) in one layer
+# All third-party deps (dev + MCP) from the committed lock — single source of
+# truth with pyproject.toml/uv.lock, no version drift. uv export emits exact
+# pinned + hashed requirements; --no-emit-project skips the project itself
+# (installed --no-deps in the runtime stage). uv runs on the system interpreter
+# so it stays out of the copied /opt/venv, and is version-pinned so the build
+# tool itself isn't a floating install (bump this pin manually as needed).
+COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
-    "mypy>=1.11" \
-    "pytest>=9.0.3" \
-    "pytest-cov>=7.1.0" \
-    "ruff>=0.15.13" \
-    "mcp[cli]>=1.27.1"
+    /usr/local/bin/python -m pip install "uv==0.11.6" && \
+    /usr/local/bin/uv export --frozen --no-emit-project --extra dev --extra mcp \
+        -o /tmp/requirements.txt && \
+    pip install -r /tmp/requirements.txt
 
 # --- Runtime stage ---
 FROM python:3.14-slim@sha256:a7185a8e40af01bf891414a4df16ef10fc6000cee460a404a13da9029fe41604 AS runtime
