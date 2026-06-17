@@ -3260,8 +3260,8 @@ class TestTickCheckboxes:
 # ---------------------------------------------------------------------------
 
 
-# Admin tools are async (Playwright-backed) — skipped from unit tests.
-# They require browser automation and are tested via live MCP tool calls.
+# Admin tools use the dispatch API (codecks_cli/admin.py) and hit live
+# endpoints — skipped from unit tests; covered via live MCP tool calls.
 
 
 # ---------------------------------------------------------------------------

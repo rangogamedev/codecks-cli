@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI-agent guide, reusable example skills, and MCP prompts for PM sessions and setup.
 - Attachment support: `create --file`, new `attach` command, `CodecksClient.attach_files()`, and MCP `attach_files` tool using stdlib multipart uploads.
 
+### Changed
+- Dependency audit + full lock refresh to latest (`mcp` 1.27→1.28, `pytest` 9.0.3→9.1, `ruff` 0.15.13→0.15.17, `mypy` 1.20→2.1, plus transitives).
+- MCP SDK dev console (`mcp[cli]`) moved from the shipped `mcp` extra to the `dev` extra — end-user `pip install codecks-cli[mcp]` is now slim (drops `typer`, `rich`, `shellingham`, `pygments`, `markdown-it-py`, `mdurl`); developers keep `mcp dev` via the `dev` extra.
+- Dockerfile installs dev+mcp dependencies from the committed `uv.lock` via `uv export` instead of a hardcoded version list — `pyproject.toml`/`uv.lock` are now the single source of truth (no version drift).
+
+### Removed
+- Unused `admin` extra (Playwright) and the orphaned Playwright-era dead code: `playwright_admin.py`, `playwright_selectors.json`, and `endpoint_cache.py` (admin operations use the dispatch API; these were imported nowhere). Removes `playwright`, `pyee`, `greenlet` from the lock.
+
+### Security
+- Refreshed security-relevant transitive dependencies: `cryptography` 46.0.7 → 49.0.0, `starlette` 1.0.0 → 1.3.1, `python-multipart` 0.0.29 → 0.0.32, `pyjwt` 2.12.1 → 2.13.0, `certifi` 2026.2.25 → 2026.5.20.
+
 ## [0.5.1] - 2026-04-12
 
 ### Added
