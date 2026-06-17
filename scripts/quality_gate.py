@@ -6,10 +6,12 @@ Usage:
     py scripts/quality_gate.py --fix        # auto-fix ruff issues first
     py scripts/quality_gate.py --coverage   # include coverage XML output
     py scripts/quality_gate.py --docker-smoke # run Docker smoke checks too
+    py scripts/quality_gate.py --audit      # run pip-audit dependency CVE scan
     py scripts/quality_gate.py --mypy-only  # run just mypy (raw output)
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -243,6 +245,53 @@ def check_docker_smoke() -> dict:
     }
 
 
+def check_pip_audit() -> dict:
+    """Audit installed dependencies against known-vulnerability databases.
+
+    Opt-in (network access required) — run with --audit or in CI. Wraps
+    `pip-audit`, parsing its JSON report to count advisories. Non-PyPI
+    packages (the local codecks-cli) are skipped by pip-audit and do not fail.
+    """
+    t0 = time.monotonic()
+    # `python -m pip_audit` does not raise FileNotFoundError when the module is
+    # absent (the interpreter exists); it exits non-zero with empty stdout.
+    # Detect the missing tool up front so --audit degrades to a clean skip.
+    if importlib.util.find_spec("pip_audit") is None:
+        return {
+            "status": "skip",
+            "reason": "pip-audit not installed (py -m pip install .[dev])",
+            "duration_s": round(time.monotonic() - t0, 1),
+        }
+    cmd = [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "-f", "json"]
+    r = _run(cmd, timeout=300)
+    duration = round(time.monotonic() - t0, 1)
+
+    vulns = 0
+    affected: list[str] = []
+    try:
+        data = json.loads(r.stdout or "{}")
+        for dep in data.get("dependencies", []):
+            dep_vulns = dep.get("vulns", [])
+            if dep_vulns:
+                vulns += len(dep_vulns)
+                ids = ", ".join(v.get("id", "?") for v in dep_vulns)
+                affected.append(f"{dep.get('name')} {dep.get('version')}: {ids}")
+    except (json.JSONDecodeError, TypeError, ValueError):
+        # Unparseable JSON — fall back to the process exit code.
+        vulns = 0 if r.returncode == 0 else -1
+
+    status = "pass" if (r.returncode == 0 and vulns == 0) else "fail"
+    result: dict = {
+        "status": status,
+        "vulnerabilities": vulns,
+        "duration_s": duration,
+    }
+    if status != "pass":
+        result["affected"] = affected
+        result["output"] = (r.stdout or r.stderr).strip()[-2000:]
+    return result
+
+
 def run_mypy_only() -> None:
     """Run just mypy with raw output and propagate exit code."""
     cmd = [sys.executable, "-m", "mypy"] + MYPY_TARGETS
@@ -256,6 +305,7 @@ def main() -> None:
     parser.add_argument("--fix", action="store_true", help="Auto-fix ruff issues first")
     parser.add_argument("--coverage", action="store_true", help="Include coverage XML output")
     parser.add_argument("--docker-smoke", action="store_true", help="Run Docker smoke checks")
+    parser.add_argument("--audit", action="store_true", help="Run pip-audit CVE scan")
     parser.add_argument("--mypy-only", action="store_true", help="Run just mypy (raw output)")
     args = parser.parse_args()
 
@@ -287,6 +337,10 @@ def main() -> None:
     if args.docker_smoke:
         print("Running Docker smoke checks...", file=sys.stderr)
         checks["docker_smoke"] = check_docker_smoke()
+
+    if args.audit:
+        print("Running pip-audit...", file=sys.stderr)
+        checks["pip_audit"] = check_pip_audit()
 
     total_duration = round(time.monotonic() - t0, 1)
 

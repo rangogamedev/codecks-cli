@@ -45,6 +45,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: false
+      - name: Dependency audit (pip-audit)
+        # Scans installed deps against the PyPI/OSV advisory DBs. The local
+        # codecks-cli package is skipped (not on PyPI) without failing. To
+        # unblock on an advisory with no fix yet, append: --ignore-vuln <ID>
+        run: uv run pip-audit --progress-spinner off
 
   docker-smoke:
     runs-on: ubuntu-latest

@@ -33,6 +33,12 @@ This tool handles Codecks API tokens. Please follow these practices:
 | 0.5.x   | Yes       |
 | 0.4.x   | No        |
 
+## Dependency security
+
+- **Dependabot** opens weekly PRs for pip dependencies, GitHub Actions, and the Docker base image.
+- **pip-audit** runs in CI on every push/PR, scanning installed dependencies against the PyPI/OSV advisory databases. Run it locally with `pip-audit` or `py scripts/quality_gate.py --audit`. An advisory with no available fix can be temporarily acknowledged with `pip-audit --ignore-vuln <ID>`.
+- All GitHub Actions are pinned to commit SHAs and the Docker base image to a digest (supply-chain hardening).
+
 ## Scope
 
 This security policy covers the codecks-cli script itself. It does not cover:
