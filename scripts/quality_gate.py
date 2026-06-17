@@ -43,7 +43,6 @@ MYPY_TARGETS = [
     "codecks_cli/_operations.py",
     "codecks_cli/_last_result.py",
     "codecks_cli/admin.py",
-    "codecks_cli/endpoint_cache.py",
     "codecks_cli/gdd.py",
     "codecks_cli/store.py",
     "codecks_cli/mcp_server/",

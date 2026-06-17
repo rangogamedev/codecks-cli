@@ -22,20 +22,20 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = [
-  "mypy>=1.11",
+  "mypy>=2.0",
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
   "ruff>=0.15.13",
-]
-mcp = [
+  # mcp[cli] provides the MCP SDK's `mcp dev`/Inspector dev console.
+  # Shipped installs use the slim base `mcp` (see the `mcp` extra below).
   "mcp[cli]>=1.27.1",
 ]
-admin = [
-  "playwright>=1.40",
+mcp = [
+  "mcp>=1.27.1",
 ]
 
 [tool.setuptools.package-data]
-codecks_cli = ["py.typed", "pm_playbook.md", "playwright_selectors.json"]
+codecks_cli = ["py.typed", "pm_playbook.md"]
 
 [tool.setuptools.packages.find]
 include = ["codecks_cli", "codecks_cli.*"]
