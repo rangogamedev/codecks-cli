@@ -34,7 +34,7 @@ dev = [
   "mcp[cli]>=1.27.1",
 ]
 mcp = [
-  "mcp>=1.27.1",
+  "mcp>=1.28.1",
 ]
 
 [tool.setuptools.package-data]
