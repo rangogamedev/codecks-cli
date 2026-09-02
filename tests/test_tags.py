@@ -204,3 +204,65 @@ class TestSyncFromApi:
                 assert "real-tag" in names
         finally:
             tags.TAGS = original
+
+
+class TestSyncQueryShape:
+    """masterTags are nested under `account` and the label field is `title`."""
+
+    def test_sync_query_is_account_nested(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
+                mock_query.return_value = {"masterTag": {}}
+                tags.sync_from_api()
+                sent = mock_query.call_args.args[0]
+                assert sent == {"_root": [{"account": [{"masterTags": ["title", "color"]}]}]}
+        finally:
+            tags.TAGS = original
+
+    def test_sync_reads_title_field(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
+                # Shape the real API returns for the account-nested query.
+                mock_query.return_value = {
+                    "account": {"a1": {"masterTags": ["t1"]}},
+                    "masterTag": {"t1": {"title": "Level Design", "color": "#ff0000"}},
+                }
+                count = tags.sync_from_api()
+                assert count == 1
+                added = tags.get_tag("level-design")
+                assert added.display_name == "Level Design"
+                assert added.category == "discipline"
+        finally:
+            tags.TAGS = original
+
+    def test_sync_skips_existing_by_title(self):
+        from unittest.mock import patch
+
+        from codecks_cli import tags
+
+        original = tags.TAGS
+        try:
+            with (
+                patch("codecks_cli.api.query") as mock_query,
+                patch("codecks_cli.api.warn_if_empty"),
+            ):
+                mock_query.return_value = {"masterTag": {"t1": {"title": "Code"}}}
+                assert tags.sync_from_api() == 0
+        finally:
+            tags.TAGS = original

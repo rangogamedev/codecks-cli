@@ -12,6 +12,12 @@ import re
 import tempfile
 from datetime import UTC, datetime, timedelta
 
+from codecks_cli._utils import (
+    card_deck_name,
+    card_matches_project,
+    card_owner_name,
+    card_updated_at,
+)
 from codecks_cli.client import CodecksClient
 from codecks_cli.config import _PROJECT_ROOT
 
@@ -147,6 +153,45 @@ def tick_all_checkboxes(client: CodecksClient, card_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Project resolution
+# ---------------------------------------------------------------------------
+
+
+def _deck_project_map(client: CodecksClient) -> dict[str, str]:
+    """Deck id / deck name -> project name, for resolving a card's project.
+
+    Flattened cards carry no ``project`` key, so project filters resolve a
+    card's deck instead. Returns an empty map if decks cannot be fetched.
+    """
+    from codecks_cli._utils import build_deck_project_map
+
+    try:
+        return build_deck_project_map(client.list_decks(include_card_counts=False))
+    except Exception:
+        return {}
+
+
+def _filter_by_project(client: CodecksClient, cards: list[dict], project: str | None) -> list[dict]:
+    """Keep only cards belonging to *project* (deck-resolved when needed)."""
+    if not project:
+        return cards
+    deck_projects: dict[str, str] | None = None
+    kept = []
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        if card.get("project") or card.get("project_name"):
+            if card_matches_project(card, project):
+                kept.append(card)
+            continue
+        if deck_projects is None:
+            deck_projects = _deck_project_map(client)
+        if card_matches_project(card, project, deck_projects):
+            kept.append(card)
+    return kept
+
+
+# ---------------------------------------------------------------------------
 # Overview / aggregation
 # ---------------------------------------------------------------------------
 
@@ -164,9 +209,7 @@ def quick_overview(client: CodecksClient, *, project: str | None = None) -> dict
     result = client.list_cards()
     cards = result.get("cards", []) if isinstance(result, dict) else []
 
-    if project:
-        project_lower = project.lower()
-        cards = [c for c in cards if str(c.get("project", "")).lower() == project_lower]
+    cards = _filter_by_project(client, cards, project)
 
     by_status: dict[str, int] = {}
     by_priority: dict[str, int] = {}
@@ -187,7 +230,7 @@ def quick_overview(client: CodecksClient, *, project: str | None = None) -> dict
         p = card.get("priority") or "null"
         by_priority[p] = by_priority.get(p, 0) + 1
 
-        d = card.get("deck", "") or card.get("deck_name", "") or "unassigned"
+        d = card_deck_name(card) or "unassigned"
         deck_counts[d] = deck_counts.get(d, 0) + 1
 
         effort = card.get("effort")
@@ -195,7 +238,7 @@ def quick_overview(client: CodecksClient, *, project: str | None = None) -> dict
             total_effort += effort
             estimated_count += 1
 
-        updated = card.get("updated_at") or card.get("updatedAt") or ""
+        updated = card_updated_at(card)
         if updated and updated < cutoff_str and s in ("started", "not_started", "blocked"):
             stale_count += 1
 
@@ -250,9 +293,7 @@ def partition_cards(
         for c in cards
         if isinstance(c, dict) and c.get("status") in statuses and not c.get("is_archived")
     ]
-    if project:
-        project_lower = project.lower()
-        cards = [c for c in cards if str(c.get("project", "")).lower() == project_lower]
+    cards = _filter_by_project(client, cards, project)
 
     # Partition
     buckets: dict[str, list[str]] = {}
@@ -271,7 +312,7 @@ def partition_cards(
                 buckets.setdefault("other", []).append(card.get("id", ""))
     elif by == "owner":
         for card in cards:
-            owner = card.get("owner_name") or card.get("owner") or "unassigned"
+            owner = card_owner_name(card) or "unassigned"
             buckets.setdefault(owner, []).append(card.get("id", ""))
     else:
         return {

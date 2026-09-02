@@ -738,3 +738,278 @@ class TestCacheInvalidationMapCompleteness:
             f"_CACHE_INVALIDATION_MAP has entries for unknown methods: {stale}. "
             f"Remove stale entries or add methods to _ALLOWED_METHODS/_MUTATION_METHODS."
         )
+
+
+# ---------------------------------------------------------------------------
+# Flattened-card keys (deck_name / owner_name / milestone_name / lastUpdatedAt)
+#
+# CodecksClient.list_cards() — which is what warms the cache — emits these
+# spellings and no 'project' key at all. Filters/sorts must handle them.
+# ---------------------------------------------------------------------------
+
+_F1 = "11111111-1111-1111-1111-111111111111"
+_F2 = "22222222-2222-2222-2222-222222222222"
+_F3 = "33333333-3333-3333-3333-333333333333"
+
+FLAT_DECKS = [
+    {"id": "d-1", "title": "Code", "project_name": "Tea Shop", "card_count": None},
+    {"id": "d-2", "title": "Art", "project_name": "Business", "card_count": None},
+]
+
+
+def _now_iso(days_ago=0):
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _flat_cards():
+    """Cards exactly as CodecksClient.list_cards() flattens them."""
+    return [
+        {
+            "id": _F1,
+            "title": "Flat A",
+            "status": "started",
+            "priority": "a",
+            "deckId": "d-1",
+            "deck_name": "Code",
+            "owner_name": "Alice",
+            "milestone_name": "M1",
+            "effort": 3,
+            "lastUpdatedAt": _now_iso(),
+        },
+        {
+            "id": _F2,
+            "title": "Flat B",
+            "status": "blocked",
+            "priority": "b",
+            "deckId": "d-2",
+            "deck_name": "Art",
+            "milestone_name": "M2",
+            "effort": 5,
+            "lastUpdatedAt": "2020-01-01T00:00:00.000Z",
+        },
+        {
+            # No owner, no milestone, no timestamp at all.
+            "id": _F3,
+            "title": "Flat C",
+            "status": "not_started",
+            "priority": "c",
+            "deckId": "d-1",
+            "deck_name": "Code",
+            "effort": 1,
+        },
+    ]
+
+
+def _titles(result):
+    """Card titles from a tool result, with sanitizer markers stripped."""
+    return [
+        str(c.get("title", "")).replace("[USER_DATA]", "").replace("[/USER_DATA]", "")
+        for c in result["cards"]
+    ]
+
+
+def _inject_flat_cache():
+    snap = {
+        "fetched_at": "2026-03-05T10:00:00Z",
+        "fetched_ts": time.monotonic(),
+        "account": SAMPLE_ACCOUNT,
+        "cards_result": {"cards": _flat_cards(), "stats": None},
+        "hand": [],
+        "decks": FLAT_DECKS,
+    }
+    _inject_cache(snap)
+    return snap
+
+
+class TestFlattenedCardFilters:
+    """Filters must read the flattened key spellings, not only the short ones."""
+
+    def test_deck_filter_uses_deck_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(deck="Code")
+        assert result["total_count"] == 2
+
+    def test_owner_filter_uses_owner_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(owner="Alice")
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat A"]
+
+    def test_owner_none_uses_owner_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(owner="none")
+        assert result["total_count"] == 2
+        assert set(_titles(result)) == {"Flat B", "Flat C"}
+
+    def test_milestone_filter_uses_milestone_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(milestone="M1")
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat A"]
+
+    def test_project_filter_resolves_via_deck(self):
+        """Cards carry no 'project' key — it comes from the deck's project."""
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(project="Tea Shop")
+        assert result["total_count"] == 2
+        assert set(_titles(result)) == {"Flat A", "Flat C"}
+
+    def test_project_filter_other_project(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(project="Business")
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat B"]
+
+    def test_stale_days_uses_last_updated_at_and_skips_blank(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(stale_days=14)
+        # Flat B is old; Flat A is fresh; Flat C has no timestamp -> excluded.
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat B"]
+
+    def test_updated_after_uses_last_updated_at(self):
+        from datetime import UTC, datetime, timedelta
+
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        cutoff = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d")
+        result = list_cards(updated_after=cutoff)
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat A"]
+
+    def test_updated_before_skips_blank_timestamps(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(updated_before="2021-01-01")
+        assert result["total_count"] == 1
+        assert _titles(result) == ["Flat B"]
+
+
+class TestFlattenedCardSorting:
+    def test_sort_by_deck_uses_deck_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(sort="deck")
+        assert _titles(result) == ["Flat B", "Flat A", "Flat C"]
+
+    def test_sort_by_owner_uses_owner_name(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(sort="owner")
+        # Unowned cards sort first (empty string), Alice last.
+        assert _titles(result)[-1] == "Flat A"
+
+    def test_sort_by_updated_uses_last_updated_at(self):
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        _inject_flat_cache()
+        result = list_cards(sort="updated")
+        assert _titles(result) == ["Flat C", "Flat B", "Flat A"]
+
+
+class TestQuickOverviewFlattenedKeys:
+    def test_deck_summary_and_stale_count(self):
+        from codecks_cli.mcp_server._tools_read import quick_overview
+
+        _inject_flat_cache()
+        result = quick_overview()
+        assert result["total_cards"] == 3
+        assert [d["name"] for d in result["deck_summary"]] == ["Art", "Code"]
+        # Flat B (blocked, updated 2020) is the only stale card.
+        assert result["stale_count"] == 1
+
+    def test_project_filter_resolves_via_deck(self):
+        from codecks_cli.mcp_server._tools_read import quick_overview
+
+        _inject_flat_cache()
+        result = quick_overview(project="Tea Shop")
+        assert result["total_cards"] == 2
+        assert [d["name"] for d in result["deck_summary"]] == ["Code"]
+
+
+class TestDocCardGuardrailFromWarmedCache:
+    """The warm-cache field set must carry isDoc so the guardrail can fire."""
+
+    def test_doc_card_blocked_after_warm_cache(self, tmp_path):
+        from codecks_cli.mcp_server._tools_write import update_cards
+
+        doc_card = {
+            "id": _F1,
+            "title": "Design Doc",
+            "status": "not_started",
+            "deck_name": "Code",
+            "isDoc": True,
+        }
+        mock_client = MagicMock()
+        mock_client.get_account.return_value = SAMPLE_ACCOUNT
+        mock_client.list_cards.return_value = {"cards": [doc_card], "stats": None}
+        mock_client.list_hand.return_value = []
+        mock_client.list_decks.return_value = FLAT_DECKS
+
+        cache_file = tmp_path / ".pm_cache.json"
+        with (
+            patch.object(_core, "_get_client", return_value=mock_client),
+            patch.object(_core, "CACHE_PATH", str(cache_file)),
+        ):
+            _core._warm_cache_impl()
+            result = update_cards(card_ids=[_F1], status="started")
+
+        assert result.get("ok") is False
+        assert result.get("error_code") == "DOC_CARD_VIOLATION"
+        mock_client.update_cards.assert_not_called()
+
+    def test_non_doc_card_not_blocked(self, tmp_path):
+        from codecks_cli.mcp_server._tools_write import update_cards
+
+        mock_client = MagicMock()
+        mock_client.get_account.return_value = SAMPLE_ACCOUNT
+        mock_client.list_cards.return_value = {
+            "cards": [{"id": _F1, "title": "Normal", "isDoc": False}],
+            "stats": None,
+        }
+        mock_client.list_hand.return_value = []
+        mock_client.list_decks.return_value = FLAT_DECKS
+        mock_client.update_cards.return_value = {"ok": True, "updated": 1}
+
+        cache_file = tmp_path / ".pm_cache.json"
+        with (
+            patch.object(_core, "_get_client", return_value=mock_client),
+            patch.object(_core, "CACHE_PATH", str(cache_file)),
+        ):
+            _core._warm_cache_impl()
+            result = update_cards(card_ids=[_F1], status="started")
+
+        assert result.get("error_code") != "DOC_CARD_VIOLATION"
+
+    def test_doc_card_blocked_via_is_doc_key(self):
+        from codecks_cli.mcp_server._tools_write import update_cards
+
+        _inject_cache(
+            {
+                "fetched_at": "2026-03-05T10:00:00Z",
+                "fetched_ts": time.monotonic(),
+                "cards_result": {"cards": [{"id": _F1, "is_doc": True}]},
+            }
+        )
+        result = update_cards(card_ids=[_F1], priority="a")
+        assert result.get("error_code") == "DOC_CARD_VIOLATION"

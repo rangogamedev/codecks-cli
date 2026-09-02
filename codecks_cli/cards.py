@@ -122,15 +122,18 @@ _FIELDS_MINIMAL = [
     {"assignee": ["name", "id"]},
 ]
 
+# isDoc is part of the list field set (not just the full one) so that
+# cache-warming calls (include_content=False) can still tell doc cards apart —
+# the MCP doc-card guardrail reads it off cached cards.
 _FIELDS_LIST = _FIELDS_MINIMAL + [
     "masterTags",
     "lastUpdatedAt",
+    "isDoc",
 ]
 
 _FIELDS_FULL = _FIELDS_LIST + [
     "createdAt",
     "milestoneId",
-    "isDoc",
     "childCardInfo",
     "content",
 ]

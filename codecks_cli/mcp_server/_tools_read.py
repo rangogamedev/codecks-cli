@@ -4,6 +4,11 @@ from datetime import UTC
 from typing import Literal
 
 from codecks_cli import CliError
+from codecks_cli._utils import card_deck_name as _card_deck_name
+from codecks_cli._utils import card_matches_project as _card_matches_project
+from codecks_cli._utils import card_milestone_name as _card_milestone_name
+from codecks_cli._utils import card_owner_name as _card_owner_name
+from codecks_cli._utils import card_updated_at as _card_updated_at
 from codecks_cli.mcp_server import _core
 from codecks_cli.mcp_server._core import (
     _call,
@@ -197,15 +202,15 @@ def _filter_cached_cards(
 
     if deck:
         deck_lower = deck.lower()
-        result = [c for c in result if str(c.get("deck", "")).lower() == deck_lower]
+        result = [c for c in result if str(_card_deck_name(c)).lower() == deck_lower]
 
     if status:
         statuses = {s.strip() for s in status.split(",")}
         result = [c for c in result if c.get("status") in statuses]
 
     if project:
-        project_lower = project.lower()
-        result = [c for c in result if str(c.get("project", "")).lower() == project_lower]
+        deck_projects = _core._deck_project_map()
+        result = [c for c in result if _card_matches_project(c, project, deck_projects)]
 
     if search:
         search_lower = search.lower()
@@ -218,7 +223,7 @@ def _filter_cached_cards(
 
     if milestone:
         milestone_lower = milestone.lower()
-        result = [c for c in result if str(c.get("milestone", "")).lower() == milestone_lower]
+        result = [c for c in result if str(_card_milestone_name(c)).lower() == milestone_lower]
 
     if tag:
         tag_lower = tag.lower()
@@ -230,10 +235,10 @@ def _filter_cached_cards(
 
     if owner:
         if owner.lower() == "none":
-            result = [c for c in result if not c.get("owner")]
+            result = [c for c in result if not _card_owner_name(c)]
         else:
             owner_lower = owner.lower()
-            result = [c for c in result if str(c.get("owner", "")).lower() == owner_lower]
+            result = [c for c in result if str(_card_owner_name(c)).lower() == owner_lower]
 
     if priority:
         priorities = {p.strip() for p in priority.split(",")}
@@ -250,23 +255,21 @@ def _filter_cached_cards(
             hand_ids = {c.get("id") for c in snapshot["hand"] if isinstance(c, dict)}
             result = [c for c in result if c.get("id") in hand_ids]
 
+    # Date filters: cards with a missing timestamp are excluded rather than
+    # silently treated as "" (which sorts before every real timestamp).
     if stale_days is not None:
         from datetime import datetime, timedelta
 
         cutoff = datetime.now(UTC) - timedelta(days=stale_days)
         cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S")
-        result = [
-            c for c in result if (c.get("updated_at") or c.get("updatedAt") or "") < cutoff_str
-        ]
+        result = [c for c in result if _card_updated_at(c) and _card_updated_at(c) < cutoff_str]
 
     if updated_after:
-        result = [
-            c for c in result if (c.get("updated_at") or c.get("updatedAt") or "") >= updated_after
-        ]
+        result = [c for c in result if _card_updated_at(c) and _card_updated_at(c) >= updated_after]
 
     if updated_before:
         result = [
-            c for c in result if (c.get("updated_at") or c.get("updatedAt") or "") <= updated_before
+            c for c in result if _card_updated_at(c) and _card_updated_at(c) <= updated_before
         ]
 
     # hero filter: not easily applicable in cache without additional data
@@ -293,9 +296,9 @@ def _sort_cards(cards: list[dict], sort: str) -> list[dict]:
         "status": lambda c: str(c.get("status", "")),
         "priority": lambda c: str(c.get("priority", "z")),
         "effort": lambda c: c.get("effort") or 999,
-        "deck": lambda c: str(c.get("deck", "")).lower(),
-        "owner": lambda c: str(c.get("owner", "")).lower(),
-        "updated": lambda c: str(c.get("updated_at") or c.get("updatedAt") or ""),
+        "deck": lambda c: str(_card_deck_name(c)).lower(),
+        "owner": lambda c: str(_card_owner_name(c)).lower(),
+        "updated": lambda c: _card_updated_at(c),
         "created": lambda c: str(c.get("created_at") or c.get("createdAt") or ""),
     }
     key_fn = key_map.get(sort)
@@ -648,8 +651,8 @@ def quick_overview(project: str | None = None) -> dict:
         cards = api_result.get("cards", []) if isinstance(api_result, dict) else []
 
     if project:
-        project_lower = project.lower()
-        cards = [c for c in cards if str(c.get("project", "")).lower() == project_lower]
+        deck_projects = _core._deck_project_map()
+        cards = [c for c in cards if _card_matches_project(c, project, deck_projects)]
 
     # Aggregate counts
     by_status: dict[str, int] = {}
@@ -673,7 +676,7 @@ def quick_overview(project: str | None = None) -> dict:
         p = card.get("priority") or "null"
         by_priority[p] = by_priority.get(p, 0) + 1
 
-        d = card.get("deck", "") or card.get("deck_name", "") or "unassigned"
+        d = _card_deck_name(card) or "unassigned"
         deck_counts[d] = deck_counts.get(d, 0) + 1
 
         effort = card.get("effort")
@@ -681,7 +684,7 @@ def quick_overview(project: str | None = None) -> dict:
             total_effort += effort
             estimated_count += 1
 
-        updated = card.get("updated_at") or card.get("updatedAt") or ""
+        updated = _card_updated_at(card)
         if updated and updated < cutoff_str and s in ("started", "not_started", "blocked"):
             stale_count += 1
 

@@ -22,6 +22,7 @@ Discovered endpoints and their field names:
 from typing import Any
 
 from codecks_cli import api, config
+from codecks_cli._utils import _get_field
 from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
@@ -153,7 +154,8 @@ def create_deck(name: str, project: str | None = None) -> dict[str, Any]:
 
     existing = list_decks()
     for _key, deck in existing.get("deck", {}).items():
-        if deck.get("title", "").lower() == name.lower() and deck.get("projectId") == project_id:
+        deck_pid = _get_field(deck, "project_id", "projectId")
+        if deck.get("title", "").lower() == name.lower() and deck_pid == project_id:
             return {
                 "ok": True,
                 "already_existed": True,
@@ -168,16 +170,24 @@ def create_deck(name: str, project: str | None = None) -> dict[str, Any]:
     try:
         result = api.dispatch("decks/create", payload)
         deck_id = result.get("payload", {}).get("id", "")
-        config._cache.pop("decks", None)  # Invalidate so next query sees new deck
-        # Seed the deck into cache so immediate resolve_deck_id() calls find it
-        # without waiting for the API to be consistent
+        # Seed the new deck into the deck cache so an immediate
+        # resolve_deck_id() finds it without waiting for API consistency.
+        # Build the seeded entry from the dict just returned by list_decks()
+        # (which is what config._cache["decks"] holds) — popping first would
+        # drop the seed on the floor.
         cached = config._cache.get("decks")
-        if isinstance(cached, dict) and isinstance(cached.get("deck"), dict):
-            cached["deck"][deck_id] = {
+        if not (isinstance(cached, dict) and isinstance(cached.get("deck"), dict)):
+            cached = {"deck": {}}
+        if deck_id:
+            deck_map: dict[str, Any] = cached["deck"]
+            deck_map[deck_id] = {
                 "id": deck_id,
                 "title": name,
                 "projectId": project_id,
             }
+            config._cache["decks"] = cached
+        else:
+            config._cache.pop("decks", None)  # Invalidate so next query re-fetches
         return {
             "ok": True,
             "already_existed": False,

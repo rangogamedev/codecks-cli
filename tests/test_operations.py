@@ -9,6 +9,7 @@ from codecks_cli._operations import (
     _load_claims,
     _save_claims,
     claim_card,
+    partition_cards,
     quick_overview,
     release_card,
     tick_all_checkboxes,
@@ -149,6 +150,106 @@ class TestQuickOverview:
         result = quick_overview(self._mock_client(cards))
         names = [d["name"] for d in result["deck_summary"]]
         assert names == ["Art", "Coding"]
+
+
+# ---------------------------------------------------------------------------
+# Flattened card keys (deck_name / lastUpdatedAt) and deck-resolved projects
+# ---------------------------------------------------------------------------
+
+FLAT_DECKS = [
+    {"id": "d-1", "title": "Code", "project_name": "Tea Shop"},
+    {"id": "d-2", "title": "Art", "project_name": "Business"},
+]
+
+
+def _flat_client(cards, decks=None):
+    """Client returning cards in CodecksClient.list_cards() flattened form."""
+    client = MagicMock()
+    client.list_cards.return_value = {"cards": cards}
+    client.list_decks.return_value = FLAT_DECKS if decks is None else decks
+    return client
+
+
+class TestQuickOverviewFlattenedKeys:
+    def test_deck_summary_uses_deck_name(self):
+        cards = [
+            {"status": "started", "priority": "a", "deck_name": "Coding"},
+            {"status": "started", "priority": "a", "deck_name": "Art"},
+        ]
+        result = quick_overview(_flat_client(cards))
+        assert [d["name"] for d in result["deck_summary"]] == ["Art", "Coding"]
+
+    def test_stale_count_uses_last_updated_at(self):
+        cards = [
+            {"status": "started", "priority": "a", "lastUpdatedAt": "2020-01-01T00:00:00.000Z"},
+            {"status": "started", "priority": "b"},  # no timestamp -> not stale
+        ]
+        result = quick_overview(_flat_client(cards))
+        assert result["stale_count"] == 1
+
+    def test_project_filter_resolves_via_deck(self):
+        cards = [
+            {"status": "started", "priority": "a", "deckId": "d-1", "deck_name": "Code"},
+            {"status": "started", "priority": "b", "deckId": "d-2", "deck_name": "Art"},
+        ]
+        result = quick_overview(_flat_client(cards), project="Tea Shop")
+        assert result["total_cards"] == 1
+        assert [d["name"] for d in result["deck_summary"]] == ["Code"]
+
+    def test_project_filter_matches_by_deck_name_only(self):
+        """Cards without deckId still resolve through the deck name."""
+        cards = [
+            {"status": "started", "priority": "a", "deck_name": "Art"},
+        ]
+        result = quick_overview(_flat_client(cards), project="Business")
+        assert result["total_cards"] == 1
+
+    def test_no_project_filter_skips_deck_lookup(self):
+        cards = [{"status": "started", "priority": "a", "deck_name": "Code"}]
+        client = _flat_client(cards)
+        quick_overview(client)
+        client.list_decks.assert_not_called()
+
+
+class TestPartitionCardsProjectFilter:
+    def test_project_filter_resolves_via_deck(self):
+        cards = [
+            {
+                "id": "c1",
+                "status": "started",
+                "title": "[Code] A",
+                "deckId": "d-1",
+                "deck_name": "Code",
+            },
+            {
+                "id": "c2",
+                "status": "started",
+                "title": "[Art] B",
+                "deckId": "d-2",
+                "deck_name": "Art",
+            },
+        ]
+        result = partition_cards(_flat_client(cards), by="lane", project="Tea Shop")
+        assert result["ok"] is True
+        assert result["total_cards"] == 1
+        assert result["batches"] == [{"key": "code", "card_ids": ["c1"], "count": 1}]
+
+    def test_project_filter_keeps_explicit_project_key(self):
+        cards = [
+            {"id": "c1", "status": "started", "title": "[Code] A", "project": "Tea Shop"},
+            {"id": "c2", "status": "started", "title": "[Code] B", "project": "Business"},
+        ]
+        result = partition_cards(_flat_client(cards), by="lane", project="Tea Shop")
+        assert result["total_cards"] == 1
+
+    def test_partition_by_owner_uses_owner_name(self):
+        cards = [
+            {"id": "c1", "status": "started", "title": "A", "owner_name": "Alice"},
+            {"id": "c2", "status": "started", "title": "B"},
+        ]
+        result = partition_cards(_flat_client(cards), by="owner")
+        keys = {b["key"] for b in result["batches"]}
+        assert keys == {"Alice", "unassigned"}
 
 
 # ---------------------------------------------------------------------------

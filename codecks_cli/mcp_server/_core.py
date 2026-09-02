@@ -179,6 +179,26 @@ def _invalidate_cache() -> None:
     config._cache.clear()
 
 
+def _deck_project_map() -> dict[str, str]:
+    """Return a deck id / deck name -> project name map for cached cards.
+
+    Cached cards carry no ``project`` key, so project filters have to resolve a
+    card's deck to its project. Prefers the cached deck list; falls back to a
+    live ``list_decks`` call and finally to an empty map.
+    """
+    from codecks_cli._utils import build_deck_project_map
+
+    snapshot = _get_snapshot()
+    if snapshot is not None:
+        decks = snapshot.get("decks")
+        if isinstance(decks, list):
+            return build_deck_project_map(decks)
+    try:
+        return build_deck_project_map(_get_client().list_decks(include_card_counts=False))
+    except Exception:
+        return {}
+
+
 def _extract_hand_ids(hand: list[Any]) -> set[str]:
     """Extract card IDs from hand list."""
     return {str(c.get("id")) for c in hand if isinstance(c, dict) and c.get("id")}

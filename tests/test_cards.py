@@ -944,3 +944,31 @@ class TestMutationHelpers:
         mock_request.return_value = {}
         delete_card("card-1")
         assert mock_request.call_count == 2  # archive then delete
+
+
+# ---------------------------------------------------------------------------
+# Card query field sets
+# ---------------------------------------------------------------------------
+
+
+class TestCardFieldSets:
+    """isDoc must be in the list field set — cache warming uses it and the MCP
+    doc-card guardrail reads isDoc off cached cards."""
+
+    def test_list_field_set_includes_is_doc(self):
+        from codecks_cli.cards import _FIELDS_FULL, _FIELDS_LIST
+
+        assert "isDoc" in _FIELDS_LIST
+        assert _FIELDS_FULL.count("isDoc") == 1
+
+    @patch("codecks_cli.cards.warn_if_empty")
+    @patch("codecks_cli.cards.query")
+    def test_list_cards_without_content_requests_is_doc(self, mock_query, _mock_warn):
+        from codecks_cli.cards import list_cards
+
+        mock_query.return_value = {"card": {}}
+        list_cards(include_content=False)
+        sent = mock_query.call_args.args[0]
+        fields = next(iter(sent["_root"][0]["account"][0].values()))
+        assert "isDoc" in fields
+        assert "content" not in fields

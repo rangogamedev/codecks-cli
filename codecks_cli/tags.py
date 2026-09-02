@@ -87,7 +87,10 @@ def sync_from_api() -> int:
 
     from codecks_cli.api import query, warn_if_empty
 
-    result = query({"_root": [{"masterTags": ["name", "color"]}]})
+    # masterTags live under `account`, and the tag label field is `title`
+    # (see cards.list_tags / CodecksClient.list_tags). A bare _root query or a
+    # `name` field silently returns nothing.
+    result = query({"_root": [{"account": [{"masterTags": ["title", "color"]}]}]})
     warn_if_empty(result, "masterTag")
     api_tags = result.get("masterTag", {})
     if not api_tags:
@@ -98,9 +101,10 @@ def sync_from_api() -> int:
     for _id, tag_data in api_tags.items():
         if not isinstance(tag_data, dict):
             continue
-        tag_name = tag_data.get("name", "").lower().replace(" ", "-")
+        raw_name = tag_data.get("title") or tag_data.get("name") or ""
+        tag_name = raw_name.lower().replace(" ", "-")
         if tag_name and tag_name not in existing_names:
-            display = tag_data.get("name", tag_name)
+            display = raw_name or tag_name
             new_tags.append(
                 TagDefinition(tag_name, display, "discipline", "Auto-synced from Codecks")
             )

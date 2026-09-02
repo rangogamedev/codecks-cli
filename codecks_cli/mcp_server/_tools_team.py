@@ -10,11 +10,13 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from codecks_cli import CliError
+from codecks_cli._utils import card_matches_project as _card_matches_project
 from codecks_cli.mcp_server._core import (
     _agent_sessions,
     _call,
     _card_summary,
     _contract_error,
+    _deck_project_map,
     _finalize_tool_result,
     _get_agent_for_card,
     _get_all_sessions,
@@ -241,6 +243,13 @@ def _get_active_cards() -> list[dict]:
     return []
 
 
+def _deck_projects(project: str | None) -> dict[str, str]:
+    """Deck id / name -> project name map, or {} when no project filter is set."""
+    if not project:
+        return {}
+    return _deck_project_map()
+
+
 def _annotate_claims(cards: list[dict]) -> list[dict]:
     """Annotate cards with claimed_by from agent sessions."""
     if not _agent_sessions:
@@ -326,12 +335,13 @@ def partition_by_lane(project: str | None = None, cap: int | None = None) -> dic
     lane_tag_names = set(LANE_TAGS.keys())
     cards = _get_active_cards()
 
+    deck_projects = _deck_projects(project)
     cards = [
         c
         for c in cards
         if c.get("status") not in ("done", None)
         and not c.get("is_archived")
-        and (project is None or c.get("project_name", "").lower() == project.lower())
+        and _card_matches_project(c, project, deck_projects)
     ]
 
     lanes: dict[str, list[dict]] = {tag: [] for tag in lane_tag_names}
@@ -376,12 +386,13 @@ def partition_by_owner(project: str | None = None, cap: int | None = None) -> di
     """
     cards = _get_active_cards()
 
+    deck_projects = _deck_projects(project)
     cards = [
         c
         for c in cards
         if c.get("status") not in ("done", None)
         and not c.get("is_archived")
-        and (project is None or c.get("project_name", "").lower() == project.lower())
+        and _card_matches_project(c, project, deck_projects)
     ]
 
     owners: dict[str, list[dict]] = {}
@@ -480,7 +491,8 @@ def team_dashboard(
     # Find unclaimed in-progress cards
     cards = _get_active_cards()
     if project:
-        cards = [c for c in cards if (c.get("project_name", "").lower() == project.lower())]
+        deck_projects = _deck_projects(project)
+        cards = [c for c in cards if _card_matches_project(c, project, deck_projects)]
     unclaimed_count = 0
     unclaimed_in_progress = []
     for card in cards:

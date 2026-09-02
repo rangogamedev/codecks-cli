@@ -96,7 +96,7 @@ cards = client.list_cards(status="started", sort="priority")
 ## Testing
 
 - `conftest.py` autouse fixture isolates all `config.*` globals — no real API calls
-- 23 test files mirror source modules (see [DEVELOPMENT.md](DEVELOPMENT.md#test-organization))
+- 24 test files mirror source modules (see [DEVELOPMENT.md](DEVELOPMENT.md#test-organization))
 - Mocks at module boundary (e.g., `codecks_cli.commands.list_cards`, `codecks_cli.client.list_cards`)
 
 ## Known Bugs Fixed (do not reintroduce)

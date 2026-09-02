@@ -121,7 +121,7 @@ codecks_cli/
     _tools_admin.py      5 admin tools (dispatch API)
   pm_playbook.md        <- Agent-agnostic PM methodology
   py.typed              <- PEP 561 type marker
-tests/                  <- 1000+ pytest tests across 23 files (no live API calls)
+tests/                  <- 1000+ pytest tests across 24 files (no live API calls)
 docker/                 <- Wrapper scripts (build, test, quality, cli, mcp, shell, dev, logs)
 ```
 
@@ -188,6 +188,7 @@ py -m pytest --tb=short                # shorter tracebacks
 | `test_repository.py` | CardRepository (indexed card access) |
 | `test_store.py` | CardStore (SQLite storage layer) |
 | `test_exceptions.py` | Exception hierarchy |
+| `test_admin.py` | Admin dispatch ops (deck creation, cache seeding) |
 
 ### Writing Tests
 

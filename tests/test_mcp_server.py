@@ -3452,3 +3452,73 @@ class TestCallErrorHandlers:
             result = _core._call("update_cards", card_ids=["c1"], status="done")
         assert result["ok"] is True
         client.update_cards.assert_called_once_with(card_ids=["c1"], status="done")
+
+
+# ---------------------------------------------------------------------------
+# Team tools: project filters resolve deck -> project
+# ---------------------------------------------------------------------------
+
+_TEAM_DECKS = [
+    {"id": "d-1", "title": "Code", "project_name": "Tea Shop"},
+    {"id": "d-2", "title": "Art", "project_name": "Business"},
+]
+
+_TEAM_CARDS = [
+    {
+        "id": _C1,
+        "status": "started",
+        "title": "Code task",
+        "tags": ["code"],
+        "deckId": "d-1",
+        "deck_name": "Code",
+        "owner_name": "Alice",
+    },
+    {
+        "id": _C2,
+        "status": "started",
+        "title": "Art task",
+        "tags": ["art"],
+        "deckId": "d-2",
+        "deck_name": "Art",
+        "owner_name": "Bob",
+    },
+]
+
+
+def _team_client():
+    """Client returning flattened cards with no 'project' key, plus decks."""
+    client = MagicMock()
+    client.list_cards.return_value = {"cards": _TEAM_CARDS}
+    client.list_decks.return_value = _TEAM_DECKS
+    return client
+
+
+class TestTeamProjectFilters:
+    def test_partition_by_lane_project_filter(self):
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_lane(project="Tea Shop")
+        assert result["ok"] is True
+        assert result["lanes"]["code"]["count"] == 1
+        assert result["lanes"]["art"]["count"] == 0
+
+    def test_partition_by_lane_without_project_keeps_all(self):
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_lane()
+        assert result["lanes"]["code"]["count"] == 1
+        assert result["lanes"]["art"]["count"] == 1
+
+    def test_partition_by_owner_project_filter(self):
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_owner(project="Business")
+        assert result["ok"] is True
+        assert set(result["owners"]) == {"Bob"}
+
+    def test_team_dashboard_project_filter(self):
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        result = mcp_mod.team_dashboard(project="Tea Shop")
+        assert result["ok"] is True
+        assert result["unclaimed_in_progress_count"] == 1

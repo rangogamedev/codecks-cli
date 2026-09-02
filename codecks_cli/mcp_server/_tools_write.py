@@ -4,6 +4,7 @@ import builtins
 from typing import Literal
 
 from codecks_cli import CliError
+from codecks_cli._utils import card_is_doc as _card_is_doc
 from codecks_cli.mcp_server import _core
 from codecks_cli.mcp_server._core import (
     _call,
@@ -171,7 +172,7 @@ def update_cards(
             for cid in card_ids:
                 for card in cached_cards.get("cards", []):
                     if isinstance(card, dict) and card.get("id") == cid:
-                        if card.get("cardType") == "doc" or card.get("is_doc"):
+                        if _card_is_doc(card):
                             return _finalize_tool_result(
                                 _contract_error(
                                     f"Card '{cid}' is a doc card. Doc cards do not support: "

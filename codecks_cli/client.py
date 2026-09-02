@@ -601,10 +601,12 @@ class CodecksClient:
                     stale.append(row)
                     is_stale = True
 
-            # Aggregate by deck and owner
-            deck = row.get("deck_name") or "unknown"
-            owner = row.get("owner_name") or "unassigned"
-            for key, agg in ((deck, deck_agg), (owner, owner_agg)):
+            # Aggregate by deck and owner. NOTE: use distinct local names —
+            # rebinding `owner` here would clobber the filter echoed in
+            # result["filters"]["owner"].
+            card_deck = row.get("deck_name") or "unknown"
+            card_owner = row.get("owner_name") or "unassigned"
+            for key, agg in ((card_deck, deck_agg), (card_owner, owner_agg)):
                 if key not in agg:
                     agg[key] = {"total": 0, "blocked": 0, "stale": 0, "in_progress": 0}
                 agg[key]["total"] += 1
