@@ -10,8 +10,8 @@ import json
 import os
 import re
 import secrets
-import socket
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -38,25 +38,51 @@ def _load_gdd_tokens():
         return None
 
 
-def _save_gdd_tokens(tokens):
-    """Save Google OAuth tokens to .gdd_tokens.json."""
-    with open(config.GDD_TOKENS_PATH, "w", encoding="utf-8") as f:
-        json.dump(tokens, f, indent=2)
-    # Restrict to owner-only on Unix/Mac. No-op on Windows.
+def _write_private_file(path, content):
+    """Write text to *path* atomically, never exposing it with loose permissions.
+
+    The temp file is created by ``mkstemp`` (0o600 by default, not umask-derived),
+    chmod'ed explicitly, then renamed into place — so there is no window in which
+    the destination is world-readable. Mirrors ``config.save_env_value``.
+    """
+    target_dir = os.path.dirname(path) or "."
+    fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=".gdd_tmp_")
     try:
-        os.chmod(config.GDD_TOKENS_PATH, 0o600)
+        # Restrict to owner-only on Unix/Mac. No-op on Windows.
+        try:
+            os.chmod(tmp_path, 0o600)
+        except (OSError, NotImplementedError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        try:
+            os.replace(tmp_path, path)
+        except OSError:
+            # Fallback for very old Windows versions without os.replace().
+            if os.path.exists(path):
+                os.remove(path)
+            os.rename(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+    # Re-assert after rename in case the destination pre-existed.
+    try:
+        os.chmod(path, 0o600)
     except (OSError, NotImplementedError):
         pass
+
+
+def _save_gdd_tokens(tokens):
+    """Save Google OAuth tokens to .gdd_tokens.json (owner-only, atomic)."""
+    _write_private_file(config.GDD_TOKENS_PATH, json.dumps(tokens, indent=2))
 
 
 def _save_gdd_cache(content):
-    """Write GDD content to cache file with restricted permissions."""
-    with open(config.GDD_CACHE_PATH, "w", encoding="utf-8") as f:
-        f.write(content)
-    try:
-        os.chmod(config.GDD_CACHE_PATH, 0o600)
-    except (OSError, NotImplementedError):
-        pass
+    """Write GDD content to cache file with restricted permissions (atomic)."""
+    _write_private_file(config.GDD_CACHE_PATH, content)
 
 
 def _google_token_request(params):
@@ -193,13 +219,6 @@ def _run_google_auth_flow():
             "  See README for setup instructions."
         )
 
-    # Find a free port
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-
-    redirect_uri = f"http://127.0.0.1:{port}"
     auth_code: list[str | None] = [None]  # mutable container for closure
     server_error: list[str | None] = [None]
 
@@ -259,6 +278,13 @@ def _run_google_auth_flow():
         def log_message(self, format, *a):
             pass  # Suppress HTTP server logging
 
+    # Bind the callback server on an ephemeral port and read the port back from
+    # it. Probing with a throwaway socket first would leave a window in which
+    # another process could grab the port before the real server binds it.
+    server = http.server.HTTPServer(("127.0.0.1", 0), _AuthHandler)
+    server.timeout = 120
+    redirect_uri = f"http://127.0.0.1:{server.server_address[1]}"
+
     # Build authorization URL
     auth_params = urllib.parse.urlencode(
         {
@@ -275,16 +301,12 @@ def _run_google_auth_flow():
     )
     auth_url = f"{config.GOOGLE_AUTH_URL}?{auth_params}"
 
-    # Start local server and open browser
-    server = http.server.HTTPServer(("127.0.0.1", port), _AuthHandler)
-    server.timeout = 120
-
-    print("Opening browser for Google authorization...")
-    print(f"  If the browser doesn't open, visit:\n  {auth_url}")
-    webbrowser.open(auth_url)
-
-    # Wait for the callback (one request only)
     try:
+        # Open the browser; the server is already listening.
+        print("Opening browser for Google authorization...")
+        print(f"  If the browser doesn't open, visit:\n  {auth_url}")
+        webbrowser.open(auth_url)
+        # Wait for the callback (one request only)
         server.handle_request()
     finally:
         server.server_close()
@@ -597,6 +619,11 @@ def sync_gdd(sections, project_name, target_section=None, apply=False, quiet=Fal
                     if update_kwargs:
                         update_card(card_id, **update_kwargs)
                     task_entry["card_id"] = card_id
+                    # Register the new title so a title repeated later in the
+                    # same GDD matches it instead of creating a duplicate card.
+                    new_title = task["title"].lower().strip()
+                    if new_title:
+                        existing_titles[new_title] = card_id
                     report["created"].append(task_entry)
                     # Rate limit: ~10 creates before a brief pause
                     if len(report["created"]) % 10 == 0:

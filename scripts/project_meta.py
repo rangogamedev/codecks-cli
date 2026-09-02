@@ -71,15 +71,27 @@ def _test_info() -> dict:
 
 
 def _mcp_info() -> dict:
-    """Count MCP tools by scanning @mcp.tool() decorators."""
-    mcp_path = PKG / "mcp_server.py"
+    """Count MCP tools registered across the mcp_server package (or legacy module).
+
+    Mirrors ``scripts/validate_docs.py::_actual_mcp_tool_count``: tools live in
+    ``codecks_cli/mcp_server/_tools_*.py`` and are registered with
+    ``mcp.tool()(<name>)`` calls, not with a decorator on the def.
+    """
+    sources: list[Path] = []
+    mcp_dir = PKG / "mcp_server"
+    if mcp_dir.is_dir():
+        sources = sorted(mcp_dir.glob("*.py"))
+    elif (PKG / "mcp_server.py").exists():
+        sources = [PKG / "mcp_server.py"]
+
     tool_names: list[str] = []
-    if mcp_path.exists():
-        content = mcp_path.read_text(encoding="utf-8")
-        # Match @mcp.tool() followed by def <name>(
-        for m in re.finditer(r"@mcp\.tool\(\)\s*\ndef\s+(\w+)\s*\(", content):
-            tool_names.append(m.group(1))
-    return {"tool_count": len(tool_names), "tool_names": tool_names}
+    for path in sources:
+        content = path.read_text(encoding="utf-8")
+        # Registration call: mcp.tool()(name)
+        tool_names.extend(re.findall(r"mcp\.tool\(\)\s*\(\s*(\w+)\s*\)", content))
+        # Legacy decorator form: @mcp.tool() above a def
+        tool_names.extend(re.findall(r"@mcp\.tool\(\)\s*\ndef\s+(\w+)\s*\(", content))
+    return {"tool_count": len(tool_names), "tool_names": sorted(tool_names)}
 
 
 def _mypy_info() -> dict:
@@ -117,10 +129,11 @@ def _source_info() -> dict:
         count += 1
     # codecks_cli/*.py
     count += len(list(PKG.glob("*.py")))
-    # codecks_cli/formatters/*.py
-    formatters = PKG / "formatters"
-    if formatters.is_dir():
-        count += len(list(formatters.glob("*.py")))
+    # codecks_cli/formatters/*.py and codecks_cli/mcp_server/*.py
+    for subpkg in ("formatters", "mcp_server"):
+        subdir = PKG / subpkg
+        if subdir.is_dir():
+            count += len(list(subdir.glob("*.py")))
     return {"module_count": count}
 
 

@@ -122,14 +122,14 @@ async def create_milestone(
     )
 
 
-async def create_tag(name: str, color: str | None = None, project: str | None = None) -> dict:
+async def create_tag(name: str, project: str | None = None) -> dict:
     """Create a new project-level tag.
 
-    Uses direct Codecks dispatch API.
+    Uses direct Codecks dispatch API. The `projects/addTag` endpoint has
+    no color field, so tag colors cannot be set from here.
 
     Args:
         name: Tag name (e.g., "legal").
-        color: Optional hex color (e.g., "#ff0000").
         project: Project name. Defaults to the primary project.
 
     Returns:
@@ -137,8 +137,6 @@ async def create_tag(name: str, color: str | None = None, project: str | None = 
     """
     try:
         name = _validate_input(name, "name")
-        if color is not None:
-            color = _validate_input(color, "color")
         if project is not None:
             project = _validate_input(project, "project")
     except CliError as e:
@@ -146,16 +144,17 @@ async def create_tag(name: str, color: str | None = None, project: str | None = 
 
     from codecks_cli import admin
 
-    return await asyncio.to_thread(_run_admin, admin.create_tag, name, color=color, project=project)
+    return await asyncio.to_thread(_run_admin, admin.create_tag, name, project=project)
 
 
 async def archive_deck(deck: str) -> dict:
-    """Archive a deck (reversible).
+    """Delete a deck. NOT reversible.
 
-    Uses direct Codecks dispatch API.
+    The Codecks dispatch API has no deck-archive action, so this dispatches
+    `decks/delete`. The deck is gone for good; its cards are preserved.
 
     Args:
-        deck: Deck name to archive.
+        deck: Deck name to delete.
 
     Returns:
         Dict with ok, deck_name, source.

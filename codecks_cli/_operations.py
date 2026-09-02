@@ -11,6 +11,7 @@ import os
 import re
 import tempfile
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from codecks_cli._utils import (
     card_deck_name,
@@ -594,13 +595,15 @@ def undo_last_mutation(client: CodecksClient) -> dict:
     errors = []
     for cid, prev_state in cards.items():
         try:
-            updates = {}
-            if prev_state.get("status"):
-                updates["status"] = prev_state["status"]
-            if prev_state.get("priority"):
-                updates["priority"] = prev_state["priority"]
-            if prev_state.get("effort") is not None:
-                updates["effort"] = prev_state["effort"]
+            updates: dict[str, Any] = {}
+            for field in ("status", "priority", "effort"):
+                if field not in prev_state:
+                    continue
+                value = prev_state[field]
+                # A snapshotted None means "the field was empty". Passing None to
+                # update_cards() means "leave unchanged", so use the "null"
+                # sentinel it understands for clearing a field instead.
+                updates[field] = "null" if value is None else value
             if updates:
                 client.update_cards([cid], **updates)
                 reverted.append(cid)

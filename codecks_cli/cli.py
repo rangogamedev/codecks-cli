@@ -131,6 +131,7 @@ Commands:
     --parent <id>           Nest as sub-card under parent card ID
     --file <path>           Attach a local file (repeatable)
   attach <id> <file...>   - Attach local file(s) to an existing card
+    --dry-run               Validate paths (resolved, size, sha256), upload nothing
   feature <title>         - Scaffold Hero + lane sub-cards (no Journey mode)
     --hero-deck <name>      Hero destination deck (required)
     --code-deck <name>      Code sub-card deck (required)

@@ -237,9 +237,10 @@ def cmd_create(ns):
 
 
 def cmd_attach(ns):
-    if _dry_run_guard("attach file(s)", f"card={ns.card_id}, files={ns.files}"):
-        return
-    output(_get_client().attach_files(ns.card_id, ns.files), fmt=ns.format)
+    # The global --dry-run flag validates the paths and reports resolved path,
+    # size and sha256 for each file instead of just printing a stub line.
+    dry_run = bool(config.RUNTIME_DRY_RUN)
+    output(_get_client().attach_files(ns.card_id, ns.files, dry_run=dry_run), fmt=ns.format)
 
 
 def cmd_feature(ns):
