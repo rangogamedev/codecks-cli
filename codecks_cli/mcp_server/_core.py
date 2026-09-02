@@ -84,7 +84,7 @@ def _reset_store() -> None:
 _snapshot_cache: dict | None = None
 _cache_loaded_at: float = 0.0  # time.monotonic() when loaded/warmed
 _disk_cache_mtime: float = 0.0  # st_mtime of .pm_cache.json when last loaded
-_batch_in_progress: bool = False  # Suppress disk writes during batch ops
+_batch_depth: int = 0  # >0 suppresses disk writes during (possibly overlapping) batches
 _repo = CardRepository()
 
 # Rate-limit tracking (Codecks API: 40 req/5s)
@@ -654,10 +654,20 @@ def _invalidate_cache_for(method_name: str) -> None:
 
 
 def _set_batch_in_progress(active: bool) -> None:
-    """Toggle the batch flag that suppresses per-mutation disk writes."""
-    global _batch_in_progress
+    """Enter (``True``) or leave (``False``) a batch that suppresses disk writes.
+
+    A depth counter rather than a boolean: two overlapping batches would
+    otherwise clear each other's flag, re-enabling per-mutation disk writes
+    while the outer batch is still running. Writes stay suppressed until the
+    last batch exits; the counter never drops below zero, so an unbalanced
+    exit cannot wedge it negative.
+    """
+    global _batch_depth
     with _state_lock:
-        _batch_in_progress = active
+        if active:
+            _batch_depth += 1
+        else:
+            _batch_depth = max(0, _batch_depth - 1)
 
 
 def _persist_cache_to_disk() -> None:
@@ -665,12 +675,12 @@ def _persist_cache_to_disk() -> None:
 
     Other MCP server processes will detect the updated file via mtime
     comparison in ``_load_cache_from_disk()`` and reload automatically.
-    Skipped during batch operations (``_batch_in_progress``) to avoid
+    Skipped during batch operations (``_batch_depth`` > 0) to avoid
     excessive disk writes — caller persists once after the batch.
     """
     global _disk_cache_mtime
     with _state_lock:
-        if _snapshot_cache is None or _batch_in_progress:
+        if _snapshot_cache is None or _batch_depth > 0:
             return
         try:
             disk_data = {k: v for k, v in _snapshot_cache.items() if k != "fetched_ts"}
@@ -990,19 +1000,23 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
     if method_name not in _ALLOWED_METHODS:
         return _contract_error(f"Unknown method: {method_name}", "error")
 
-    # Rate-limit awareness: pause if approaching API limit. The timestamp list
-    # is shared across worker threads, so prune/inspect it under the lock and
-    # sleep (and call the API) with the lock released.
-    with _state_lock:
-        now = time.monotonic()
-        _api_call_timestamps[:] = [t for t in _api_call_timestamps if now - t < _RATE_LIMIT_WINDOW]
-        wait = 0.0
-        if len(_api_call_timestamps) >= _RATE_LIMIT_MAX:
+    # Rate-limit awareness: pause if approaching the API limit. The timestamp
+    # list is shared across worker threads, so pruning, the window check *and*
+    # the slot reservation all happen in one critical section — splitting them
+    # lets N threads each see room and over-admit. Only the sleep (and the API
+    # call itself) happens with the lock released, after which the state is
+    # re-checked from scratch.
+    while True:
+        with _state_lock:
+            now = time.monotonic()
+            _api_call_timestamps[:] = [
+                t for t in _api_call_timestamps if now - t < _RATE_LIMIT_WINDOW
+            ]
+            if len(_api_call_timestamps) < _RATE_LIMIT_MAX:
+                _api_call_timestamps.append(now)
+                break
             wait = _RATE_LIMIT_WINDOW - (now - _api_call_timestamps[0])
-    if wait > 0:
-        time.sleep(min(wait, _RATE_LIMIT_WINDOW))
-    with _state_lock:
-        _api_call_timestamps.append(time.monotonic())
+        time.sleep(min(max(wait, 0.0), _RATE_LIMIT_WINDOW))
 
     try:
         client = _get_client()

@@ -9,10 +9,11 @@ Environment variables:
     ``MCP_HTTP_PORT``             TCP port. Defaults to ``8808``.
     ``MCP_HTTP_ALLOWED_HOSTS``    Comma-separated ``Host`` header allowlist used
                                   when the bind address is not loopback.
-                                  Defaults to ``localhost:*,127.0.0.1:*``.
+                                  Defaults to
+                                  ``localhost:*,127.0.0.1:*,[::1]:*``.
     ``MCP_HTTP_ALLOWED_ORIGINS``  Comma-separated ``Origin`` header allowlist,
-                                  same conditions. Defaults to
-                                  ``http://localhost:*,http://127.0.0.1:*``.
+                                  same conditions. Defaults to ``http://localhost:*,
+                                  http://127.0.0.1:*,http://[::1]:*``.
 
 The MCP SDK only auto-enables DNS-rebinding protection when the bind address is
 a loopback address; for any other address this module builds the
@@ -31,8 +32,9 @@ DEFAULT_PORT = "8808"
 #: Bind addresses for which the SDK already turns on DNS-rebinding protection.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
-DEFAULT_ALLOWED_HOSTS = "localhost:*,127.0.0.1:*"
-DEFAULT_ALLOWED_ORIGINS = "http://localhost:*,http://127.0.0.1:*"
+#: Mirrors the SDK's own loopback allowlists, IPv6 loopback included.
+DEFAULT_ALLOWED_HOSTS = "localhost:*,127.0.0.1:*,[::1]:*"
+DEFAULT_ALLOWED_ORIGINS = "http://localhost:*,http://127.0.0.1:*,http://[::1]:*"
 
 
 def _csv_env(name: str, default: str) -> list[str]:

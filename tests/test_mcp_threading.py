@@ -151,3 +151,76 @@ def test_rate_limit_timestamps_survive_concurrent_calls(monkeypatch):
     # Every call recorded exactly one timestamp — no lost or duplicated writes.
     assert len(_core._api_call_timestamps) == per_thread * threads
     assert all(isinstance(t, float) for t in _core._api_call_timestamps)
+
+
+def test_rate_limiter_never_over_admits_under_concurrency(monkeypatch):
+    """50 threads racing the limiter must never put more than the cap in a window.
+
+    The window check and the slot reservation share one critical section, so
+    threads that all see room cannot all be admitted. A fake clock (advanced
+    only by the limiter's own sleep) keeps this deterministic and fast.
+    """
+    max_calls = 5
+    window = 1.0
+    monkeypatch.setattr(_core, "_api_call_timestamps", [])
+    monkeypatch.setattr(_core, "_RATE_LIMIT_MAX", max_calls)
+    monkeypatch.setattr(_core, "_RATE_LIMIT_WINDOW", window)
+
+    clock = {"now": 0.0}
+    clock_lock = threading.Lock()
+
+    def fake_monotonic():
+        with clock_lock:
+            return clock["now"]
+
+    def fake_sleep(seconds):
+        with clock_lock:
+            clock["now"] += max(seconds, 0.001)
+
+    monkeypatch.setattr(_core.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(_core.time, "sleep", fake_sleep)
+
+    observed: list[int] = []
+
+    class FakeClient:
+        def get_account(self):
+            # Sample the reservation list; pruning only happens at admission, so
+            # its length is the number of admissions in the current window.
+            with _core._state_lock:
+                observed.append(len(_core._api_call_timestamps))
+            return {"ok": True}
+
+    monkeypatch.setattr(_core, "_client", FakeClient())
+
+    errors = _run_threads(lambda _i: _core._call("get_account"), 50)
+
+    assert errors == []
+    assert len(observed) == 50
+    assert max(observed) <= max_calls, f"over-admitted: {max(observed)} > {max_calls}"
+    assert len(_core._api_call_timestamps) <= max_calls
+
+
+def test_overlapping_batches_suppress_disk_writes_until_the_last_exit(tmp_path, monkeypatch):
+    """The batch flag is a depth counter, so nested batches don't clear each other."""
+    cache_file = tmp_path / "cache.json"
+    monkeypatch.setattr(_core, "CACHE_PATH", str(cache_file))
+    monkeypatch.setattr(_core, "_batch_depth", 0)
+    monkeypatch.setattr(_core, "_snapshot_cache", {"cards": []})
+
+    _core._set_batch_in_progress(True)  # outer batch
+    _core._set_batch_in_progress(True)  # overlapping inner batch
+    _core._persist_cache_to_disk()
+    assert not cache_file.exists()
+
+    _core._set_batch_in_progress(False)  # inner exits, outer still running
+    assert _core._batch_depth == 1
+    _core._persist_cache_to_disk()
+    assert not cache_file.exists()
+
+    _core._set_batch_in_progress(False)  # last exit re-enables disk writes
+    assert _core._batch_depth == 0
+    _core._persist_cache_to_disk()
+    assert cache_file.exists()
+
+    _core._set_batch_in_progress(False)  # unbalanced exit must not go negative
+    assert _core._batch_depth == 0

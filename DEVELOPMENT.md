@@ -229,8 +229,8 @@ only:
 |----------|---------|---------|
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind address. Compose sets `0.0.0.0` *inside* the container; only use a non-loopback value behind a loopback-published port or a trusted reverse proxy. |
 | `MCP_HTTP_PORT` | `8808` | TCP port. |
-| `MCP_HTTP_ALLOWED_HOSTS` | `localhost:*,127.0.0.1:*` | Comma-separated `Host` header allowlist, applied when `MCP_HTTP_HOST` is not loopback. |
-| `MCP_HTTP_ALLOWED_ORIGINS` | `http://localhost:*,http://127.0.0.1:*` | Comma-separated `Origin` header allowlist, same condition. |
+| `MCP_HTTP_ALLOWED_HOSTS` | `localhost:*,127.0.0.1:*,[::1]:*` | Comma-separated `Host` header allowlist, applied when `MCP_HTTP_HOST` is not loopback. |
+| `MCP_HTTP_ALLOWED_ORIGINS` | `http://localhost:*,http://127.0.0.1:*,http://[::1]:*` | Comma-separated `Origin` header allowlist, same condition. |
 
 The MCP SDK only auto-enables DNS-rebinding protection for loopback binds, so
 `build_transport_security()` supplies explicit `TransportSecuritySettings` for

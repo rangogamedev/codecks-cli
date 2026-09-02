@@ -2919,6 +2919,41 @@ class TestUndoMcpTool:
         mcp_mod.undo()
         assert not undo_file.exists()
 
+    def test_undo_keeps_a_snapshot_written_while_it_runs(self, tmp_path, monkeypatch):
+        """A newer snapshot saved during the revert loop must survive.
+
+        The read and the removal happen in one locked section, so undo only ever
+        deletes the snapshot it consumed. Here a concurrent mutation is
+        simulated by writing S2 from inside ``update_cards``.
+        """
+        import codecks_cli._operations as ops
+
+        undo_file = tmp_path / ".pm_undo.json"
+        s1 = {
+            "timestamp": "2026-03-17T00:00:00Z",
+            "cards": {_C1: {"status": "done", "priority": None, "effort": None}},
+        }
+        s2 = {
+            "timestamp": "2026-03-17T00:00:05Z",
+            "cards": {_C2: {"status": "started", "priority": None, "effort": None}},
+        }
+        undo_file.write_text(json.dumps(s1))
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
+
+        def _update_cards(card_ids, **kwargs):
+            undo_file.write_text(json.dumps(s2))
+            return {"ok": True}
+
+        mock_client = MagicMock()
+        mock_client.update_cards.side_effect = _update_cards
+
+        result = ops.undo_last_mutation(mock_client)
+
+        assert result["ok"] is True
+        assert result["reverted"] == [_C1]
+        assert undo_file.exists(), "the newer snapshot was deleted"
+        assert json.loads(undo_file.read_text()) == s2
+
 
 class TestSnapshotInCall:
     """Tests that _call() creates undo snapshots for undoable methods."""

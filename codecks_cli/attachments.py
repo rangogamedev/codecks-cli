@@ -73,8 +73,47 @@ def _skip_root(entry: str, reason: str) -> None:
     warnings.warn(
         f"{ALLOW_DIRS_ENV} entry {entry!r} ignored: {reason}.",
         RuntimeWarning,
-        stacklevel=3,
+        stacklevel=4,
     )
+
+
+def _validated_root(path: Path, source: str | None = None) -> Path | None:
+    """Return *path* resolved if it is usable as an attachment root, else ``None``.
+
+    The same checks apply to the built-in defaults and to
+    ``CODECKS_ATTACH_ALLOW_DIRS`` entries: the candidate must be absolute,
+    resolvable, an existing directory, and not a whole filesystem root — a
+    desktop MCP client that launches the server with ``/`` as its working
+    directory must not thereby make the entire disk attachable. *source* is the
+    raw environment entry when the candidate came from the environment; those
+    rejections warn, while a default that fails is skipped silently.
+    """
+    candidate = path.expanduser()
+    if not candidate.is_absolute():
+        if source is not None:
+            _skip_root(source, "not an absolute path")
+        return None
+    try:
+        resolved = candidate.resolve(strict=False)
+    except OSError as e:
+        if source is not None:
+            _skip_root(source, f"could not be resolved ({e})")
+        return None
+    if resolved.parent == resolved:
+        if source is not None:
+            _skip_root(source, "a filesystem root would allow every file on the disk")
+        return None
+    try:
+        is_dir = resolved.is_dir()
+    except OSError as e:
+        if source is not None:
+            _skip_root(source, f"could not be inspected ({e})")
+        return None
+    if not is_dir:
+        if source is not None:
+            _skip_root(source, "not an existing directory")
+        return None
+    return resolved
 
 
 def _allowed_roots() -> list[Path]:
@@ -83,50 +122,32 @@ def _allowed_roots() -> list[Path]:
     Allowed by default: the project root and the current working directory —
     for a pip-installed package the project root is ``site-packages``, which
     holds nothing worth attaching, so the directory the user actually works in
-    has to count too. Extra roots come from ``CODECKS_ATTACH_ALLOW_DIRS``; an
-    entry that is not an absolute path, is not an existing directory, or is a
-    whole filesystem root is skipped with a warning instead of silently
-    widening the policy to everything.
+    has to count too. Extra roots come from ``CODECKS_ATTACH_ALLOW_DIRS``. Every
+    candidate goes through :func:`_validated_root`, so a filesystem root never
+    becomes an allowed root — not from the environment, and not from a server
+    started with ``/`` as its working directory either.
     """
     from codecks_cli.config import _PROJECT_ROOT
 
     roots: list[Path] = []
 
-    def add(root: Path) -> None:
-        if root not in roots:
+    def add(root: Path | None) -> None:
+        if root is not None and root not in roots:
             roots.append(root)
 
-    for default in (Path(_PROJECT_ROOT), Path.cwd()):
-        try:
-            add(default.expanduser().resolve(strict=False))
-        except OSError:
-            continue
+    defaults: list[Path] = [Path(_PROJECT_ROOT)]
+    try:
+        defaults.append(Path.cwd())
+    except OSError:
+        pass  # Working directory was removed out from under us.
+    for default in defaults:
+        add(_validated_root(default))
 
     for entry in (os.environ.get(ALLOW_DIRS_ENV) or "").split(os.pathsep):
         entry = entry.strip()
         if not entry:
             continue
-        candidate = Path(entry).expanduser()
-        if not candidate.is_absolute():
-            _skip_root(entry, "not an absolute path")
-            continue
-        try:
-            resolved = candidate.resolve(strict=False)
-        except OSError as e:
-            _skip_root(entry, f"could not be resolved ({e})")
-            continue
-        if resolved.parent == resolved:
-            _skip_root(entry, "a filesystem root would allow every file on the disk")
-            continue
-        try:
-            is_dir = resolved.is_dir()
-        except OSError as e:
-            _skip_root(entry, f"could not be inspected ({e})")
-            continue
-        if not is_dir:
-            _skip_root(entry, "not an existing directory")
-            continue
-        add(resolved)
+        add(_validated_root(Path(entry), source=entry))
     return roots
 
 

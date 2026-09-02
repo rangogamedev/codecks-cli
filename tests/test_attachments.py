@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -508,6 +509,36 @@ def test_valid_entry_is_kept_alongside_the_defaults(project_root, tmp_path, monk
     roots = _allowed_roots()
 
     assert extra.resolve() in roots
+    assert project_root.resolve() in roots
+
+
+def test_filesystem_root_cwd_is_not_an_allowed_root(project_root, monkeypatch):
+    """A client launching the server with cwd ``/`` must not open the whole disk."""
+    from codecks_cli.attachments import _allowed_roots
+
+    fs_root = Path(project_root.anchor or "/")
+    monkeypatch.setattr(Path, "cwd", staticmethod(lambda: fs_root))
+
+    with warnings.catch_warnings():
+        # A rejected *default* root is skipped silently — no warning spam.
+        warnings.simplefilter("error")
+        roots = _allowed_roots()
+
+    assert fs_root.resolve() not in roots
+    assert roots == [project_root.resolve()]
+
+
+def test_normal_cwd_is_an_allowed_root(project_root, tmp_path, monkeypatch):
+    """An ordinary working directory still counts as a default root."""
+    from codecks_cli.attachments import _allowed_roots
+
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    roots = _allowed_roots()
+
+    assert workdir.resolve() in roots
     assert project_root.resolve() in roots
 
 

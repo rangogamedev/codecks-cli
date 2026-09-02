@@ -841,7 +841,9 @@ def batch_create_cards(
     _existing_titles: dict[str, str] = {}  # normalized_title → card_id
     _cache_has_data = False
     repo = _core.get_repository()
-    if repo and repo.all_cards:
+    # ``all_cards`` copies the list under the repo lock on every access, so ask
+    # for the cheap count first and bind the snapshot once.
+    if repo and repo.count:
         _cache_has_data = True
         for c in repo.all_cards:
             t = (c.get("title") or "").strip().lower()

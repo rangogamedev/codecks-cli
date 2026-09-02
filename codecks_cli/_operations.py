@@ -573,7 +573,14 @@ def snapshot_before_mutation(client: CodecksClient, card_ids: list[str]) -> None
             undo_dir = os.path.dirname(_UNDO_PATH) or "."
             fd, tmp = tempfile.mkstemp(dir=undo_dir, suffix=".tmp")
             try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                try:
+                    handle = os.fdopen(fd, "w", encoding="utf-8")
+                except BaseException:
+                    # fdopen did not take ownership of the descriptor — close it
+                    # here or it leaks for the lifetime of the process.
+                    os.close(fd)
+                    raise
+                with handle as f:
                     json.dump(data, f, indent=2)
             except BaseException:
                 try:
@@ -592,6 +599,10 @@ def undo_last_mutation(client: CodecksClient) -> dict:
     Returns:
         dict with ok, reverted_count, details.
     """
+    # Read *and* consume the snapshot in one critical section. Releasing the
+    # lock in between would let a concurrent mutation write a newer snapshot
+    # that the unlink below then destroys — only the snapshot actually read
+    # here may ever be removed.
     with _undo_lock:
         try:
             with open(_UNDO_PATH, encoding="utf-8") as f:
@@ -601,6 +612,10 @@ def undo_last_mutation(client: CodecksClient) -> dict:
                 "ok": False,
                 "error": "No undo snapshot found. Mutations save snapshots automatically.",
             }
+        try:
+            os.unlink(_UNDO_PATH)
+        except OSError:
+            pass
 
     cards = data.get("cards", {})
     if not cards:
@@ -624,13 +639,6 @@ def undo_last_mutation(client: CodecksClient) -> dict:
                 reverted.append(cid)
         except Exception as e:
             errors.append({"card_id": cid, "error": str(e)})
-
-    # Remove undo file after use
-    with _undo_lock:
-        try:
-            os.unlink(_UNDO_PATH)
-        except OSError:
-            pass
 
     return {
         "ok": True,

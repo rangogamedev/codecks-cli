@@ -44,8 +44,12 @@ def test_non_loopback_enables_protection_with_defaults(runner, monkeypatch):
 
     assert settings is not None
     assert settings.enable_dns_rebinding_protection is True
-    assert settings.allowed_hosts == ["localhost:*", "127.0.0.1:*"]
-    assert settings.allowed_origins == ["http://localhost:*", "http://127.0.0.1:*"]
+    assert settings.allowed_hosts == ["localhost:*", "127.0.0.1:*", "[::1]:*"]
+    assert settings.allowed_origins == [
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        "http://[::1]:*",
+    ]
 
 
 def test_non_loopback_honours_env_allowlists(runner, monkeypatch):
@@ -66,8 +70,12 @@ def test_blank_env_falls_back_to_the_defaults(runner, monkeypatch):
     settings = runner.build_transport_security("10.0.0.5")
 
     assert settings is not None
-    assert settings.allowed_hosts == ["localhost:*", "127.0.0.1:*"]
-    assert settings.allowed_origins == ["http://localhost:*", "http://127.0.0.1:*"]
+    assert settings.allowed_hosts == ["localhost:*", "127.0.0.1:*", "[::1]:*"]
+    assert settings.allowed_origins == [
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        "http://[::1]:*",
+    ]
 
 
 def test_main_binds_loopback_by_default(runner, monkeypatch):
