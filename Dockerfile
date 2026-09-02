@@ -4,7 +4,7 @@
 
 # Base image digest-pinned for supply-chain integrity.
 # Dependabot updates the tag + digest together when a new Python slim image ships.
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
+FROM python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc AS builder
 
 WORKDIR /build
 
@@ -20,13 +20,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 # tool itself isn't a floating install (bump this pin manually as needed).
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    /usr/local/bin/python -m pip install "uv==0.11.6" && \
+    /usr/local/bin/python -m pip install "uv==0.12.9" && \
     /usr/local/bin/uv export --frozen --no-emit-project --extra dev --extra mcp \
         -o /tmp/requirements.txt && \
     pip install -r /tmp/requirements.txt
 
 # --- Runtime stage ---
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS runtime
+FROM python:3.14-slim@sha256:a7fb1e634c4a578f9e0bd6327f11a3cde11b7a9395f48e24360c0988bcc5c2bc AS runtime
 
 # Non-root user for safety
 RUN groupadd -r codecks && useradd -r -g codecks -m codecks

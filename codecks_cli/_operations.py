@@ -1,7 +1,7 @@
 """Shared operations used by both CLI commands and MCP tools.
 
 These functions contain business logic that is independent of the
-transport layer (CLI argparse vs MCP FastMCP). Both cli.py commands
+transport layer (CLI argparse vs MCP MCPServer). Both cli.py commands
 and mcp_server/_tools_*.py tools should call these instead of
 duplicating logic.
 """

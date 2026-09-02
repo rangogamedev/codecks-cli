@@ -2,7 +2,7 @@
 """MCP server exposing CodecksClient methods as tools.
 
 Package structure (see .claude/maps/mcp-server.md for tool index):
-  __init__.py       — FastMCP init, register() calls, re-exports
+  __init__.py       — MCPServer init, register() calls, re-exports
   __main__.py       — ``py -m codecks_cli.mcp_server`` entry point
   _core.py          — Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
   _security.py      — Injection detection, sanitization, input validation
@@ -20,7 +20,7 @@ Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from codecks_cli.mcp_server import (
     _prompts,
@@ -32,7 +32,7 @@ from codecks_cli.mcp_server import (
     _tools_write,
 )
 
-mcp = FastMCP(
+mcp = MCPServer(
     "codecks",
     instructions=(
         "Codecks project management tools (53 tools). "

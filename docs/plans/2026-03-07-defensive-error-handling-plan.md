@@ -255,27 +255,28 @@ git commit -m "Add content parsing helper module"
 Add to `TestUpdateCards` class (after existing title/content tests near line 563):
 
 ```python
-    @patch("codecks_cli.client.update_card")
-    @patch("codecks_cli.client.get_card")
-    def test_content_with_windows_line_endings(self, mock_get, mock_update):
-        """Windows line endings should not break title detection."""
-        mock_get.return_value = {"card": {"c1": {"content": "Title\r\nOld body"}}}
-        mock_update.return_value = {}
-        client = _client()
-        client.update_cards(["c1"], content="New body")
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "Title\nNew body"
+@patch("codecks_cli.client.update_card")
+@patch("codecks_cli.client.get_card")
+def test_content_with_windows_line_endings(self, mock_get, mock_update):
+    """Windows line endings should not break title detection."""
+    mock_get.return_value = {"card": {"c1": {"content": "Title\r\nOld body"}}}
+    mock_update.return_value = {}
+    client = _client()
+    client.update_cards(["c1"], content="New body")
+    call_kwargs = mock_update.call_args[1]
+    assert call_kwargs["content"] == "Title\nNew body"
 
-    @patch("codecks_cli.client.update_card")
-    @patch("codecks_cli.client.get_card")
-    def test_content_empty_old_content(self, mock_get, mock_update):
-        """When old content is empty, content should pass through as-is."""
-        mock_get.return_value = {"card": {"c1": {"content": ""}}}
-        mock_update.return_value = {}
-        client = _client()
-        client.update_cards(["c1"], content="New body")
-        call_kwargs = mock_update.call_args[1]
-        assert call_kwargs["content"] == "\nNew body"
+
+@patch("codecks_cli.client.update_card")
+@patch("codecks_cli.client.get_card")
+def test_content_empty_old_content(self, mock_get, mock_update):
+    """When old content is empty, content should pass through as-is."""
+    mock_get.return_value = {"card": {"c1": {"content": ""}}}
+    mock_update.return_value = {}
+    client = _client()
+    client.update_cards(["c1"], content="New body")
+    call_kwargs = mock_update.call_args[1]
+    assert call_kwargs["content"] == "\nNew body"
 ```
 
 **Step 2: Run new tests to see them fail**
@@ -371,6 +372,7 @@ class TestErrorContract:
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_call_setup_error_not_retryable(self, MockClient):
         from codecks_cli.exceptions import SetupError
+
         MockClient.return_value.get_account.side_effect = SetupError("no token")
         _core._client = None
         result = _core._call("get_account")
@@ -390,6 +392,7 @@ class TestErrorContract:
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_call_cli_error_not_retryable(self, MockClient):
         from codecks_cli.exceptions import CliError
+
         MockClient.return_value.get_account.side_effect = CliError("bad id")
         _core._client = None
         result = _core._call("get_account")
@@ -627,7 +630,11 @@ class TestUpdateCardBody:
         # Verify update_cards was called with the right content
         client.update_cards.assert_called_once()
         call_kwargs = client.update_cards.call_args
-        assert "Keep Title" in call_kwargs[1].get("content", "") or call_kwargs[0][1] if call_kwargs[0] else ""
+        assert (
+            "Keep Title" in call_kwargs[1].get("content", "") or call_kwargs[0][1]
+            if call_kwargs[0]
+            else ""
+        )
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_update_card_body_invalid_uuid(self, MockClient):
@@ -676,9 +683,7 @@ def update_card_body(card_id: str, body: str) -> dict:
         old_content = card_result.get("content") or ""
 
     new_content = replace_body(old_content, body)
-    return _finalize_tool_result(
-        _call("update_cards", card_ids=[card_id], content=new_content)
-    )
+    return _finalize_tool_result(_call("update_cards", card_ids=[card_id], content=new_content))
 ```
 
 **Step 4: Register the new tool in the `register()` function**

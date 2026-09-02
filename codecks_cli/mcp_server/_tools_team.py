@@ -554,7 +554,7 @@ def get_team_playbook() -> dict:
 
 
 def register(mcp):
-    """Register team coordination tools with the FastMCP instance.
+    """Register team coordination tools with the MCPServer instance.
 
     Tools removed in v0.5.0:
     - partition_by_lane/partition_by_owner → merged into partition_cards(by=...)

@@ -10,7 +10,7 @@ Claude Code-specific configuration. For shared agent instructions, see [AGENTS.m
 - **Lock file**: `uv.lock` — pinned dependency versions, committed to git
 - **CI**: `.github/workflows/test.yml` — ruff, mypy, pytest (matrix: 3.12, 3.14) + Codecov + Docker smoke. All Actions pinned to commit hashes.
 - **Dependabot**: `.github/dependabot.yml` — weekly PRs for pip deps, GitHub Actions, and Docker
-- **Version**: `VERSION` in `codecks_cli/config.py` + `pyproject.toml` (keep in sync). Tags: `v0.1.0`..`v0.5.0`.
+- **Version**: `VERSION` in `codecks_cli/config.py` + `pyproject.toml` (keep in sync). Tags: `v0.1.0`..`v0.5.0`. Current version: 0.5.1 (tag pending).
 
 ## Skills (`.claude/commands/`)
 

@@ -132,7 +132,7 @@ def _env_float(key: str, default: float) -> float:
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 CONTRACT_SCHEMA_VERSION = "1.0"
 
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}

@@ -33,15 +33,19 @@ def parse_content(content: str | None) -> tuple[str, str]:
     """Split content into (title, body). Title = first non-empty line.
     Returns ("", "") for None/empty. Strips \\r from line endings."""
 
+
 def serialize_content(title: str, body: str) -> str:
     """Combine title + body into Codecks content format.
     Uses single \\n separator (no blank line) matching Codecks convention."""
 
+
 def replace_body(content: str | None, new_body: str) -> str:
     """Keep existing title, replace body."""
 
+
 def replace_title(content: str | None, new_title: str) -> str:
     """Keep existing body, replace title."""
+
 
 def has_title(content: str | None) -> bool:
     """True if content has a non-empty first line."""
@@ -84,9 +88,9 @@ def has_title(content: str | None) -> bool:
 {
     "ok": False,
     "error": "Card not found",
-    "error_code": "CARD_NOT_FOUND",       # machine-readable
-    "retryable": False,                     # agent decision hint
-    "schema_version": "1.0"
+    "error_code": "CARD_NOT_FOUND",  # machine-readable
+    "retryable": False,  # agent decision hint
+    "schema_version": "1.0",
 }
 ```
 
@@ -115,9 +119,9 @@ When a cache-served response has age > 80% of TTL:
 {
     "ok": True,
     "data": [...],
-    "stale_warning": True,        # only present when stale
-    "cache_age_seconds": 270,     # how old the cached data is
-    "cache_ttl_seconds": 300      # configured TTL
+    "stale_warning": True,  # only present when stale
+    "cache_age_seconds": 270,  # how old the cached data is
+    "cache_ttl_seconds": 300,  # configured TTL
 }
 ```
 

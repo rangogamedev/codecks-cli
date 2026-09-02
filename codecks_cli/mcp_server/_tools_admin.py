@@ -171,7 +171,7 @@ async def archive_deck(deck: str) -> dict:
 
 
 def register(mcp):
-    """Register all admin tools with the FastMCP instance."""
+    """Register all admin tools with the MCPServer instance."""
     mcp.tool()(create_project)
     mcp.tool()(create_deck)
     mcp.tool()(create_milestone)

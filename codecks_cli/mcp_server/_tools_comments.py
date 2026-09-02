@@ -64,7 +64,7 @@ def list_conversations(card_id: str) -> dict:
 
 
 def register(mcp):
-    """Register all comment tools with the FastMCP instance."""
+    """Register all comment tools with the MCPServer instance."""
     mcp.tool()(create_comment)
     mcp.tool()(reply_comment)
     mcp.tool()(close_comment)

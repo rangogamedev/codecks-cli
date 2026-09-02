@@ -79,6 +79,7 @@ Due dates (`dueAt`), Dependencies, Time tracking, Runs/Capacity, Guardians, Beas
 
 ```python
 from codecks_cli import CodecksClient
+
 client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```

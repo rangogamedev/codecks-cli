@@ -710,7 +710,7 @@ def quick_overview(project: str | None = None) -> dict:
 
 
 def register(mcp):
-    """Register all read tools with the FastMCP instance."""
+    """Register all read tools with the MCPServer instance."""
     mcp.tool()(get_account)
     mcp.tool()(list_cards)
     mcp.tool()(get_card)

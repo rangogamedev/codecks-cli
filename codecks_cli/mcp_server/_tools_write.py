@@ -1198,7 +1198,7 @@ def undo() -> dict:
 
 
 def register(mcp):
-    """Register all write tools with the FastMCP instance."""
+    """Register all write tools with the MCPServer instance."""
     mcp.tool()(create_card)
     mcp.tool()(attach_files)
     mcp.tool()(update_cards)

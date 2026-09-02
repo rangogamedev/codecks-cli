@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codecks-cli"
-version = "0.5.0"
+version = "0.5.1"
 description = "CLI, Python API, and MCP server for Codecks.io project management"
 readme = "README.md"
 license = "MIT"
@@ -22,19 +22,19 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = [
-  "mypy>=2.0",
-  "pytest>=9.0.3",
+  "mypy>=2.3.1",
+  "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
-  "ruff>=0.15.13",
+  "ruff>=0.16.5",
   # pip-audit scans installed deps against the PyPI/OSV advisory DBs.
   # Wired into CI and `quality_gate.py --audit` (see scripts/quality_gate.py).
-  "pip-audit>=2.7.3",
+  "pip-audit>=2.10.1",
   # mcp[cli] provides the MCP SDK's `mcp dev`/Inspector dev console.
   # Shipped installs use the slim base `mcp` (see the `mcp` extra below).
-  "mcp[cli]>=1.27.1",
+  "mcp[cli]>=2.1.1",
 ]
 mcp = [
-  "mcp>=1.27.1",
+  "mcp>=2.1.1",
 ]
 
 [tool.setuptools.package-data]

@@ -674,7 +674,7 @@ def session_start(agent_name: str | None = None) -> dict:
 
 
 def register(mcp):
-    """Register local tools with the FastMCP instance.
+    """Register local tools with the MCPServer instance.
 
     Tools removed in v0.5.0 (available via CLI or session_start):
     - get_pm_playbook → injected via session_start() / CLAUDE.md

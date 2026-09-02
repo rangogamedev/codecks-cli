@@ -48,7 +48,7 @@ Tokens go in `.env` (gitignored). Never paste tokens in chat.
 
 
 def register(mcp):
-    """Register MCP prompts on the FastMCP instance."""
+    """Register MCP prompts on the MCPServer instance."""
 
     @mcp.prompt("pm-session")
     def pm_session_prompt() -> str:

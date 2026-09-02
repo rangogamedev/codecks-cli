@@ -108,7 +108,7 @@ codecks_cli/
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
   mcp_server/           <- 53 MCP tools (package, 6 tool modules)
-    __init__.py          FastMCP init, registration, re-exports
+    __init__.py          MCPServer init, registration, re-exports
     __main__.py          py -m codecks_cli.mcp_server entry
     _core.py             Client cache, dispatcher, snapshot cache
     _security.py         Injection detection, sanitization
