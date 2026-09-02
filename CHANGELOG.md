@@ -35,7 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/project_meta.py` read the removed `codecks_cli/mcp_server.py` module and always reported 0 MCP tools, and its source-module count omitted `mcp_server/` — both now walk the package (53 tools).
 - `scripts/validate_docs.py --fix` stored issue locations as bare basenames, so every file under `docs/` (and `.claude/`, `.github/`) was silently skipped while still being counted as "fixed" — locations are now repo-relative.
 - `docker/build.sh` passed `--build-arg PYTHON_VERSION` to a Dockerfile with no such `ARG` (the base image is digest-pinned) — the dead argument and its `DEVELOPMENT.md` line are gone.
-<!-- PHASE2-FIXED -->
+- Cached-card filters in `list_cards` (MCP) now match the flattened keys that `CodecksClient.list_cards()` actually emits (`deck_name`, `owner_name`, `milestone_name`, `lastUpdatedAt`), so `deck`, `owner`, `owner=none`, `milestone`, `stale_days`, `updated_after` and `updated_before` no longer return empty or wrong results when served from cache.
+- Cards with no timestamp are no longer counted as infinitely stale by `stale_days`, and no longer silently dropped from `updated_after` matches.
+- `sort` by `deck`, `owner` or `updated` no longer degrades to insertion order on cached cards.
+- `project` filters resolve a card's deck to its project instead of reading a `project` key that flattened cards never carry — affects `list_cards`, `quick_overview`, `partition_cards`, `partition_by_lane`, `partition_by_owner` and `team_dashboard`.
+- `quick_overview` reports a real `stale_count` and a real `deck_summary` instead of `0` and `unassigned`.
+- `isDoc` is now part of the list field set, so the MCP doc-card guardrail fires `DOC_CARD_VIOLATION` from a warmed cache instead of letting status/priority/effort updates through to doc cards.
+- `CodecksClient.pm_focus()` echoes the requested `owner` in `filters.owner` instead of the last processed card's owner.
+- `admin.create_deck()` actually seeds the new deck into the deck cache, so an immediately following `resolve_deck_id()` finds it; the duplicate check also reads `project_id`/`projectId` in either spelling.
+- `tags.sync_from_api()` queries `masterTags` under `account` and reads the `title` field, so live tag sync no longer returns zero tags.
 
 ### Removed
 - Unused `admin` extra (Playwright) and the orphaned Playwright-era dead code: `playwright_admin.py`, `playwright_selectors.json`, and `endpoint_cache.py` (admin operations use the dispatch API; these were imported nowhere). Removes `playwright`, `pyee`, `greenlet` from the lock.
