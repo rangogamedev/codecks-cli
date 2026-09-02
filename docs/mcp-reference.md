@@ -77,7 +77,7 @@ This also warms the snapshot cache, making subsequent reads near-instant (<50ms)
 
 Notes on individual tools:
 
-- `attach_files(card_id, files, dry_run=False)` — paths must resolve inside an allowed root: the project root plus any directory in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated). Dot-prefixed components, credential-looking basenames (`*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*token*`, `*secret*`), `/etc`, `/proc`, `/sys`, and names containing `"`/CR/LF are always refused. `dry_run=True` returns `files: [{path, resolved, size, sha256}]` and uploads nothing. See [cli-reference.md](cli-reference.md#attachments).
+- `attach_files(card_id, files, dry_run=False)` — paths must resolve inside an allowed root: the project root and the current working directory, plus any directory in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated; non-absolute, non-existent and filesystem-root entries are ignored with a warning). Dot-prefixed components, credential-looking basenames (`*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*token*`, `*secret*`), `/etc`, `/proc`, `/sys`, and names containing `"`/CR/LF are always refused. `dry_run=True` returns `files: [{path, resolved, size, sha256}]` and uploads nothing. See [cli-reference.md](cli-reference.md#attachments).
 - `archive_deck(deck)` — despite the name, this dispatches `decks/delete`: the deck is **deleted and cannot be restored**. Its cards are preserved.
 - `create_tag(name, project?)` — takes no color; the `projects/addTag` endpoint has no color field.
 - `batch_delete_cards` / `batch_archive_cards` / `batch_unarchive_cards` — `ok` is `false` if any card failed, and `failed` lists `{card_id, error}` for each one.

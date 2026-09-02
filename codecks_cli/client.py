@@ -896,8 +896,9 @@ class CodecksClient:
     def attach_files(self, card_id: str, files: list[str], dry_run: bool = False) -> dict[str, Any]:
         """Attach local files to an existing card.
 
-        Paths must resolve inside an allowed root (the project root plus any
-        directory listed in ``CODECKS_ATTACH_ALLOW_DIRS``) and must not match the
+        Paths must resolve inside an allowed root (the project root and the
+        current working directory, plus any directory listed in
+        ``CODECKS_ATTACH_ALLOW_DIRS``) and must not match the
         credential denylist.
 
         Args:

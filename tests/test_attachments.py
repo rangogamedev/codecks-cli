@@ -39,9 +39,12 @@ def _allow_scratch_roots(monkeypatch):
     roots = []
     for candidate in (Path("/tmp"), Path(".sandbox_tmp")):
         try:
-            roots.append(str(candidate.resolve()))
+            resolved = candidate.resolve()
         except OSError:
             continue
+        # Non-existent entries are skipped (with a warning) by the allowlist.
+        if resolved.is_dir():
+            roots.append(str(resolved))
     monkeypatch.setenv(attachments.ALLOW_DIRS_ENV, os.pathsep.join(roots))
 
 
@@ -248,6 +251,9 @@ def project_root(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
     monkeypatch.setattr(config, "_PROJECT_ROOT", str(root))
+    # The current directory is an allowed root too, so point it at the same
+    # isolated tree — otherwise the repo checkout would widen the policy.
+    monkeypatch.chdir(root)
     monkeypatch.delenv(attachments.ALLOW_DIRS_ENV, raising=False)
     return root
 
@@ -288,7 +294,9 @@ def test_env_override_allows_extra_root(project_root, tmp_path, monkeypatch):
         ALLOW_DIRS_ENV, os.pathsep.join([str(tmp_path / "unused"), str(outside.parent)])
     )
 
-    files = prepare_attachment_files([str(outside)])
+    # The bogus first entry is skipped with a warning; the valid one still applies.
+    with pytest.warns(RuntimeWarning, match="not an existing directory"):
+        files = prepare_attachment_files([str(outside)])
 
     assert files[0].file_name == "notes.txt"
 
@@ -413,3 +421,160 @@ def test_client_dry_run_does_not_resolve_a_user_id(project_root):
     mock_user.assert_not_called()
     mock_session.assert_not_called()
     assert result["dry_run"] is True
+
+
+# ---------------------------------------------------------------------------
+# Allowed-root validation
+# ---------------------------------------------------------------------------
+
+
+def test_current_directory_is_an_allowed_root_by_default(tmp_path, monkeypatch):
+    """pip installs put _PROJECT_ROOT in site-packages, so cwd has to count too."""
+    from codecks_cli import attachments, config
+
+    elsewhere = tmp_path / "site-packages"
+    elsewhere.mkdir()
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.setattr(config, "_PROJECT_ROOT", str(elsewhere))
+    monkeypatch.delenv(attachments.ALLOW_DIRS_ENV, raising=False)
+    monkeypatch.chdir(workdir)
+
+    target = workdir / "hero.png"
+    target.write_bytes(b"png")
+
+    files = attachments.prepare_attachment_files([str(target)])
+
+    assert files[0].file_name == "hero.png"
+    assert workdir.resolve() in attachments._allowed_roots()
+
+
+def test_filesystem_root_entry_is_skipped_with_a_warning(project_root, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, _allowed_roots
+
+    fs_root = str(Path(project_root.anchor or "/"))
+    monkeypatch.setenv(ALLOW_DIRS_ENV, fs_root)
+
+    with pytest.warns(RuntimeWarning, match="filesystem root"):
+        roots = _allowed_roots()
+
+    assert Path(fs_root).resolve() not in roots
+
+
+def test_relative_entry_is_skipped_with_a_warning(project_root, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, _allowed_roots
+
+    monkeypatch.setenv(ALLOW_DIRS_ENV, ".")
+
+    with pytest.warns(RuntimeWarning, match="not an absolute path"):
+        roots = _allowed_roots()
+
+    # Only the two defaults (project root and cwd, which the fixture makes equal).
+    assert roots == [project_root.resolve()]
+
+
+def test_nonexistent_entry_is_skipped_with_a_warning(project_root, tmp_path, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, _allowed_roots
+
+    missing = tmp_path / "does-not-exist"
+    monkeypatch.setenv(ALLOW_DIRS_ENV, str(missing))
+
+    with pytest.warns(RuntimeWarning, match="not an existing directory"):
+        roots = _allowed_roots()
+
+    assert missing.resolve() not in roots
+
+
+def test_file_entry_is_skipped_with_a_warning(project_root, tmp_path, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, _allowed_roots
+
+    a_file = tmp_path / "not-a-dir.txt"
+    a_file.write_text("x", encoding="utf-8")
+    monkeypatch.setenv(ALLOW_DIRS_ENV, str(a_file))
+
+    with pytest.warns(RuntimeWarning, match="not an existing directory"):
+        roots = _allowed_roots()
+
+    assert a_file.resolve() not in roots
+
+
+def test_valid_entry_is_kept_alongside_the_defaults(project_root, tmp_path, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, _allowed_roots
+
+    extra = tmp_path / "shared"
+    extra.mkdir()
+    monkeypatch.setenv(ALLOW_DIRS_ENV, str(extra))
+
+    roots = _allowed_roots()
+
+    assert extra.resolve() in roots
+    assert project_root.resolve() in roots
+
+
+# ---------------------------------------------------------------------------
+# Multipart field hardening (fields come from the /s3/sign server response)
+# ---------------------------------------------------------------------------
+
+
+def _plain_attachment(project_root):
+    from codecks_cli.attachments import AttachmentFile
+
+    target = project_root / "plain.txt"
+    target.write_text("body", encoding="utf-8")
+    return AttachmentFile(path=target, file_name="plain.txt", content_type="text/plain", size=4)
+
+
+def test_multipart_rejects_crlf_in_a_field_name(project_root):
+    from codecks_cli.attachments import build_multipart_body
+
+    attachment = _plain_attachment(project_root)
+
+    with pytest.raises(CliError, match="Upload field name contains a CR/LF"):
+        build_multipart_body(attachment, {"key\r\nX-Injected": "v"}, boundary="B")
+
+
+def test_multipart_rejects_crlf_in_a_field_value(project_root):
+    from codecks_cli.attachments import build_multipart_body
+
+    attachment = _plain_attachment(project_root)
+
+    with pytest.raises(CliError, match="value contains a CR/LF"):
+        build_multipart_body(attachment, {"policy": "v\r\n--B\r\n"}, boundary="B")
+
+
+def test_multipart_escapes_quotes_and_backslashes_in_a_field_name(project_root):
+    from codecks_cli.attachments import build_multipart_body
+
+    attachment = _plain_attachment(project_root)
+
+    body, _ = build_multipart_body(attachment, {'we"ird\\key': "value"}, boundary="B")
+
+    assert b'name="we\\"ird\\\\key"' in body
+    assert b"value" in body
+
+
+def test_multipart_leaves_field_values_verbatim(project_root):
+    """Values are body content: escaping them would corrupt the S3 policy fields."""
+    from codecks_cli.attachments import build_multipart_body
+
+    attachment = _plain_attachment(project_root)
+
+    body, _ = build_multipart_body(attachment, {"policy": 'a"b\\c'}, boundary="B")
+
+    assert b'a"b\\c' in body
+
+
+def test_multipart_rejects_crlf_in_the_file_name(project_root):
+    from codecks_cli.attachments import AttachmentFile, build_multipart_body
+
+    target = project_root / "plain.txt"
+    target.write_text("body", encoding="utf-8")
+    attachment = AttachmentFile(
+        path=target,
+        file_name="evil\r\nContent-Type: text/html",
+        content_type="text/plain",
+        size=4,
+    )
+
+    with pytest.raises(CliError, match="Attachment file name contains a CR/LF"):
+        build_multipart_body(attachment, None, boundary="B")

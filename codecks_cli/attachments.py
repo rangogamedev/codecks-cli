@@ -1,8 +1,9 @@
 """Attachment validation and upload helpers for Codecks cards.
 
 Path policy: an attachment must resolve (symlinks followed) inside an allowed
-root — the project root, plus anything listed in the ``CODECKS_ATTACH_ALLOW_DIRS``
-environment variable — and must not match the credential denylist below.
+root — the project root and the current working directory, plus anything listed
+in the ``CODECKS_ATTACH_ALLOW_DIRS`` environment variable — and must not match
+the credential denylist below.
 """
 
 import fnmatch
@@ -10,6 +11,7 @@ import hashlib
 import mimetypes
 import os
 import uuid
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -45,6 +47,17 @@ _DENIED_ROOTS = ("/etc", "/proc", "/sys")
 _ILLEGAL_NAME_CHARS = ('"', "\r", "\n")
 
 
+def _escape_header_param(value: str) -> str:
+    """Escape backslashes and quotes for a quoted-string header parameter."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _reject_crlf(value: str, label: str) -> None:
+    """Refuse CR/LF, which no amount of quoting makes safe in a MIME part."""
+    if "\r" in value or "\n" in value:
+        raise CliError(f"[ERROR] {label} contains a CR/LF character: {value!r}")
+
+
 @dataclass(frozen=True)
 class AttachmentFile:
     """Local file metadata needed for Codecks/S3 uploads."""
@@ -55,23 +68,65 @@ class AttachmentFile:
     size: int
 
 
+def _skip_root(entry: str, reason: str) -> None:
+    """Warn (once per call) that an allowlist entry was ignored."""
+    warnings.warn(
+        f"{ALLOW_DIRS_ENV} entry {entry!r} ignored: {reason}.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _allowed_roots() -> list[Path]:
-    """Directories attachments may be read from: project root + env overrides."""
+    """Directories attachments may be read from.
+
+    Allowed by default: the project root and the current working directory —
+    for a pip-installed package the project root is ``site-packages``, which
+    holds nothing worth attaching, so the directory the user actually works in
+    has to count too. Extra roots come from ``CODECKS_ATTACH_ALLOW_DIRS``; an
+    entry that is not an absolute path, is not an existing directory, or is a
+    whole filesystem root is skipped with a warning instead of silently
+    widening the policy to everything.
+    """
     from codecks_cli.config import _PROJECT_ROOT
 
     roots: list[Path] = []
-    try:
-        roots.append(Path(_PROJECT_ROOT).expanduser().resolve(strict=False))
-    except OSError:
-        pass
+
+    def add(root: Path) -> None:
+        if root not in roots:
+            roots.append(root)
+
+    for default in (Path(_PROJECT_ROOT), Path.cwd()):
+        try:
+            add(default.expanduser().resolve(strict=False))
+        except OSError:
+            continue
+
     for entry in (os.environ.get(ALLOW_DIRS_ENV) or "").split(os.pathsep):
         entry = entry.strip()
         if not entry:
             continue
-        try:
-            roots.append(Path(entry).expanduser().resolve(strict=False))
-        except OSError:
+        candidate = Path(entry).expanduser()
+        if not candidate.is_absolute():
+            _skip_root(entry, "not an absolute path")
             continue
+        try:
+            resolved = candidate.resolve(strict=False)
+        except OSError as e:
+            _skip_root(entry, f"could not be resolved ({e})")
+            continue
+        if resolved.parent == resolved:
+            _skip_root(entry, "a filesystem root would allow every file on the disk")
+            continue
+        try:
+            is_dir = resolved.is_dir()
+        except OSError as e:
+            _skip_root(entry, f"could not be inspected ({e})")
+            continue
+        if not is_dir:
+            _skip_root(entry, "not an existing directory")
+            continue
+        add(resolved)
     return roots
 
 
@@ -198,14 +253,29 @@ def build_multipart_body(
     *,
     boundary: str | None = None,
 ) -> tuple[bytes, str]:
-    """Build a multipart/form-data body for a single S3 file upload."""
+    """Build a multipart/form-data body for a single S3 file upload.
+
+    Field names and values come from the ``/s3/sign`` response, i.e. from the
+    server — they are still treated as untrusted: CR/LF is refused outright
+    (it would let a crafted field inject headers or a boundary line) and the
+    name is escaped like the file name before it goes into the quoted-string
+    ``Content-Disposition`` parameter. Values are not escaped: they are body
+    content, not header syntax, and rewriting them would corrupt the upload
+    policy/signature fields.
+    """
+    _reject_crlf(attachment.file_name, "Attachment file name")
     boundary = boundary or f"----codecks-{uuid.uuid4().hex}"
     chunks: list[bytes] = []
 
     def add_field(name: str, value: object) -> None:
+        text = str(value)
+        _reject_crlf(name, "Upload field name")
+        _reject_crlf(text, f"Upload field {name!r} value")
         chunks.append(f"--{boundary}\r\n".encode())
-        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
-        chunks.append(str(value).encode("utf-8"))
+        chunks.append(
+            f'Content-Disposition: form-data; name="{_escape_header_param(name)}"\r\n\r\n'.encode()
+        )
+        chunks.append(text.encode("utf-8"))
         chunks.append(b"\r\n")
 
     for key, value in (fields or {}).items():
@@ -215,7 +285,7 @@ def build_multipart_body(
     chunks.append(f"--{boundary}\r\n".encode())
     # Escape backslashes and quotes so a crafted file name cannot terminate the
     # quoted-string parameter and inject extra header fields (RFC 6266 / 2616).
-    escaped_name = attachment.file_name.replace("\\", "\\\\").replace('"', '\\"')
+    escaped_name = _escape_header_param(attachment.file_name)
     chunks.append(
         (
             'Content-Disposition: form-data; name="file"; '

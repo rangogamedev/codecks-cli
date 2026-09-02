@@ -10,6 +10,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -537,6 +538,11 @@ def save_feedback(
 _UNDO_FILE = ".pm_undo.json"
 _UNDO_PATH = os.path.join(_PROJECT_ROOT, _UNDO_FILE)
 
+#: Serializes read-modify-write of the undo snapshot file. MCP SDK v2 runs sync
+#: tool functions on a worker-thread pool, so two mutations can land here at
+#: once. Only the file access is guarded — never an API request.
+_undo_lock = threading.Lock()
+
 
 def snapshot_before_mutation(client: CodecksClient, card_ids: list[str]) -> None:
     """Save current state of cards about to be mutated for undo support.
@@ -562,14 +568,22 @@ def snapshot_before_mutation(client: CodecksClient, card_ids: list[str]) -> None
         "timestamp": datetime.now(UTC).isoformat(),
         "cards": cards,
     }
-    try:
-        undo_dir = os.path.dirname(_UNDO_PATH) or "."
-        fd, tmp = tempfile.mkstemp(dir=undo_dir, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, _UNDO_PATH)
-    except OSError:
-        pass  # Non-fatal
+    with _undo_lock:
+        try:
+            undo_dir = os.path.dirname(_UNDO_PATH) or "."
+            fd, tmp = tempfile.mkstemp(dir=undo_dir, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            os.replace(tmp, _UNDO_PATH)
+        except OSError:
+            pass  # Non-fatal
 
 
 def undo_last_mutation(client: CodecksClient) -> dict:
@@ -578,14 +592,15 @@ def undo_last_mutation(client: CodecksClient) -> dict:
     Returns:
         dict with ok, reverted_count, details.
     """
-    try:
-        with open(_UNDO_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {
-            "ok": False,
-            "error": "No undo snapshot found. Mutations save snapshots automatically.",
-        }
+    with _undo_lock:
+        try:
+            with open(_UNDO_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {
+                "ok": False,
+                "error": "No undo snapshot found. Mutations save snapshots automatically.",
+            }
 
     cards = data.get("cards", {})
     if not cards:
@@ -611,10 +626,11 @@ def undo_last_mutation(client: CodecksClient) -> dict:
             errors.append({"card_id": cid, "error": str(e)})
 
     # Remove undo file after use
-    try:
-        os.unlink(_UNDO_PATH)
-    except OSError:
-        pass
+    with _undo_lock:
+        try:
+            os.unlink(_UNDO_PATH)
+        except OSError:
+            pass
 
     return {
         "ok": True,

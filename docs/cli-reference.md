@@ -207,8 +207,9 @@ codecks-cli attach <card-id> mockup.png --dry-run   # validate only, upload noth
 
 Every path is resolved (symlinks followed) and must land inside an **allowed root**:
 
-- the project root, and
-- any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows; each entry is expanded and resolved).
+- the project root,
+- the current working directory (a pip-installed package's project root is `site-packages`, which holds nothing shareable), and
+- any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows; each entry is expanded and resolved). An entry that is not an absolute path, is not an existing directory, or is a whole filesystem root (`/`, `C:\`) is skipped with a warning on stderr.
 
 ```bash
 CODECKS_ATTACH_ALLOW_DIRS=/srv/art:/mnt/renders codecks-cli attach <card-id> /srv/art/hero.png

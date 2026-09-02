@@ -53,7 +53,14 @@ def _write_private_file(path, content):
             os.chmod(tmp_path, 0o600)
         except (OSError, NotImplementedError):
             pass
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        try:
+            handle = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            # fdopen did not take ownership of the descriptor — close it here
+            # or it leaks for the lifetime of the process.
+            os.close(fd)
+            raise
+        with handle as f:
             f.write(content)
         try:
             os.replace(tmp_path, path)
@@ -282,26 +289,26 @@ def _run_google_auth_flow():
     # it. Probing with a throwaway socket first would leave a window in which
     # another process could grab the port before the real server binds it.
     server = http.server.HTTPServer(("127.0.0.1", 0), _AuthHandler)
-    server.timeout = 120
-    redirect_uri = f"http://127.0.0.1:{server.server_address[1]}"
-
-    # Build authorization URL
-    auth_params = urllib.parse.urlencode(
-        {
-            "client_id": config.GOOGLE_CLIENT_ID,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": config.GOOGLE_SCOPE,
-            "access_type": "offline",
-            "prompt": "consent",
-            "state": oauth_state,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-        }
-    )
-    auth_url = f"{config.GOOGLE_AUTH_URL}?{auth_params}"
-
     try:
+        server.timeout = 120
+        redirect_uri = f"http://127.0.0.1:{server.server_address[1]}"
+
+        # Build authorization URL
+        auth_params = urllib.parse.urlencode(
+            {
+                "client_id": config.GOOGLE_CLIENT_ID,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": config.GOOGLE_SCOPE,
+                "access_type": "offline",
+                "prompt": "consent",
+                "state": oauth_state,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+        auth_url = f"{config.GOOGLE_AUTH_URL}?{auth_params}"
+
         # Open the browser; the server is already listening.
         print("Opening browser for Google authorization...")
         print(f"  If the browser doesn't open, visit:\n  {auth_url}")
@@ -309,6 +316,8 @@ def _run_google_auth_flow():
         # Wait for the callback (one request only)
         server.handle_request()
     finally:
+        # Covers every path between bind and callback, so the listening socket
+        # is never left open on an exception.
         server.server_close()
 
     if server_error[0]:

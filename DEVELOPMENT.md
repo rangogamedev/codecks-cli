@@ -219,6 +219,23 @@ Run everything in a sandboxed Linux container — no Python install needed on th
 - Default builds use the lightweight Python runtime; shell/Claude scripts build the optional agent image on demand
 - `MCP_HTTP_PORT=9000 ./docker/mcp-http.sh` to override the HTTP port
 
+#### MCP HTTP transport
+
+The HTTP MCP server (`scripts/run_mcp_http.py`) is unauthenticated, so it binds
+loopback by default and the Compose service publishes its port on `127.0.0.1`
+only:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MCP_HTTP_HOST` | `127.0.0.1` | Bind address. Compose sets `0.0.0.0` *inside* the container; only use a non-loopback value behind a loopback-published port or a trusted reverse proxy. |
+| `MCP_HTTP_PORT` | `8808` | TCP port. |
+| `MCP_HTTP_ALLOWED_HOSTS` | `localhost:*,127.0.0.1:*` | Comma-separated `Host` header allowlist, applied when `MCP_HTTP_HOST` is not loopback. |
+| `MCP_HTTP_ALLOWED_ORIGINS` | `http://localhost:*,http://127.0.0.1:*` | Comma-separated `Origin` header allowlist, same condition. |
+
+The MCP SDK only auto-enables DNS-rebinding protection for loopback binds, so
+`build_transport_security()` supplies explicit `TransportSecuritySettings` for
+every other bind address.
+
 ### Security Hardening
 
 All Docker services inherit these settings:

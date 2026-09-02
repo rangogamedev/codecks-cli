@@ -28,6 +28,9 @@ def _isolate_config(monkeypatch):
     monkeypatch.setattr(config, "RUNTIME_QUIET", False)
     monkeypatch.setattr(config, "RUNTIME_VERBOSE", False)
 
+    # Attachment allowlist must not leak in from the developer's environment
+    monkeypatch.delenv("CODECKS_ATTACH_ALLOW_DIRS", raising=False)
+
     # Reset the client singleton so tests don't share state
     from codecks_cli import commands
 

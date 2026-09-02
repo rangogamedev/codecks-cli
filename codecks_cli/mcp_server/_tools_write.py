@@ -83,10 +83,12 @@ def create_card(
 def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
     """Attach local file(s) to an existing card.
 
-    Paths must resolve inside an allowed root — the project root, plus any
-    directory listed in the CODECKS_ATTACH_ALLOW_DIRS environment variable
-    (os.pathsep-separated). Dot-prefixed components and credential-looking
-    names (*.pem, *.key, id_rsa*, *token*, *secret*, ...) are always refused.
+    Paths must resolve inside an allowed root — the project root and the
+    current working directory, plus any directory listed in the
+    CODECKS_ATTACH_ALLOW_DIRS environment variable (os.pathsep-separated).
+    Dot-prefixed components and credential-looking names (*.pem, *.key,
+    id_rsa*, *token*, *secret*, ...) are always refused. dry_run validates
+    locally and needs neither a token nor a network call.
 
     Args:
         card_id: Full 36-char UUID.
@@ -103,15 +105,28 @@ def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
     if dry_run:
-        result = _call("attach_files", card_id=card_id, files=files, dry_run=True)
-        if isinstance(result, dict) and result.get("ok"):
-            result = {
-                **result,
+        # A preview uploads nothing, so it must not need a token or a network
+        # round-trip: run the path policy locally instead of going through
+        # _call() -> _get_client() (which validates the session token).
+        from codecks_cli.attachments import preview_attachment_files
+
+        try:
+            previews = preview_attachment_files(files)
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "card_id": card_id,
+                "attached": 0,
+                "failed": 0,
+                "files": previews,
                 "action": "attach_files",
-                "file_count": len(result.get("files") or []),
+                "file_count": len(previews),
                 "message": f"Would attach {len(files)} file(s) to card {card_id}",
             }
-        return _finalize_tool_result(result)
+        )
     return _finalize_tool_result(_call("attach_files", card_id=card_id, files=files))
 
 
@@ -834,7 +849,7 @@ def batch_create_cards(
                 _existing_titles[t] = c.get("id", "")
 
     # Suppress per-card disk writes; persist once after the batch
-    _core._batch_in_progress = True
+    _core._set_batch_in_progress(True)
     try:
         for i, item in enumerate(parsed):
             if not isinstance(item, dict):
@@ -926,7 +941,7 @@ def batch_create_cards(
             # Track this title so later items in the same batch don't duplicate it
             _existing_titles[normalized] = card_id
     finally:
-        _core._batch_in_progress = False
+        _core._set_batch_in_progress(False)
         _core._persist_cache_to_disk()  # Single disk write for the whole batch
 
     response: dict = {
@@ -951,7 +966,7 @@ def _batch_single_card_op(
     """
     results: list[dict] = []
     success = 0
-    _core._batch_in_progress = True
+    _core._set_batch_in_progress(True)
     try:
         for card_id in card_ids:
             op_result = _call(method_name, card_id=card_id)
@@ -964,7 +979,7 @@ def _batch_single_card_op(
                 )
                 results.append({"card_id": card_id, "status": "error", "error": error_msg})
     finally:
-        _core._batch_in_progress = False
+        _core._set_batch_in_progress(False)
         _core._persist_cache_to_disk()
     return success, results
 

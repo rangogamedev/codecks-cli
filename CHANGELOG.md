@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- MCP HTTP runner (`scripts/run_mcp_http.py`) binds `127.0.0.1` by default instead of `0.0.0.0`, and the `mcp-http` Compose service publishes its port on loopback only (`127.0.0.1:${MCP_HTTP_PORT:-8808}:8808`) while setting `MCP_HTTP_HOST=0.0.0.0` inside the container. The MCP SDK only auto-enables DNS-rebinding (Host/Origin) protection for loopback binds, so a non-loopback `MCP_HTTP_HOST` now gets explicit `TransportSecuritySettings` built from `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (defaults `localhost:*,127.0.0.1:*` and `http://localhost:*,http://127.0.0.1:*`).
+- `.gitignore` covers the atomic-write temp files (`.gdd_tmp_*`, `.env_tmp_*`, `tmp*.tmp`) that a crash can leave behind holding `.env` contents or a Google refresh token.
+- Multipart upload fields from the `/s3/sign` response are validated before use: CR/LF in a field name or value is refused, and field names get the same backslash/quote escaping as the file name. `build_multipart_body` re-checks the file name for CR/LF defensively.
+- `CODECKS_ATTACH_ALLOW_DIRS` entries that are not absolute paths, are not existing directories, or name a whole filesystem root are skipped with a warning instead of silently widening the attachment allowlist to everything.
+
 ### Added
 - AI-agent guide, reusable example skills, and MCP prompts for PM sessions and setup.
 - Attachment support: `create --file`, new `attach` command, `CodecksClient.attach_files()`, and MCP `attach_files` tool using stdlib multipart uploads.
@@ -18,11 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency audit + full lock refresh to latest (`mcp` 1.27→1.28→2.1, `pytest` 9.0.3→9.1→9.1.1, `ruff` 0.15.13→0.15.17→0.16.5, `mypy` 1.20→2.1→2.3.1, `coverage` 7.14→7.16, Docker `uv` 0.11.6→0.12.9, GitHub Action `setup-uv` v9→v10.0.1, `python:3.14-slim` digest refresh, plus transitives — `httpx` replaced by `httpx2`, `pydantic-settings` dropped, `mcp-types` and `opentelemetry-api` added).
 - MCP SDK v2 migration: `FastMCP` → `MCPServer`; `scripts/run_mcp_http.py` now passes host/port to `run()`.
 - `create_tag` MCP tool drops the unsupported `color` parameter — the `projects/addTag` dispatch endpoint has no color field, so it was validated and documented but never sent.
+- Attachments: the current working directory is an allowed root alongside the project root — a pip-installed package's project root is `site-packages`, which holds nothing shareable. `SECURITY.md` now also states the limit of the policy: it constrains an agent restricted to the CLI/MCP tools, not one that can also write files into an allowed root.
 - Version bumped to 0.5.1.
 - MCP SDK dev console (`mcp[cli]`) moved from the shipped `mcp` extra to the `dev` extra — end-user `pip install codecks-cli[mcp]` is now slim (drops `typer`, `rich`, `shellingham`, `pygments`, `markdown-it-py`, `mdurl`); developers keep `mcp dev` via the `dev` extra.
 - Dockerfile installs dev+mcp dependencies from the committed `uv.lock` via `uv export` instead of a hardcoded version list — `pyproject.toml`/`uv.lock` are now the single source of truth (no version drift).
 
 ### Fixed
+- Thread safety under MCP SDK v2: the SDK runs synchronous tool functions on a worker-thread pool (v1 ran them inline on the event loop), so the unguarded module globals in `mcp_server/_core.py` (client/store singletons, snapshot cache, batch flag, rate-limit timestamps, agent claims) and the `CardRepository` indexes could interleave. `_core` now has a module-level `RLock` around every state mutation — never held across a Codecks API request — `CardRepository` has its own `RLock` and returns snapshot copies from its read accessors, and the `.pm_undo.json` read-modify-write is serialized.
+- MCP `attach_files(dry_run=True)` built a `CodecksClient` (and therefore validated the session token over the network) just to preview paths — it now runs the path policy locally via `preview_attachment_files()`, so a preview needs neither a token nor a network call.
+- `gdd._write_private_file` leaked the `mkstemp` descriptor if `os.fdopen` raised, and the Google OAuth callback `HTTPServer` was constructed outside the `try:` whose `finally` closes it — both now close on every path.
 - `batch_delete_cards` / `batch_archive_cards` / `batch_unarchive_cards` hardcoded `ok: true` even when every card failed — `ok` now reflects whether all cards succeeded, and a `failed` list names each failure.
 - `undo` used truthiness when restoring a snapshot, so a card whose `status`/`priority`/`effort` had been empty was reported as reverted while keeping the new value — empty fields are now restored with the `"null"` clear sentinel (`CodecksClient.update_cards` learned `status="null"` to match `priority`/`effort`).
 - `archive_deck` (MCP tool) and `CodecksClient.archive_deck_admin` documented themselves as "reversible" while dispatching `decks/delete` — docstrings and docs now say the deck is deleted and cannot be restored (cards are preserved). Tool name unchanged.

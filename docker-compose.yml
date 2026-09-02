@@ -79,8 +79,14 @@ services:
       - path: .env
         required: false
     command: ["python", "scripts/run_mcp_http.py"]
+    environment:
+      # Bind all interfaces *inside* the container; the published port below is
+      # loopback-only, and MCP_HTTP_ALLOWED_HOSTS/ORIGINS keep DNS-rebinding
+      # protection on for the non-loopback bind.
+      MCP_HTTP_HOST: "0.0.0.0"
     ports:
-      - "${MCP_HTTP_PORT:-8808}:8808"
+      # Loopback-only: the MCP server is unauthenticated.
+      - "127.0.0.1:${MCP_HTTP_PORT:-8808}:8808"
     healthcheck:
       test: ["CMD", "python", "-c",
         "import socket; s=socket.create_connection(('localhost',8808),timeout=3); s.close()"]

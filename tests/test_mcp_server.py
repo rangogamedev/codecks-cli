@@ -253,40 +253,55 @@ class TestMutationTools:
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_attach_files_dry_run(self, MockClient):
-        """dry_run delegates to the client so the path policy actually runs."""
+        """dry_run runs the path policy locally — no client, no network."""
         preview = [
             {"path": "mockup.png", "resolved": "/p/mockup.png", "size": 3, "sha256": "ab"},
             {"path": "notes.txt", "resolved": "/p/notes.txt", "size": 5, "sha256": "cd"},
         ]
-        client = _mock_client(
-            attach_files={
-                "ok": True,
-                "dry_run": True,
-                "card_id": _C1,
-                "attached": 0,
-                "failed": 0,
-                "files": preview,
-            }
-        )
-        MockClient.return_value = client
-        result = mcp_mod.attach_files(_C1, ["mockup.png", "notes.txt"], dry_run=True)
+        with patch(
+            "codecks_cli.attachments.preview_attachment_files", return_value=preview
+        ) as mock_preview:
+            result = mcp_mod.attach_files(_C1, ["mockup.png", "notes.txt"], dry_run=True)
+
         assert result["ok"] is True
         assert result["dry_run"] is True
+        assert result["card_id"] == _C1
         assert result["action"] == "attach_files"
         assert result["file_count"] == 2
         assert result["files"] == preview
-        client.attach_files.assert_called_once_with(
-            card_id=_C1, files=["mockup.png", "notes.txt"], dry_run=True
-        )
+        mock_preview.assert_called_once_with(["mockup.png", "notes.txt"])
+        MockClient.assert_not_called()
+
+    def test_attach_files_dry_run_needs_no_token(self, monkeypatch):
+        """A preview must work with no configuration at all."""
+        from codecks_cli import SetupError
+        from codecks_cli.mcp_server import _core
+
+        monkeypatch.setattr(_core, "_client", None)
+
+        def _no_client():
+            raise SetupError("[SETUP] No session token configured.")
+
+        monkeypatch.setattr(_core, "CodecksClient", _no_client)
+        preview = [{"path": "mockup.png", "resolved": "/p/mockup.png", "size": 3, "sha256": "ab"}]
+        with patch("codecks_cli.attachments.preview_attachment_files", return_value=preview):
+            result = mcp_mod.attach_files(_C1, ["mockup.png"], dry_run=True)
+
+        assert result["ok"] is True
+        assert result["dry_run"] is True
+        assert result["files"] == preview
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_attach_files_dry_run_surfaces_policy_error(self, MockClient):
-        client = _mock_client()
-        client.attach_files.side_effect = CliError("[ERROR] outside the allowed roots: /etc/passwd")
-        MockClient.return_value = client
-        result = mcp_mod.attach_files(_C1, ["/etc/passwd"], dry_run=True)
+        with patch(
+            "codecks_cli.attachments.preview_attachment_files",
+            side_effect=CliError("[ERROR] outside the allowed roots: /etc/passwd"),
+        ):
+            result = mcp_mod.attach_files(_C1, ["/etc/passwd"], dry_run=True)
+
         assert result["ok"] is False
         assert "outside the allowed roots" in result["error"]
+        MockClient.assert_not_called()
 
     def test_attach_files_validates_uuid(self):
         # Bad UUID is rejected before the client is ever built.

@@ -10,6 +10,10 @@
 .pm_claims.json
 .pm_last_result.json
 .pm_undo.json
+# Atomic-write temp files (may hold .env contents or OAuth tokens on a crash)
+.gdd_tmp_*
+.env_tmp_*
+tmp*.tmp
 .mcp.json
 task_plan.md
 findings.md

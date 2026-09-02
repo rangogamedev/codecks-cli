@@ -67,7 +67,7 @@ See [docs/cli-reference.md](docs/cli-reference.md) for the full command referenc
 
 ## Attachments
 
-`attach` (and `create --file`, and the `attach_files` MCP tool) only uploads files that resolve inside an **allowed root**: the project root, plus any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows).
+`attach` (and `create --file`, and the `attach_files` MCP tool) only uploads files that resolve inside an **allowed root**. Allowed by default: the project root and the current working directory, plus any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows). Entries that are not absolute paths, are not existing directories, or name a whole filesystem root are ignored with a warning.
 
 ```bash
 CODECKS_ATTACH_ALLOW_DIRS=/srv/art:/mnt/renders codecks-cli attach <uuid> /srv/art/hero.png

@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -18,15 +19,34 @@ from codecks_cli.config import (
 from codecks_cli.mcp_server._repository import CardRepository
 from codecks_cli.store import CardStore
 
+#: Guards every mutable module global below (client/store singletons, snapshot
+#: cache, batch flag, rate-limit timestamps, agent claims). Re-entrant because
+#: these helpers call one another (e.g. ``_write_through_cache`` ->
+#: ``_invalidate_cache_for`` -> ``_invalidate_cache``). MCP SDK v2 dispatches
+#: sync tool functions on a worker-thread pool, so they really do run
+#: concurrently. Never held across a Codecks API request.
+_state_lock = threading.RLock()
+
 _client: CodecksClient | None = None
 
 
 def _get_client() -> CodecksClient:
-    """Return a cached CodecksClient, creating one on first use."""
+    """Return a cached CodecksClient, creating one on first use.
+
+    The client is constructed outside the lock — ``CodecksClient()`` performs a
+    token-validation request, and blocking every other thread's cache access on
+    a network round-trip is worse than the rare duplicate construction. Only one
+    instance is ever published, so all callers still share a single client.
+    """
     global _client
-    if _client is None:
-        _client = CodecksClient()
-    return _client
+    with _state_lock:
+        if _client is not None:
+            return _client
+    client = CodecksClient()
+    with _state_lock:
+        if _client is None:
+            _client = client
+        return _client
 
 
 # ---------------------------------------------------------------------------
@@ -37,22 +57,24 @@ _store: CardStore | None = None
 
 
 def _get_store() -> CardStore:
-    """Return the lazy-initialized CardStore singleton."""
+    """Return the lazy-initialized CardStore singleton (thread-safe)."""
     global _store
-    if _store is None:
-        _store = CardStore()
-    return _store
+    with _state_lock:
+        if _store is None:
+            _store = CardStore()
+        return _store
 
 
 def _reset_store() -> None:
     """Close and discard the SQLite store. For test isolation."""
     global _store
-    if _store is not None:
-        try:
-            _store.close()
-        except Exception:
-            pass
-        _store = None
+    with _state_lock:
+        if _store is not None:
+            try:
+                _store.close()
+            except Exception:
+                pass
+            _store = None
 
 
 # ---------------------------------------------------------------------------
@@ -84,67 +106,69 @@ def _load_cache_from_disk() -> bool:
     automatically picks up the fresh data on next read.
     """
     global _snapshot_cache, _cache_loaded_at, _disk_cache_mtime
-
-    # Check disk file mtime
-    try:
-        current_mtime = os.path.getmtime(CACHE_PATH)
-    except (FileNotFoundError, OSError):
-        current_mtime = 0.0
-
-    # Skip reload if we already have data from this version of the file
-    if _snapshot_cache is not None and current_mtime > 0 and current_mtime <= _disk_cache_mtime:
-        return True
-
-    # Load from disk (first load or newer version available)
-    if current_mtime > 0:
+    with _state_lock:
+        # Check disk file mtime
         try:
-            with open(CACHE_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and "fetched_at" in data:
-                data["fetched_ts"] = time.monotonic()
-                _snapshot_cache = data
-                _cache_loaded_at = data["fetched_ts"]
-                _disk_cache_mtime = current_mtime
-                # Rebuild card indexes from loaded data
-                cards_data = data.get("cards_result")
-                if isinstance(cards_data, dict):
-                    _repo.load(cards_data.get("cards", []))
-                decks_data = data.get("decks")
-                if isinstance(decks_data, list):
-                    _repo.load_decks(decks_data)
-                return True
-        except (json.JSONDecodeError, OSError):
-            pass  # JSON load failed — try SQLite fallback below
+            current_mtime = os.path.getmtime(CACHE_PATH)
+        except (FileNotFoundError, OSError):
+            current_mtime = 0.0
 
-    # Fallback: try SQLite store
-    if _snapshot_cache is None:
-        try:
-            store = _get_store()
-            fetched = store.get_meta("fetched_at")
-            if fetched:
-                if _repo.load_from_store(store):
-                    _snapshot_cache = {"fetched_at": fetched, "fetched_ts": time.monotonic()}
-                    _cache_loaded_at = _snapshot_cache["fetched_ts"]
+        # Skip reload if we already have data from this version of the file
+        if _snapshot_cache is not None and current_mtime > 0 and current_mtime <= _disk_cache_mtime:
+            return True
+
+        # Load from disk (first load or newer version available)
+        if current_mtime > 0:
+            try:
+                with open(CACHE_PATH, encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and "fetched_at" in data:
+                    data["fetched_ts"] = time.monotonic()
+                    _snapshot_cache = data
+                    _cache_loaded_at = data["fetched_ts"]
+                    _disk_cache_mtime = current_mtime
+                    # Rebuild card indexes from loaded data
+                    cards_data = data.get("cards_result")
+                    if isinstance(cards_data, dict):
+                        _repo.load(cards_data.get("cards", []))
+                    decks_data = data.get("decks")
+                    if isinstance(decks_data, list):
+                        _repo.load_decks(decks_data)
                     return True
-        except Exception:
-            pass
+            except (json.JSONDecodeError, OSError):
+                pass  # JSON load failed — try SQLite fallback below
 
-    return False
+        # Fallback: try SQLite store
+        if _snapshot_cache is None:
+            try:
+                store = _get_store()
+                fetched = store.get_meta("fetched_at")
+                if fetched:
+                    if _repo.load_from_store(store):
+                        _snapshot_cache = {"fetched_at": fetched, "fetched_ts": time.monotonic()}
+                        _cache_loaded_at = _snapshot_cache["fetched_ts"]
+                        return True
+            except Exception:
+                pass
+
+        return False
 
 
 def _is_cache_valid() -> bool:
     """Return True if in-memory cache exists and hasn't expired."""
-    if _snapshot_cache is None:
-        return False
-    if CACHE_TTL_SECONDS <= 0:
-        return False
-    age = time.monotonic() - _cache_loaded_at
-    return bool(age < CACHE_TTL_SECONDS)
+    with _state_lock:
+        if _snapshot_cache is None:
+            return False
+        if CACHE_TTL_SECONDS <= 0:
+            return False
+        age = time.monotonic() - _cache_loaded_at
+        return bool(age < CACHE_TTL_SECONDS)
 
 
 def _get_snapshot() -> dict | None:
     """Return current snapshot cache (may be None)."""
-    return _snapshot_cache
+    with _state_lock:
+        return _snapshot_cache
 
 
 def _get_cache_metadata() -> dict:
@@ -152,31 +176,33 @@ def _get_cache_metadata() -> dict:
 
     Includes ``stale_warning: True`` when cache age exceeds 80% of TTL.
     """
-    if _snapshot_cache is None:
-        return {"cached": False}
-    age = time.monotonic() - _cache_loaded_at
-    meta: dict = {
-        "cached": True,
-        "cache_age_seconds": round(age, 1),
-        "cache_fetched_at": _snapshot_cache.get("fetched_at", ""),
-    }
-    if CACHE_TTL_SECONDS > 0 and age > CACHE_TTL_SECONDS * 0.8:
-        meta["stale_warning"] = True
-        meta["cache_ttl_seconds"] = CACHE_TTL_SECONDS
-    return meta
+    with _state_lock:
+        if _snapshot_cache is None:
+            return {"cached": False}
+        age = time.monotonic() - _cache_loaded_at
+        meta: dict = {
+            "cached": True,
+            "cache_age_seconds": round(age, 1),
+            "cache_fetched_at": _snapshot_cache.get("fetched_at", ""),
+        }
+        if CACHE_TTL_SECONDS > 0 and age > CACHE_TTL_SECONDS * 0.8:
+            meta["stale_warning"] = True
+            meta["cache_ttl_seconds"] = CACHE_TTL_SECONDS
+        return meta
 
 
 def _invalidate_cache() -> None:
     """Clear in-memory snapshot cache. Next read will hit the API."""
     global _snapshot_cache, _cache_loaded_at
-    _snapshot_cache = None
-    _cache_loaded_at = 0.0
-    _repo.clear()
-    # Also clear the cards.py process-level cache so list_decks/list_cards
-    # re-query the API instead of returning stale data.
-    from codecks_cli import config
+    with _state_lock:
+        _snapshot_cache = None
+        _cache_loaded_at = 0.0
+        _repo.clear()
+        # Also clear the cards.py process-level cache so list_decks/list_cards
+        # re-query the API instead of returning stale data.
+        from codecks_cli import config
 
-    config._cache.clear()
+        config._cache.clear()
 
 
 def _deck_project_map() -> dict[str, str]:
@@ -397,43 +423,46 @@ def _warm_cache_impl() -> dict:
         "standup": standup_data,
     }
 
-    _snapshot_cache = snapshot
-    _cache_loaded_at = now_ts
+    # The API round-trips above ran unlocked; everything below mutates shared
+    # state, so it runs under the module lock.
+    with _state_lock:
+        _snapshot_cache = snapshot
+        _cache_loaded_at = now_ts
 
-    # Build card indexes and name mappings
-    _repo.load(all_cards)
-    if isinstance(decks, list):
-        _repo.load_decks(decks)
-
-    # Persist to disk (atomic write)
-    disk_data = dict(snapshot)
-    disk_data.pop("fetched_ts", None)
-    try:
-        cache_dir = os.path.dirname(CACHE_PATH) or "."
-        fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(disk_data, f, ensure_ascii=False)
-            os.replace(tmp, CACHE_PATH)
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-    except OSError:
-        pass  # Disk write failure is non-fatal
-
-    # Persist to SQLite store (best-effort)
-    try:
-        store = _get_store()
-        _repo.persist_to_store(store)
+        # Build card indexes and name mappings
+        _repo.load(all_cards)
         if isinstance(decks, list):
-            store.upsert_decks(decks)
-        store.set_meta("fetched_at", now_iso)
-        store.set_meta("card_count", str(len(all_cards)))
-    except Exception:
-        pass  # SQLite persistence is best-effort
+            _repo.load_decks(decks)
+
+        # Persist to disk (atomic write)
+        disk_data = dict(snapshot)
+        disk_data.pop("fetched_ts", None)
+        try:
+            cache_dir = os.path.dirname(CACHE_PATH) or "."
+            fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(disk_data, f, ensure_ascii=False)
+                os.replace(tmp, CACHE_PATH)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+        except OSError:
+            pass  # Disk write failure is non-fatal
+
+        # Persist to SQLite store (best-effort)
+        try:
+            store = _get_store()
+            _repo.persist_to_store(store)
+            if isinstance(decks, list):
+                store.upsert_decks(decks)
+            store.set_meta("fetched_at", now_iso)
+            store.set_meta("card_count", str(len(all_cards)))
+        except Exception:
+            pass  # SQLite persistence is best-effort
 
     return {
         "ok": True,
@@ -456,113 +485,120 @@ _agent_sessions: dict[str, dict] = {}
 
 def _save_claims() -> None:
     """Persist agent claims to disk (atomic write via tempfile + os.replace)."""
-    try:
-        claims_dir = os.path.dirname(_CLAIMS_PATH) or "."
-        fd, tmp = tempfile.mkstemp(dir=claims_dir, suffix=".tmp")
+    with _state_lock:
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(_agent_sessions, f, ensure_ascii=False)
-            os.replace(tmp, _CLAIMS_PATH)
-        except BaseException:
+            claims_dir = os.path.dirname(_CLAIMS_PATH) or "."
+            fd, tmp = tempfile.mkstemp(dir=claims_dir, suffix=".tmp")
             try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-    except OSError:
-        pass  # Disk write failure is non-fatal
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(_agent_sessions, f, ensure_ascii=False)
+                os.replace(tmp, _CLAIMS_PATH)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+        except OSError:
+            pass  # Disk write failure is non-fatal
 
-    # Also persist to SQLite store (best-effort)
-    try:
-        store = _get_store()
-        for agent_name, session in _agent_sessions.items():
-            for card_id in session.get("active_cards", []):
-                store.upsert_claim(card_id, agent_name)
-    except Exception:
-        pass
+        # Also persist to SQLite store (best-effort)
+        try:
+            store = _get_store()
+            for agent_name, session in _agent_sessions.items():
+                for card_id in session.get("active_cards", []):
+                    store.upsert_claim(card_id, agent_name)
+        except Exception:
+            pass
 
 
 def _load_claims() -> None:
     """Load persisted agent claims from disk. Missing/corrupt file is OK."""
     global _agent_sessions
-    try:
-        with open(_CLAIMS_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            _agent_sessions.update(data)
-            return
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        pass  # JSON load failed — try SQLite fallback below
+    with _state_lock:
+        try:
+            with open(_CLAIMS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                _agent_sessions.update(data)
+                return
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass  # JSON load failed — try SQLite fallback below
 
-    # Fallback: try SQLite store
-    try:
-        store = _get_store()
-        claims = store.all_claims()
-        if claims:
-            # Rebuild _agent_sessions from flat claim records
-            for card_id, claim in claims.items():
-                agent = claim.get("agent_name", "")
-                if not agent:
-                    continue
-                if agent not in _agent_sessions:
-                    _agent_sessions[agent] = {
-                        "active_cards": [],
-                        "claimed_at": {},
-                        "last_seen": claim.get("claimed_at", ""),
-                    }
-                if card_id not in _agent_sessions[agent]["active_cards"]:
-                    _agent_sessions[agent]["active_cards"].append(card_id)
-                    _agent_sessions[agent]["claimed_at"][card_id] = claim.get("claimed_at", "")
-    except Exception:
-        pass
+        # Fallback: try SQLite store
+        try:
+            store = _get_store()
+            claims = store.all_claims()
+            if claims:
+                # Rebuild _agent_sessions from flat claim records
+                for card_id, claim in claims.items():
+                    agent = claim.get("agent_name", "")
+                    if not agent:
+                        continue
+                    if agent not in _agent_sessions:
+                        _agent_sessions[agent] = {
+                            "active_cards": [],
+                            "claimed_at": {},
+                            "last_seen": claim.get("claimed_at", ""),
+                        }
+                    if card_id not in _agent_sessions[agent]["active_cards"]:
+                        _agent_sessions[agent]["active_cards"].append(card_id)
+                        _agent_sessions[agent]["claimed_at"][card_id] = claim.get("claimed_at", "")
+        except Exception:
+            pass
 
 
 def _register_agent(agent_name: str, card_id: str | None = None) -> None:
     """Track an agent and optionally the card it is working on."""
-    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if agent_name not in _agent_sessions:
-        _agent_sessions[agent_name] = {
-            "active_cards": [],
-            "claimed_at": {},
-            "last_seen": now_iso,
-        }
-    _agent_sessions[agent_name]["last_seen"] = now_iso
-    if card_id and card_id not in _agent_sessions[agent_name]["active_cards"]:
-        _agent_sessions[agent_name]["active_cards"].append(card_id)
-        _agent_sessions[agent_name]["claimed_at"][card_id] = now_iso
-    _save_claims()
+    with _state_lock:
+        now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if agent_name not in _agent_sessions:
+            _agent_sessions[agent_name] = {
+                "active_cards": [],
+                "claimed_at": {},
+                "last_seen": now_iso,
+            }
+        _agent_sessions[agent_name]["last_seen"] = now_iso
+        if card_id and card_id not in _agent_sessions[agent_name]["active_cards"]:
+            _agent_sessions[agent_name]["active_cards"].append(card_id)
+            _agent_sessions[agent_name]["claimed_at"][card_id] = now_iso
+        _save_claims()
 
 
 def _unregister_agent_card(agent_name: str, card_id: str) -> bool:
     """Remove a card from an agent's active list. Returns True if removed."""
-    session = _agent_sessions.get(agent_name)
-    if not session:
+    with _state_lock:
+        session = _agent_sessions.get(agent_name)
+        if not session:
+            return False
+        if card_id in session["active_cards"]:
+            session["active_cards"].remove(card_id)
+            session["claimed_at"].pop(card_id, None)
+            session["last_seen"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            _save_claims()
+            return True
         return False
-    if card_id in session["active_cards"]:
-        session["active_cards"].remove(card_id)
-        session["claimed_at"].pop(card_id, None)
-        session["last_seen"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        _save_claims()
-        return True
-    return False
 
 
 def _get_agent_for_card(card_id: str) -> str | None:
     """Return the agent name that has claimed a card, or None."""
-    for name, session in _agent_sessions.items():
-        if card_id in session.get("active_cards", []):
-            return name
-    return None
+    with _state_lock:
+        for name, session in _agent_sessions.items():
+            if card_id in session.get("active_cards", []):
+                return name
+        return None
 
 
 def _get_all_sessions() -> dict[str, dict]:
     """Return a copy of all agent sessions."""
-    return {name: dict(session) for name, session in _agent_sessions.items()}
+    with _state_lock:
+        return {name: dict(session) for name, session in _agent_sessions.items()}
 
 
 def _reset_sessions() -> None:
     """Clear all agent sessions (for test isolation)."""
-    _agent_sessions.clear()
+    with _state_lock:
+        _agent_sessions.clear()
 
 
 # Load persisted claims on module init
@@ -599,21 +635,29 @@ def _invalidate_cache_for(method_name: str) -> None:
 
     Falls back to full invalidation for unknown methods.
     """
-    if method_name not in _CACHE_INVALIDATION_MAP:
-        _invalidate_cache()
-        return
-    keys = _CACHE_INVALIDATION_MAP[method_name]
-    if not keys or _snapshot_cache is None:
-        return
-    for key in keys:
-        _snapshot_cache.pop(key, None)
-    if "cards_result" in keys:
-        _repo.clear()
+    with _state_lock:
+        if method_name not in _CACHE_INVALIDATION_MAP:
+            _invalidate_cache()
+            return
+        keys = _CACHE_INVALIDATION_MAP[method_name]
+        if not keys or _snapshot_cache is None:
+            return
+        for key in keys:
+            _snapshot_cache.pop(key, None)
+        if "cards_result" in keys:
+            _repo.clear()
 
 
 # ---------------------------------------------------------------------------
 # Write-through cache + disk sync (cross-process coherence)
 # ---------------------------------------------------------------------------
+
+
+def _set_batch_in_progress(active: bool) -> None:
+    """Toggle the batch flag that suppresses per-mutation disk writes."""
+    global _batch_in_progress
+    with _state_lock:
+        _batch_in_progress = active
 
 
 def _persist_cache_to_disk() -> None:
@@ -625,39 +669,41 @@ def _persist_cache_to_disk() -> None:
     excessive disk writes — caller persists once after the batch.
     """
     global _disk_cache_mtime
-    if _snapshot_cache is None or _batch_in_progress:
-        return
-    try:
-        disk_data = {k: v for k, v in _snapshot_cache.items() if k != "fetched_ts"}
-        disk_data["fetched_at"] = datetime.now(UTC).isoformat()
-        cache_dir = os.path.dirname(CACHE_PATH) or "."
-        fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+    with _state_lock:
+        if _snapshot_cache is None or _batch_in_progress:
+            return
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(
-                    disk_data, f, default=str
-                )  # default=str prevents TypeError on non-serializable
-            os.replace(tmp, CACHE_PATH)
-            # Update our mtime so we don't reload our own write
-            _disk_cache_mtime = os.path.getmtime(CACHE_PATH)
-        except BaseException:
+            disk_data = {k: v for k, v in _snapshot_cache.items() if k != "fetched_ts"}
+            disk_data["fetched_at"] = datetime.now(UTC).isoformat()
+            cache_dir = os.path.dirname(CACHE_PATH) or "."
+            fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
             try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-    except (OSError, TypeError, ValueError):
-        pass  # Non-fatal — cache is best-effort
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(
+                        disk_data, f, default=str
+                    )  # default=str prevents TypeError on non-serializable
+                os.replace(tmp, CACHE_PATH)
+                # Update our mtime so we don't reload our own write
+                _disk_cache_mtime = os.path.getmtime(CACHE_PATH)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+        except (OSError, TypeError, ValueError):
+            pass  # Non-fatal — cache is best-effort
 
 
 def _recompute_derived() -> None:
     """Recompute pm_focus and standup from current cache state."""
-    if _snapshot_cache is None:
-        return
-    cards = _snapshot_cache.get("cards_result", {}).get("cards", [])
-    hand_ids = _extract_hand_ids(_snapshot_cache.get("hand", []))
-    _snapshot_cache["pm_focus"] = _compute_pm_focus(cards, hand_ids)
-    _snapshot_cache["standup"] = _compute_standup(cards, hand_ids)
+    with _state_lock:
+        if _snapshot_cache is None:
+            return
+        cards = _snapshot_cache.get("cards_result", {}).get("cards", [])
+        hand_ids = _extract_hand_ids(_snapshot_cache.get("hand", []))
+        _snapshot_cache["pm_focus"] = _compute_pm_focus(cards, hand_ids)
+        _snapshot_cache["standup"] = _compute_standup(cards, hand_ids)
 
 
 def _write_through_cache(method_name: str, result, **kwargs) -> None:
@@ -667,94 +713,95 @@ def _write_through_cache(method_name: str, result, **kwargs) -> None:
     we inject the mutation result directly into the cache. This gives
     same-process reads instant consistency.
     """
-    if _snapshot_cache is None:
-        return
-    if not isinstance(result, dict) or not result.get("ok"):
-        # Mutation failed or result is not a dict — fall back to invalidation
-        _invalidate_cache_for(method_name)
-        return
-
-    cards_result = _snapshot_cache.get("cards_result")
-    if not isinstance(cards_result, dict):
-        _invalidate_cache_for(method_name)
-        return
-    cards: list = cards_result.get("cards", [])
-
-    try:
-        if method_name == "create_card":
-            card_id = result.get("card_id", "")
-            if card_id:
-                new_card = {
-                    "id": card_id,
-                    "title": result.get("title", kwargs.get("title", "")),
-                    "status": "not_started",
-                    "priority": kwargs.get("priority"),
-                    "effort": kwargs.get("effort"),
-                    "deck_name": result.get("deck", kwargs.get("deck", "")),
-                    "owner_name": result.get("owner", kwargs.get("owner", "")),
-                }
-                cards.append(new_card)
-                _repo.add(new_card)
-                _recompute_derived()
-
-        elif method_name == "delete_card":
-            card_id = kwargs.get("card_id", "")
-            cards_result["cards"] = [c for c in cards if c.get("id") != card_id]
-            _repo.remove(card_id)
-            # Also remove from hand if present
-            hand = _snapshot_cache.get("hand", [])
-            _snapshot_cache["hand"] = [c for c in hand if c.get("id") != card_id]
-            _recompute_derived()
-
-        elif method_name in ("mark_done", "mark_started"):
-            # mark_done/mark_started take card_ids (plural list), not card_id
-            card_ids = kwargs.get("card_ids", [])
-            new_status = "done" if method_name == "mark_done" else "started"
-            for cid in card_ids:
-                for card in cards:
-                    if card.get("id") == cid:
-                        card["status"] = new_status
-                        break
-                _repo.update(cid, {"status": new_status})
-            _recompute_derived()
-
-        elif method_name == "add_to_hand":
-            added_ids = set(kwargs.get("card_ids", []))
-            hand = _snapshot_cache.get("hand", [])
-            existing_ids = {c.get("id") for c in hand}
-            for card in cards:
-                if card.get("id") in added_ids and card.get("id") not in existing_ids:
-                    hand.append(card)
-            _recompute_derived()
-
-        elif method_name == "remove_from_hand":
-            removed_ids = set(kwargs.get("card_ids", []))
-            _snapshot_cache["hand"] = [
-                c for c in _snapshot_cache.get("hand", []) if c.get("id") not in removed_ids
-            ]
-            _recompute_derived()
-
-        elif method_name == "archive_card":
-            card_id = kwargs.get("card_id", "")
-            cards_result["cards"] = [c for c in cards if c.get("id") != card_id]
-            _repo.remove(card_id)
-            hand = _snapshot_cache.get("hand", [])
-            _snapshot_cache["hand"] = [c for c in hand if c.get("id") != card_id]
-            _recompute_derived()
-
-        else:
-            # For update_cards, scaffold_feature, split_features, etc.
-            # — fall back to selective invalidation (too complex to write-through)
+    with _state_lock:
+        if _snapshot_cache is None:
+            return
+        if not isinstance(result, dict) or not result.get("ok"):
+            # Mutation failed or result is not a dict — fall back to invalidation
             _invalidate_cache_for(method_name)
             return
 
-    except Exception:
-        # Any error in write-through: fall back to safe invalidation
-        _invalidate_cache_for(method_name)
-        return
+        cards_result = _snapshot_cache.get("cards_result")
+        if not isinstance(cards_result, dict):
+            _invalidate_cache_for(method_name)
+            return
+        cards: list = cards_result.get("cards", [])
 
-    # Persist to disk for cross-process coherence
-    _persist_cache_to_disk()
+        try:
+            if method_name == "create_card":
+                card_id = result.get("card_id", "")
+                if card_id:
+                    new_card = {
+                        "id": card_id,
+                        "title": result.get("title", kwargs.get("title", "")),
+                        "status": "not_started",
+                        "priority": kwargs.get("priority"),
+                        "effort": kwargs.get("effort"),
+                        "deck_name": result.get("deck", kwargs.get("deck", "")),
+                        "owner_name": result.get("owner", kwargs.get("owner", "")),
+                    }
+                    cards.append(new_card)
+                    _repo.add(new_card)
+                    _recompute_derived()
+
+            elif method_name == "delete_card":
+                card_id = kwargs.get("card_id", "")
+                cards_result["cards"] = [c for c in cards if c.get("id") != card_id]
+                _repo.remove(card_id)
+                # Also remove from hand if present
+                hand = _snapshot_cache.get("hand", [])
+                _snapshot_cache["hand"] = [c for c in hand if c.get("id") != card_id]
+                _recompute_derived()
+
+            elif method_name in ("mark_done", "mark_started"):
+                # mark_done/mark_started take card_ids (plural list), not card_id
+                card_ids = kwargs.get("card_ids", [])
+                new_status = "done" if method_name == "mark_done" else "started"
+                for cid in card_ids:
+                    for card in cards:
+                        if card.get("id") == cid:
+                            card["status"] = new_status
+                            break
+                    _repo.update(cid, {"status": new_status})
+                _recompute_derived()
+
+            elif method_name == "add_to_hand":
+                added_ids = set(kwargs.get("card_ids", []))
+                hand = _snapshot_cache.get("hand", [])
+                existing_ids = {c.get("id") for c in hand}
+                for card in cards:
+                    if card.get("id") in added_ids and card.get("id") not in existing_ids:
+                        hand.append(card)
+                _recompute_derived()
+
+            elif method_name == "remove_from_hand":
+                removed_ids = set(kwargs.get("card_ids", []))
+                _snapshot_cache["hand"] = [
+                    c for c in _snapshot_cache.get("hand", []) if c.get("id") not in removed_ids
+                ]
+                _recompute_derived()
+
+            elif method_name == "archive_card":
+                card_id = kwargs.get("card_id", "")
+                cards_result["cards"] = [c for c in cards if c.get("id") != card_id]
+                _repo.remove(card_id)
+                hand = _snapshot_cache.get("hand", [])
+                _snapshot_cache["hand"] = [c for c in hand if c.get("id") != card_id]
+                _recompute_derived()
+
+            else:
+                # For update_cards, scaffold_feature, split_features, etc.
+                # — fall back to selective invalidation (too complex to write-through)
+                _invalidate_cache_for(method_name)
+                return
+
+        except Exception:
+            # Any error in write-through: fall back to safe invalidation
+            _invalidate_cache_for(method_name)
+            return
+
+        # Persist to disk for cross-process coherence
+        _persist_cache_to_disk()
 
 
 # ---------------------------------------------------------------------------
@@ -897,18 +944,19 @@ _UNDOABLE_METHODS = {"update_cards", "mark_done", "mark_started"}
 
 def _find_uuid_hint(short_id: str) -> str:
     """Search cache for a card whose ID starts with the given prefix."""
-    if _snapshot_cache is None:
+    with _state_lock:
+        if _snapshot_cache is None:
+            return ""
+        cards_result = _snapshot_cache.get("cards_result")
+        if not isinstance(cards_result, dict):
+            return ""
+        for card in cards_result.get("cards", []):
+            if isinstance(card, dict):
+                full_id = card.get("id", "")
+                if full_id.startswith(short_id) or full_id.replace("-", "").startswith(short_id):
+                    title = card.get("title", "")[:50]
+                    return f" Did you mean '{full_id}' ({title})?"
         return ""
-    cards_result = _snapshot_cache.get("cards_result")
-    if not isinstance(cards_result, dict):
-        return ""
-    for card in cards_result.get("cards", []):
-        if isinstance(card, dict):
-            full_id = card.get("id", "")
-            if full_id.startswith(short_id) or full_id.replace("-", "").startswith(short_id):
-                title = card.get("title", "")[:50]
-                return f" Did you mean '{full_id}' ({title})?"
-    return ""
 
 
 def _validate_uuid(value: str, field: str = "card_id") -> str:
@@ -942,14 +990,19 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
     if method_name not in _ALLOWED_METHODS:
         return _contract_error(f"Unknown method: {method_name}", "error")
 
-    # Rate-limit awareness: pause if approaching API limit
-    now = time.monotonic()
-    _api_call_timestamps[:] = [t for t in _api_call_timestamps if now - t < _RATE_LIMIT_WINDOW]
-    if len(_api_call_timestamps) >= _RATE_LIMIT_MAX:
-        wait = _RATE_LIMIT_WINDOW - (now - _api_call_timestamps[0])
-        if wait > 0:
-            time.sleep(min(wait, _RATE_LIMIT_WINDOW))
-    _api_call_timestamps.append(time.monotonic())
+    # Rate-limit awareness: pause if approaching API limit. The timestamp list
+    # is shared across worker threads, so prune/inspect it under the lock and
+    # sleep (and call the API) with the lock released.
+    with _state_lock:
+        now = time.monotonic()
+        _api_call_timestamps[:] = [t for t in _api_call_timestamps if now - t < _RATE_LIMIT_WINDOW]
+        wait = 0.0
+        if len(_api_call_timestamps) >= _RATE_LIMIT_MAX:
+            wait = _RATE_LIMIT_WINDOW - (now - _api_call_timestamps[0])
+    if wait > 0:
+        time.sleep(min(wait, _RATE_LIMIT_WINDOW))
+    with _state_lock:
+        _api_call_timestamps.append(time.monotonic())
 
     try:
         client = _get_client()
@@ -999,24 +1052,27 @@ def _suggest_valid_values(error_msg: str) -> str:
     When an agent misspells a deck name or uses a wrong milestone,
     this provides the valid options so the LLM can self-correct.
     """
-    msg_lower = error_msg.lower()
-    suggestions = []
-    if "deck" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
-        deck_names = [name for name in _repo._deck_name_to_id.keys()] if _repo else []
-        if deck_names:
-            suggestions.append(f"Available decks: {', '.join(sorted(deck_names, key=str.lower))}")
-    if "milestone" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
-        if _snapshot_cache and "milestones" in _snapshot_cache:
-            ms = _snapshot_cache["milestones"]
-            if isinstance(ms, list):
-                names = [m.get("name", "") for m in ms if isinstance(m, dict)]
-                if names:
-                    suggestions.append(f"Available milestones: {', '.join(names)}")
-    if "owner" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
-        owners = set(_repo._by_owner.keys()) if _repo else set()
-        if owners:
-            suggestions.append(f"Available owners: {', '.join(sorted(owners))}")
-    return "\n".join(suggestions)
+    with _state_lock:
+        msg_lower = error_msg.lower()
+        suggestions = []
+        if "deck" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
+            deck_names = [name for name in _repo._deck_name_to_id.keys()] if _repo else []
+            if deck_names:
+                suggestions.append(
+                    f"Available decks: {', '.join(sorted(deck_names, key=str.lower))}"
+                )
+        if "milestone" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
+            if _snapshot_cache and "milestones" in _snapshot_cache:
+                ms = _snapshot_cache["milestones"]
+                if isinstance(ms, list):
+                    names = [m.get("name", "") for m in ms if isinstance(m, dict)]
+                    if names:
+                        suggestions.append(f"Available milestones: {', '.join(names)}")
+        if "owner" in msg_lower and ("not found" in msg_lower or "unknown" in msg_lower):
+            owners = set(_repo._by_owner.keys()) if _repo else set()
+            if owners:
+                suggestions.append(f"Available owners: {', '.join(sorted(owners))}")
+        return "\n".join(suggestions)
 
 
 # ---------------------------------------------------------------------------
