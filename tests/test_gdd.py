@@ -1,5 +1,8 @@
 """Tests for gdd.py — parse_gdd, _fuzzy_match, _extract_google_doc_id, sync_gdd."""
 
+import json
+import os
+import stat
 from unittest.mock import mock_open, patch
 
 import pytest
@@ -10,6 +13,7 @@ from codecks_cli.gdd import (
     _extract_google_doc_id,
     _fuzzy_match,
     _save_gdd_cache,
+    _save_gdd_tokens,
     fetch_gdd,
     parse_gdd,
     sync_gdd,
@@ -235,8 +239,52 @@ class TestSyncGddErrorHandling:
         assert "some API error" in report["errors"][0]["error"]
 
 
+class TestSyncGddDeduplication:
+    """A title repeated inside one GDD must not create two cards."""
+
+    MOCK_DECKS = {"deck": {"dk1": {"id": "d1", "title": "Test"}}}
+
+    @patch("codecks_cli.gdd.list_cards", return_value={"card": {}})
+    @patch("codecks_cli.gdd.list_decks")
+    @patch("codecks_cli.gdd.update_card")
+    @patch("codecks_cli.gdd.create_card")
+    def test_repeated_title_creates_one_card(self, mock_create, mock_update, mock_decks, mock_list):
+        mock_decks.return_value = self.MOCK_DECKS
+        mock_create.return_value = {"cardId": "card-1"}
+        sections = [
+            {
+                "section": "Test",
+                "tasks": [{"title": "Build inventory"}, {"title": "Build inventory"}],
+            }
+        ]
+
+        report = sync_gdd(sections, "TestProject", apply=True)
+
+        assert mock_create.call_count == 1
+        assert len(report["created"]) == 1
+        assert len(report["existing"]) == 1
+        assert report["existing"][0]["card_id"] == "card-1"
+        assert report["errors"] == []
+
+    @patch("codecks_cli.gdd.list_cards", return_value={"card": {}})
+    @patch("codecks_cli.gdd.list_decks")
+    @patch("codecks_cli.gdd.create_card")
+    def test_failed_create_is_not_registered(self, mock_create, mock_decks, mock_list):
+        """A create that failed must not poison the seen-titles map."""
+        mock_decks.return_value = self.MOCK_DECKS
+        mock_create.side_effect = CliError("[ERROR] boom")
+        sections = [
+            {"section": "Test", "tasks": [{"title": "Build inventory"}] * 2},
+        ]
+
+        report = sync_gdd(sections, "TestProject", apply=True)
+
+        assert mock_create.call_count == 2
+        assert len(report["errors"]) == 2
+
+
 class TestSaveGddCache:
-    """_save_gdd_cache writes content and chmods to 0o600."""
+    """_save_gdd_cache writes content atomically and restricts it to 0o600."""
 
     @patch("codecks_cli.gdd.os.chmod")
     def test_writes_and_chmods(self, mock_chmod, tmp_path, monkeypatch):
@@ -245,7 +293,46 @@ class TestSaveGddCache:
         _save_gdd_cache("# GDD content")
         with open(cache_path, encoding="utf-8") as f:
             assert f.read() == "# GDD content"
-        mock_chmod.assert_called_once_with(cache_path, 0o600)
+        mock_chmod.assert_any_call(cache_path, 0o600)
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+    def test_cache_file_is_owner_only(self, tmp_path, monkeypatch):
+        """The file is never briefly world-readable: mkstemp + chmod + rename."""
+        cache_path = tmp_path / ".gdd_cache.md"
+        monkeypatch.setattr(config, "GDD_CACHE_PATH", str(cache_path))
+        old_umask = os.umask(0o022)  # a permissive umask must not leak through
+        try:
+            _save_gdd_cache("# GDD content")
+        finally:
+            os.umask(old_umask)
+        assert stat.S_IMODE(cache_path.stat().st_mode) == 0o600
+        # No temp files left behind.
+        assert sorted(p.name for p in tmp_path.iterdir()) == [".gdd_cache.md"]
+
+
+class TestSaveGddTokens:
+    """_save_gdd_tokens never exposes the refresh token to other users."""
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+    def test_tokens_file_is_owner_only(self, tmp_path, monkeypatch):
+        tokens_path = tmp_path / ".gdd_tokens.json"
+        monkeypatch.setattr(config, "GDD_TOKENS_PATH", str(tokens_path))
+        old_umask = os.umask(0o022)
+        try:
+            _save_gdd_tokens({"refresh_token": "secret", "access_token": "a"})
+        finally:
+            os.umask(old_umask)
+        assert stat.S_IMODE(tokens_path.stat().st_mode) == 0o600
+        assert json.loads(tokens_path.read_text(encoding="utf-8"))["refresh_token"] == "secret"
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+    def test_overwriting_a_loose_file_tightens_it(self, tmp_path, monkeypatch):
+        tokens_path = tmp_path / ".gdd_tokens.json"
+        tokens_path.write_text("{}", encoding="utf-8")
+        os.chmod(tokens_path, 0o644)
+        monkeypatch.setattr(config, "GDD_TOKENS_PATH", str(tokens_path))
+        _save_gdd_tokens({"refresh_token": "secret"})
+        assert stat.S_IMODE(tokens_path.stat().st_mode) == 0o600
 
 
 class TestFetchGdd:

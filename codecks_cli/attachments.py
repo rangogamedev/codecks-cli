@@ -1,6 +1,12 @@
-"""Attachment validation and upload helpers for Codecks cards."""
+"""Attachment validation and upload helpers for Codecks cards.
+
+Path policy: an attachment must resolve (symlinks followed) inside an allowed
+root — the project root, plus anything listed in the ``CODECKS_ATTACH_ALLOW_DIRS``
+environment variable — and must not match the credential denylist below.
+"""
 
 import fnmatch
+import hashlib
 import mimetypes
 import os
 import uuid
@@ -11,6 +17,9 @@ from urllib.parse import quote
 from codecks_cli.api import raw_http_request, session_request
 from codecks_cli.exceptions import CliError
 
+#: Environment variable holding extra allowed attachment roots (os.pathsep-separated).
+ALLOW_DIRS_ENV = "CODECKS_ATTACH_ALLOW_DIRS"
+
 _SENSITIVE_FILE_PATTERNS = (
     ".env",
     ".gdd_tokens.json",
@@ -18,6 +27,22 @@ _SENSITIVE_FILE_PATTERNS = (
     ".pm_claims.json",
     ".pm_store.db*",
 )
+
+#: Basename globs that never get attached, no matter which root they live under.
+_DENIED_NAME_PATTERNS = (
+    "*.pem",
+    "*.key",
+    "id_rsa*",
+    "id_ed25519*",
+    "*token*",
+    "*secret*",
+)
+
+#: Absolute prefixes that are never attachable (pseudo-filesystems, system config).
+_DENIED_ROOTS = ("/etc", "/proc", "/sys")
+
+#: Characters that would break out of a Content-Disposition filename parameter.
+_ILLEGAL_NAME_CHARS = ('"', "\r", "\n")
 
 
 @dataclass(frozen=True)
@@ -30,14 +55,94 @@ class AttachmentFile:
     size: int
 
 
-def _is_sensitive_file(path: Path) -> bool:
-    # Resolve symlinks so a `link.txt -> .env` rename cannot bypass the basename match.
+def _allowed_roots() -> list[Path]:
+    """Directories attachments may be read from: project root + env overrides."""
+    from codecks_cli.config import _PROJECT_ROOT
+
+    roots: list[Path] = []
     try:
-        resolved = path.resolve(strict=False)
+        roots.append(Path(_PROJECT_ROOT).expanduser().resolve(strict=False))
     except OSError:
-        resolved = path
-    name = resolved.name.lower()
-    return any(fnmatch.fnmatch(name, pattern.lower()) for pattern in _SENSITIVE_FILE_PATTERNS)
+        pass
+    for entry in (os.environ.get(ALLOW_DIRS_ENV) or "").split(os.pathsep):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            roots.append(Path(entry).expanduser().resolve(strict=False))
+        except OSError:
+            continue
+    return roots
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def _is_sensitive_name(name: str) -> bool:
+    """True if a basename matches the credential/state-file denylist."""
+    lowered = name.lower()
+    patterns = _SENSITIVE_FILE_PATTERNS + _DENIED_NAME_PATTERNS
+    return any(fnmatch.fnmatch(lowered, pattern.lower()) for pattern in patterns)
+
+
+def _check_attachment_path(raw_path: str) -> Path:
+    """Resolve *raw_path* and enforce the attachment path policy.
+
+    Symlinks are followed before every check, so a ``link.txt -> ~/.ssh/id_rsa``
+    rename cannot smuggle a file past the denylist or out of the allowed roots.
+    Returns the fully resolved path, or raises ``CliError`` explaining the
+    rejection.
+    """
+    try:
+        resolved = Path(raw_path).expanduser().resolve(strict=False)
+    except OSError as e:
+        raise CliError(f"[ERROR] Attachment path could not be resolved: {raw_path} ({e})") from e
+
+    for char, label in zip(_ILLEGAL_NAME_CHARS, ('"', "CR", "LF"), strict=True):
+        if char in resolved.name:
+            raise CliError(
+                f"[ERROR] Attachment file name contains an illegal character ({label}): "
+                f"{resolved.name!r}"
+            )
+
+    posix = resolved.as_posix()
+    for denied in _DENIED_ROOTS:
+        if posix == denied or posix.startswith(denied + "/"):
+            raise CliError(f"[ERROR] Refusing to attach a file under {denied}: {resolved}")
+
+    if _is_sensitive_name(resolved.name):
+        raise CliError(f"[ERROR] Refusing to attach sensitive local file: {resolved.name}")
+
+    roots = _allowed_roots()
+    root = next((r for r in roots if _is_within(resolved, r)), None)
+    if root is None:
+        allowed = ", ".join(str(r) for r in roots) or "(none)"
+        raise CliError(
+            f"[ERROR] Attachment path is outside the allowed roots: {resolved}\n"
+            f"  Allowed: {allowed}\n"
+            f"  Add more roots via the {ALLOW_DIRS_ENV} environment variable "
+            f"({os.pathsep!r}-separated absolute directories)."
+        )
+
+    # Below the allowed root, refuse any dot-prefixed component: that covers
+    # .ssh/, .aws/, .env.local, .gdd_tokens.json and friends. Components *above*
+    # the root are the operator's choice and are not our business.
+    for part in resolved.relative_to(root).parts:
+        if part.startswith("."):
+            raise CliError(
+                f"[ERROR] Refusing to attach a dot-prefixed path component ({part!r}): {resolved}"
+            )
+    return resolved
+
+
+def file_sha256(path: Path) -> str:
+    """Hex SHA-256 of a local file, streamed so large files stay cheap."""
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def prepare_attachment_files(paths: list[str]) -> list[AttachmentFile]:
@@ -48,13 +153,11 @@ def prepare_attachment_files(paths: list[str]) -> list[AttachmentFile]:
     files: list[AttachmentFile] = []
     seen_names: set[str] = set()
     for raw_path in paths:
-        path = Path(raw_path).expanduser()
+        path = _check_attachment_path(raw_path)
         if not path.exists():
             raise CliError(f"[ERROR] Attachment file not found: {raw_path}")
         if not path.is_file():
             raise CliError(f"[ERROR] Attachment path is not a file: {raw_path}")
-        if _is_sensitive_file(path):
-            raise CliError(f"[ERROR] Refusing to attach sensitive local file: {path.name}")
         if not os.access(path, os.R_OK):
             raise CliError(f"[ERROR] Attachment file is not readable: {raw_path}")
 
@@ -73,6 +176,20 @@ def prepare_attachment_files(paths: list[str]) -> list[AttachmentFile]:
             )
         )
     return files
+
+
+def preview_attachment_files(paths: list[str]) -> list[dict[str, object]]:
+    """Validate *paths* and describe them without uploading anything."""
+    attachments = prepare_attachment_files(paths)
+    return [
+        {
+            "path": raw_path,
+            "resolved": str(a.path),
+            "size": a.size,
+            "sha256": file_sha256(a.path),
+        }
+        for raw_path, a in zip(paths, attachments, strict=True)
+    ]
 
 
 def build_multipart_body(
@@ -96,10 +213,13 @@ def build_multipart_body(
     add_field("Content-Type", attachment.content_type)
 
     chunks.append(f"--{boundary}\r\n".encode())
+    # Escape backslashes and quotes so a crafted file name cannot terminate the
+    # quoted-string parameter and inject extra header fields (RFC 6266 / 2616).
+    escaped_name = attachment.file_name.replace("\\", "\\\\").replace('"', '\\"')
     chunks.append(
         (
             'Content-Disposition: form-data; name="file"; '
-            f'filename="{attachment.file_name}"\r\n'
+            f'filename="{escaped_name}"\r\n'
             f"Content-Type: {attachment.content_type}\r\n\r\n"
         ).encode()
     )
@@ -165,8 +285,23 @@ def upload_report_files(
     return {"ok": True, "attached": len(uploaded), "failed": 0, "files": uploaded}
 
 
-def attach_files_to_card(card_id: str, paths: list[str], *, user_id: str) -> dict[str, object]:
-    """Upload local files and attach them to an existing Codecks card."""
+def attach_files_to_card(
+    card_id: str, paths: list[str], *, user_id: str, dry_run: bool = False
+) -> dict[str, object]:
+    """Upload local files and attach them to an existing Codecks card.
+
+    With ``dry_run=True`` the paths are validated against the attachment policy
+    and described (resolved path, size, sha256) but nothing is uploaded.
+    """
+    if dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "card_id": card_id,
+            "attached": 0,
+            "failed": 0,
+            "files": preview_attachment_files(paths),
+        }
     attachments = prepare_attachment_files(paths)
     attached: list[dict[str, object]] = []
     failures: list[dict[str, str]] = []

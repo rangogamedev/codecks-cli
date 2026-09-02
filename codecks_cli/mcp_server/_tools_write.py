@@ -82,30 +82,35 @@ def create_card(
 def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
     """Attach local file(s) to an existing card.
 
+    Paths must resolve inside an allowed root — the project root, plus any
+    directory listed in the CODECKS_ATTACH_ALLOW_DIRS environment variable
+    (os.pathsep-separated). Dot-prefixed components and credential-looking
+    names (*.pem, *.key, id_rsa*, *token*, *secret*, ...) are always refused.
+
     Args:
         card_id: Full 36-char UUID.
         files: Local file paths visible to the MCP server process.
-        dry_run: If True, validate the card ID and preview without uploading.
+        dry_run: If True, validate the paths and report resolved path, size and
+            sha256 for each file without uploading anything.
 
     Returns:
-        Dict with ok, card_id, attached, failed, and files.
+        Dict with ok, card_id, attached, failed, and files. On dry_run, files
+        carries {path, resolved, size, sha256} entries and dry_run is True.
     """
     try:
         _validate_uuid(card_id)
     except CliError as e:
         return _finalize_tool_result(_contract_error(str(e), "error"))
     if dry_run:
-        return _finalize_tool_result(
-            {
-                "ok": True,
-                "dry_run": True,
+        result = _call("attach_files", card_id=card_id, files=files, dry_run=True)
+        if isinstance(result, dict) and result.get("ok"):
+            result = {
+                **result,
                 "action": "attach_files",
-                "card_id": card_id,
-                "file_count": len(files),
-                "files": files,
+                "file_count": len(result.get("files") or []),
                 "message": f"Would attach {len(files)} file(s) to card {card_id}",
             }
-        )
+        return _finalize_tool_result(result)
     return _finalize_tool_result(_call("attach_files", card_id=card_id, files=files))
 
 
@@ -963,6 +968,15 @@ def _batch_single_card_op(
     return success, results
 
 
+def _batch_failures(results: list[dict]) -> list[dict]:
+    """Extract the per-card failures from a batch result list."""
+    return [
+        {"card_id": r.get("card_id"), "error": r.get("error", "")}
+        for r in results
+        if r.get("status") == "error"
+    ]
+
+
 def _validate_batch_ids(card_ids: list[str]) -> list[str] | dict:
     """Validate and cap batch card_ids. Returns ids list or error dict."""
     if not card_ids:
@@ -983,14 +997,22 @@ def batch_delete_cards(card_ids: list[str]) -> dict:
         card_ids: List of 36-char card UUIDs to delete. Max 20.
 
     Returns:
-        Dict with deleted count and per-card results.
+        Dict with ok (False if any card failed), deleted count,
+        per-card results, and a failed list of {card_id, error}.
     """
     ids = _validate_batch_ids(card_ids)
     if isinstance(ids, dict):
         return ids
     deleted, results = _batch_single_card_op(ids, "delete_card", "deleted", "Delete failed.")
+    failed = _batch_failures(results)
     return _finalize_tool_result(
-        {"ok": True, "deleted": deleted, "total": len(ids), "results": results}
+        {
+            "ok": not failed,
+            "deleted": deleted,
+            "total": len(ids),
+            "results": results,
+            "failed": failed,
+        }
     )
 
 
@@ -1002,14 +1024,22 @@ def batch_archive_cards(card_ids: list[str]) -> dict:
         card_ids: List of 36-char card UUIDs to archive. Max 20.
 
     Returns:
-        Dict with archived count and per-card results.
+        Dict with ok (False if any card failed), archived count,
+        per-card results, and a failed list of {card_id, error}.
     """
     ids = _validate_batch_ids(card_ids)
     if isinstance(ids, dict):
         return ids
     archived, results = _batch_single_card_op(ids, "archive_card", "archived", "Archive failed.")
+    failed = _batch_failures(results)
     return _finalize_tool_result(
-        {"ok": True, "archived": archived, "total": len(ids), "results": results}
+        {
+            "ok": not failed,
+            "archived": archived,
+            "total": len(ids),
+            "results": results,
+            "failed": failed,
+        }
     )
 
 
@@ -1020,7 +1050,8 @@ def batch_unarchive_cards(card_ids: list[str]) -> dict:
         card_ids: List of 36-char card UUIDs to unarchive. Max 20.
 
     Returns:
-        Dict with unarchived count and per-card results.
+        Dict with ok (False if any card failed), unarchived count,
+        per-card results, and a failed list of {card_id, error}.
     """
     ids = _validate_batch_ids(card_ids)
     if isinstance(ids, dict):
@@ -1029,12 +1060,14 @@ def batch_unarchive_cards(card_ids: list[str]) -> dict:
         ids, "unarchive_card", "unarchived", "Unarchive failed."
     )
 
+    failed = _batch_failures(results)
     return _finalize_tool_result(
         {
-            "ok": True,
+            "ok": not failed,
             "unarchived": unarchived,
             "total": len(ids),
             "results": results,
+            "failed": failed,
         }
     )
 

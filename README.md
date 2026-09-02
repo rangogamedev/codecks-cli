@@ -65,6 +65,17 @@ codecks-cli attach <uuid> mockup.png
 
 See [docs/cli-reference.md](docs/cli-reference.md) for the full command reference.
 
+## Attachments
+
+`attach` (and `create --file`, and the `attach_files` MCP tool) only uploads files that resolve inside an **allowed root**: the project root, plus any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows).
+
+```bash
+CODECKS_ATTACH_ALLOW_DIRS=/srv/art:/mnt/renders codecks-cli attach <uuid> /srv/art/hero.png
+codecks-cli attach <uuid> hero.png --dry-run   # resolved path + size + SHA-256, no upload
+```
+
+Dot-prefixed path components, credential-looking names (`*.pem`, `*.key`, `id_rsa*`, `*token*`, `*secret*`), and anything under `/etc`, `/proc`, or `/sys` are always refused. The MCP tool takes the same `dry_run` flag. Full rules: [docs/cli-reference.md](docs/cli-reference.md#attachments).
+
 ## How It Works
 
 ```

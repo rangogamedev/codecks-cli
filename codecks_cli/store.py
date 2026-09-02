@@ -45,6 +45,21 @@ class CardStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._init_schema()
+        # WAL mode spawns `-wal` / `-shm` sidecars holding the same private card
+        # content. SQLite normally copies the DB file's mode onto them, but that
+        # is not guaranteed everywhere — re-assert 0o600 best-effort once the
+        # schema write has actually materialised them.
+        self._restrict_wal_sidecars()
+
+    def _restrict_wal_sidecars(self) -> None:
+        """Best-effort chmod 0o600 on the WAL/SHM sidecar files."""
+        if self._db_path == ":memory:":
+            return
+        for suffix in ("-wal", "-shm"):
+            try:
+                os.chmod(self._db_path + suffix, 0o600)
+            except (OSError, NotImplementedError):
+                pass  # Sidecar absent or platform without POSIX permissions
 
     # ------------------------------------------------------------------
     # Schema

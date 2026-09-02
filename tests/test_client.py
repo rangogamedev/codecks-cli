@@ -525,6 +525,14 @@ class TestUpdateCards:
         assert result["fields"]["priority"] is None
 
     @patch("codecks_cli.client.update_card")
+    def test_clears_status_with_null(self, mock_update):
+        mock_update.return_value = {}
+        client = _client()
+        result = client.update_cards(["c1"], status="null")
+        assert result["fields"]["status"] is None
+        assert mock_update.call_args.kwargs["status"] is None
+
+    @patch("codecks_cli.client.update_card")
     def test_clears_effort_with_null(self, mock_update):
         mock_update.return_value = {}
         client = _client()

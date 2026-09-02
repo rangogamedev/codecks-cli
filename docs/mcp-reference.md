@@ -75,6 +75,13 @@ This also warms the snapshot cache, making subsequent reads near-instant (<50ms)
 | **Admin** | 5 | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck` |
 | **Other** | 1 | `undo` |
 
+Notes on individual tools:
+
+- `attach_files(card_id, files, dry_run=False)` — paths must resolve inside an allowed root: the project root plus any directory in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated). Dot-prefixed components, credential-looking basenames (`*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*token*`, `*secret*`), `/etc`, `/proc`, `/sys`, and names containing `"`/CR/LF are always refused. `dry_run=True` returns `files: [{path, resolved, size, sha256}]` and uploads nothing. See [cli-reference.md](cli-reference.md#attachments).
+- `archive_deck(deck)` — despite the name, this dispatches `decks/delete`: the deck is **deleted and cannot be restored**. Its cards are preserved.
+- `create_tag(name, project?)` — takes no color; the `projects/addTag` endpoint has no color field.
+- `batch_delete_cards` / `batch_archive_cards` / `batch_unarchive_cards` — `ok` is `false` if any card failed, and `failed` lists `{card_id, error}` for each one.
+
 ## Token Efficiency
 
 Minimize token consumption with these patterns:
@@ -142,10 +149,11 @@ Set via `CODECKS_MCP_RESPONSE_MODE` environment variable:
 | `get_team_playbook` | `session_start().playbook_rules` |
 | `get_tag_registry` | `session_start().project_context.tag_registry` |
 | `get_lane_registry` | `session_start().project_context.lane_registry` |
-| `planning_*` (4 tools) | CLI: `py codecks_api.py plan <cmd>` |
-| `save/get/clear_cli_feedback` | CLI: `py codecks_api.py feedback <cmd>` |
+| `planning_*` (4 tools) | Python API: `codecks_cli.planning.init_planning` / `get_planning_status` / `update_planning` / `measure_planning` |
+| `save_cli_feedback` | CLI: `py codecks_api.py feedback "<message>" [--category ...]` |
+| `get_cli_feedback` / `clear_cli_feedback` | Read/delete `.cli_feedback.json` in the project root (no CLI command) |
 | `warm_cache` | `session_start()` warms cache |
-| `cache_status` | CLI: `py codecks_api.py cache status` |
+| `cache_status` | CLI: `py codecks_api.py cache --show` |
 | `partition_by_lane` / `partition_by_owner` | `partition_cards(by='lane'\|'owner')` |
 | `tick_all_checkboxes` | `tick_checkboxes(all=True)` |
 

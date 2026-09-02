@@ -251,14 +251,45 @@ class TestMutationTools:
         assert result["attached"] == 1
         client.attach_files.assert_called_once_with(card_id=_C1, files=["mockup.png"])
 
-    def test_attach_files_dry_run(self):
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_attach_files_dry_run(self, MockClient):
+        """dry_run delegates to the client so the path policy actually runs."""
+        preview = [
+            {"path": "mockup.png", "resolved": "/p/mockup.png", "size": 3, "sha256": "ab"},
+            {"path": "notes.txt", "resolved": "/p/notes.txt", "size": 5, "sha256": "cd"},
+        ]
+        client = _mock_client(
+            attach_files={
+                "ok": True,
+                "dry_run": True,
+                "card_id": _C1,
+                "attached": 0,
+                "failed": 0,
+                "files": preview,
+            }
+        )
+        MockClient.return_value = client
         result = mcp_mod.attach_files(_C1, ["mockup.png", "notes.txt"], dry_run=True)
         assert result["ok"] is True
         assert result["dry_run"] is True
         assert result["action"] == "attach_files"
         assert result["file_count"] == 2
+        assert result["files"] == preview
+        client.attach_files.assert_called_once_with(
+            card_id=_C1, files=["mockup.png", "notes.txt"], dry_run=True
+        )
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_attach_files_dry_run_surfaces_policy_error(self, MockClient):
+        client = _mock_client()
+        client.attach_files.side_effect = CliError("[ERROR] outside the allowed roots: /etc/passwd")
+        MockClient.return_value = client
+        result = mcp_mod.attach_files(_C1, ["/etc/passwd"], dry_run=True)
+        assert result["ok"] is False
+        assert "outside the allowed roots" in result["error"]
 
     def test_attach_files_validates_uuid(self):
+        # Bad UUID is rejected before the client is ever built.
         result = mcp_mod.attach_files(_BAD, ["mockup.png"], dry_run=True)
         assert result["ok"] is False
         assert "36-char UUID" in result["error"]
@@ -2179,6 +2210,39 @@ class TestUuidHints:
 
 
 # ---------------------------------------------------------------------------
+# Admin tools
+# ---------------------------------------------------------------------------
+
+
+class TestAdminToolContracts:
+    """The admin tool surface must not promise what the dispatch API cannot do."""
+
+    def test_create_tag_has_no_color_parameter(self):
+        """`projects/addTag` takes no color — the tool must not advertise one."""
+        import inspect
+
+        from codecks_cli.mcp_server import _tools_admin
+
+        params = inspect.signature(_tools_admin.create_tag).parameters
+        assert "color" not in params
+        assert list(params) == ["name", "project"]
+        doc = _tools_admin.create_tag.__doc__ or ""
+        assert "color:" not in doc  # no Args entry promising a color
+        assert "no color field" in doc  # but it explains why
+
+    def test_archive_deck_docstring_says_it_deletes(self):
+        """admin.archive_deck dispatches decks/delete — the docs must say so."""
+        from codecks_cli.client import CodecksClient
+        from codecks_cli.mcp_server import _tools_admin
+
+        for doc in (_tools_admin.archive_deck.__doc__, CodecksClient.archive_deck_admin.__doc__):
+            assert doc is not None
+            assert "NOT reversible" in doc
+            assert "decks/delete" in doc
+            assert "reversible)" not in doc
+
+
+# ---------------------------------------------------------------------------
 # session_start composite tool (Task 3)
 # ---------------------------------------------------------------------------
 
@@ -2204,6 +2268,53 @@ class TestSessionStart:
         assert "standup" in result
         assert "preferences" in result
         assert "project_context" in result
+
+    @patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent_prefs.json")
+    def test_removed_tools_point_at_real_entry_points(self):
+        """The migration guide must not advertise CLI commands that don't exist."""
+        from codecks_cli import planning
+        from codecks_cli.cli import build_parser
+
+        _core._snapshot_cache = {
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "fetched_ts": __import__("time").monotonic(),
+            "account": {"name": "test"},
+            "standup": {},
+            "cards_result": {"cards": []},
+            "hand": [],
+            "decks": [],
+        }
+        _core._cache_loaded_at = _core._snapshot_cache["fetched_ts"]
+        removed = mcp_mod.session_start()["removed_tools"]
+
+        # There is no `plan` subcommand — planning is a Python API.
+        assert not any("codecks_api.py plan" in v for v in removed.values())
+        for fn in ("init_planning", "get_planning_status", "update_planning", "measure_planning"):
+            assert hasattr(planning, fn)
+            assert any(fn in v for v in removed.values())
+
+        assert removed["cache_status"] == "CLI: py codecks_api.py cache --show"
+        assert 'feedback "<message>"' in removed["save_cli_feedback"]
+        assert ".cli_feedback.json" in removed["get_cli_feedback"]
+        assert ".cli_feedback.json" in removed["clear_cli_feedback"]
+
+        # Every advertised CLI subcommand + flag must exist in the parser.
+        subparsers = {
+            name
+            for action in build_parser()._subparsers._actions
+            if hasattr(action, "choices") and action.choices
+            for name in action.choices
+        }
+        assert "plan" not in subparsers
+        assert {"cache", "feedback"} <= subparsers
+        cache_flags = {
+            opt
+            for action in build_parser()._subparsers._actions
+            if hasattr(action, "choices") and action.choices and "cache" in action.choices
+            for a in action.choices["cache"]._actions
+            for opt in a.option_strings
+        }
+        assert "--show" in cache_flags
 
     @patch("codecks_cli.mcp_server._tools_local._PREFS_PATH", "/nonexistent_prefs.json")
     def test_project_context_has_deck_names(self):
@@ -2693,7 +2804,10 @@ class TestUndoMcpTool:
         assert result["ok"] is True
         assert result["reverted_count"] == 1
         assert _C1 in result["reverted"]
-        mock_client.update_cards.assert_called_once_with([_C1], status="not_started", priority="b")
+        # effort was None in the snapshot -> restored with the "null" clear sentinel
+        mock_client.update_cards.assert_called_once_with(
+            [_C1], status="not_started", priority="b", effort="null"
+        )
 
     def test_undo_restores_effort(self, tmp_path, monkeypatch):
         """undo() restores effort field (regression test for effort bug fix)."""
@@ -2726,6 +2840,39 @@ class TestUndoMcpTool:
         # Effort=5 should be included in the update call
         mock_client.update_cards.assert_called_once_with(
             [_C1], status="started", priority="a", effort=5
+        )
+
+    def test_undo_clears_fields_that_were_empty(self, tmp_path, monkeypatch):
+        """A snapshot with priority/status None clears them again, not silently skips."""
+        import codecks_cli._operations as ops
+
+        undo_file = tmp_path / ".pm_undo.json"
+        undo_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-03-17T00:00:00Z",
+                    "cards": {
+                        _C1: {
+                            "status": None,
+                            "priority": None,
+                            "effort": None,
+                            "deck_name": "Code",
+                        }
+                    },
+                }
+            )
+        )
+        monkeypatch.setattr(ops, "_UNDO_PATH", str(undo_file))
+
+        mock_client = MagicMock()
+        mock_client.update_cards.return_value = {"ok": True}
+        monkeypatch.setattr(_core, "_client", mock_client)
+
+        result = mcp_mod.undo()
+        assert result["ok"] is True
+        assert result["reverted_count"] == 1
+        mock_client.update_cards.assert_called_once_with(
+            [_C1], status="null", priority="null", effort="null"
         )
 
     def test_undo_deletes_snapshot_after_use(self, tmp_path, monkeypatch):
@@ -3118,6 +3265,31 @@ class TestBatchDeleteCards:
         result = mcp_mod.batch_delete_cards(card_ids=[_C1, _C2])
         assert result["ok"] is True
         assert result["deleted"] == 2
+        assert result["failed"] == []
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_all_failures_report_not_ok(self, MockClient):
+        """ok must reflect reality — every card failing is not a success."""
+        client = _mock_client(delete_card={"ok": False, "error": "Card is locked"})
+        MockClient.return_value = client
+        result = mcp_mod.batch_delete_cards(card_ids=[_C1, _C2])
+        assert result["ok"] is False
+        assert result["deleted"] == 0
+        assert [f["card_id"] for f in result["failed"]] == [_C1, _C2]
+        assert all(f["error"] == "Card is locked" for f in result["failed"])
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_partial_failure_reports_not_ok(self, MockClient):
+        client = _mock_client()
+        client.delete_card.side_effect = [
+            {"ok": True, "card_id": _C1},
+            {"ok": False, "error": "Card is locked"},
+        ]
+        MockClient.return_value = client
+        result = mcp_mod.batch_delete_cards(card_ids=[_C1, _C2])
+        assert result["ok"] is False
+        assert result["deleted"] == 1
+        assert [f["card_id"] for f in result["failed"]] == [_C2]
 
 
 class TestBatchArchiveCards:
@@ -3138,6 +3310,16 @@ class TestBatchArchiveCards:
         result = mcp_mod.batch_archive_cards(card_ids=[_C1])
         assert result["ok"] is True
         assert result["archived"] == 1
+        assert result["failed"] == []
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_all_failures_report_not_ok(self, MockClient):
+        client = _mock_client(archive_card={"ok": False, "error": "nope"})
+        MockClient.return_value = client
+        result = mcp_mod.batch_archive_cards(card_ids=[_C1])
+        assert result["ok"] is False
+        assert result["archived"] == 0
+        assert result["failed"] == [{"card_id": _C1, "error": "nope"}]
 
 
 class TestBatchUnarchiveCards:
@@ -3154,6 +3336,16 @@ class TestBatchUnarchiveCards:
         result = mcp_mod.batch_unarchive_cards(card_ids=[_C1])
         assert result["ok"] is True
         assert result["unarchived"] == 1
+        assert result["failed"] == []
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_all_failures_report_not_ok(self, MockClient):
+        client = _mock_client(unarchive_card={"ok": False, "error": "nope"})
+        MockClient.return_value = client
+        result = mcp_mod.batch_unarchive_cards(card_ids=[_C1])
+        assert result["ok"] is False
+        assert result["unarchived"] == 0
+        assert result["failed"] == [{"card_id": _C1, "error": "nope"}]
 
 
 class TestBatchUpdateBodies:

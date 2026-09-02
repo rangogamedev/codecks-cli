@@ -1,5 +1,6 @@
 """Tests for attachment validation, multipart upload helpers, and workflows."""
 
+import hashlib
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -24,6 +25,24 @@ def _scratch_dir() -> Path:
         except OSError:
             continue
     raise RuntimeError("No writable scratch directory available for attachment tests.")
+
+
+@pytest.fixture(autouse=True)
+def _allow_scratch_roots(monkeypatch):
+    """Scratch dirs live outside the project root — allowlist them for these tests.
+
+    Tests that exercise the allowlist itself override this with their own
+    ``monkeypatch.setenv`` / ``delenv`` call.
+    """
+    from codecks_cli import attachments
+
+    roots = []
+    for candidate in (Path("/tmp"), Path(".sandbox_tmp")):
+        try:
+            roots.append(str(candidate.resolve()))
+        except OSError:
+            continue
+    monkeypatch.setenv(attachments.ALLOW_DIRS_ENV, os.pathsep.join(roots))
 
 
 def test_prepare_files_rejects_duplicate_basenames():
@@ -214,3 +233,183 @@ def test_upload_report_files_uses_upload_urls(mock_raw):
     assert result["ok"] is True
     assert result["attached"] == 1
     mock_raw.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Path policy: allowlisted roots + credential denylist
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def project_root(tmp_path, monkeypatch):
+    """Point the attachment allowlist at an isolated project root only."""
+    from codecks_cli import attachments, config
+
+    root = tmp_path / "project"
+    root.mkdir()
+    monkeypatch.setattr(config, "_PROJECT_ROOT", str(root))
+    monkeypatch.delenv(attachments.ALLOW_DIRS_ENV, raising=False)
+    return root
+
+
+def test_file_inside_project_root_is_accepted(project_root):
+    from codecks_cli.attachments import prepare_attachment_files
+
+    target = project_root / "assets" / "mockup.png"
+    target.parent.mkdir()
+    target.write_bytes(b"png")
+
+    files = prepare_attachment_files([str(target)])
+
+    assert len(files) == 1
+    assert files[0].file_name == "mockup.png"
+
+
+def test_file_outside_project_root_is_rejected(project_root, tmp_path):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, prepare_attachment_files
+
+    outside = tmp_path / "elsewhere" / "notes.txt"
+    outside.parent.mkdir()
+    outside.write_text("data", encoding="utf-8")
+
+    with pytest.raises(CliError) as exc:
+        prepare_attachment_files([str(outside)])
+    assert "outside the allowed roots" in str(exc.value)
+    assert ALLOW_DIRS_ENV in str(exc.value)
+
+
+def test_env_override_allows_extra_root(project_root, tmp_path, monkeypatch):
+    from codecks_cli.attachments import ALLOW_DIRS_ENV, prepare_attachment_files
+
+    outside = tmp_path / "shared" / "notes.txt"
+    outside.parent.mkdir()
+    outside.write_text("data", encoding="utf-8")
+    monkeypatch.setenv(
+        ALLOW_DIRS_ENV, os.pathsep.join([str(tmp_path / "unused"), str(outside.parent)])
+    )
+
+    files = prepare_attachment_files([str(outside)])
+
+    assert files[0].file_name == "notes.txt"
+
+
+def test_dotfile_component_is_rejected(project_root):
+    from codecks_cli.attachments import prepare_attachment_files
+
+    target = project_root / ".ssh" / "config"
+    target.parent.mkdir()
+    target.write_text("Host *", encoding="utf-8")
+
+    with pytest.raises(CliError, match="dot-prefixed path component"):
+        prepare_attachment_files([str(target)])
+
+
+@pytest.mark.parametrize(
+    "name", ["server.pem", "deploy.key", "id_rsa", "id_ed25519.pub", "API_TOKEN.txt", "Secrets.md"]
+)
+def test_credential_looking_names_are_rejected(project_root, name):
+    from codecks_cli.attachments import prepare_attachment_files
+
+    target = project_root / name
+    target.write_text("x", encoding="utf-8")
+
+    with pytest.raises(CliError, match="Refusing to attach sensitive local file"):
+        prepare_attachment_files([str(target)])
+
+
+@pytest.mark.parametrize("bad", ['quote".txt', "carriage\rreturn.txt", "line\nfeed.txt"])
+def test_illegal_filename_characters_are_rejected(project_root, bad):
+    from codecks_cli.attachments import prepare_attachment_files
+
+    target = project_root / bad
+    try:
+        target.write_text("x", encoding="utf-8")
+    except OSError:
+        pytest.skip("Filesystem rejects this file name")
+
+    with pytest.raises(CliError, match="illegal character"):
+        prepare_attachment_files([str(target)])
+
+
+def test_symlink_escaping_the_root_is_rejected(project_root, tmp_path):
+    from codecks_cli.attachments import prepare_attachment_files
+
+    outside = tmp_path / "outside.txt"
+    outside.write_text("data", encoding="utf-8")
+    link = project_root / "innocent.txt"
+    try:
+        os.symlink(outside, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation not supported on this platform/user")
+
+    with pytest.raises(CliError, match="outside the allowed roots"):
+        prepare_attachment_files([str(link)])
+
+
+def test_multipart_escapes_quotes_and_backslashes_in_filename(project_root):
+    from codecks_cli.attachments import AttachmentFile, build_multipart_body
+
+    target = project_root / "plain.txt"
+    target.write_text("body", encoding="utf-8")
+    attachment = AttachmentFile(
+        path=target,
+        file_name='we"ird\\name.txt',
+        content_type="text/plain",
+        size=4,
+    )
+
+    body, _ = build_multipart_body(attachment, None, boundary="B")
+
+    assert b'filename="we\\"ird\\\\name.txt"' in body
+
+
+def test_dry_run_previews_without_uploading(project_root):
+    from codecks_cli.attachments import attach_files_to_card
+
+    target = project_root / "mockup.png"
+    target.write_bytes(b"png")
+
+    with (
+        patch("codecks_cli.attachments.session_request") as mock_session,
+        patch("codecks_cli.attachments.raw_http_request") as mock_raw,
+    ):
+        result = attach_files_to_card("card-1", [str(target)], user_id="u1", dry_run=True)
+
+    mock_session.assert_not_called()
+    mock_raw.assert_not_called()
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["attached"] == 0
+    entry = result["files"][0]
+    assert entry["path"] == str(target)
+    assert entry["resolved"] == str(target)
+    assert entry["size"] == 3
+    assert entry["sha256"] == hashlib.sha256(b"png").hexdigest()
+
+
+def test_dry_run_still_enforces_the_path_policy(project_root, tmp_path):
+    from codecks_cli.attachments import attach_files_to_card
+
+    outside = tmp_path / "outside.txt"
+    outside.write_text("data", encoding="utf-8")
+
+    with pytest.raises(CliError, match="outside the allowed roots"):
+        attach_files_to_card("card-1", [str(outside)], user_id="u1", dry_run=True)
+
+
+def test_client_dry_run_does_not_resolve_a_user_id(project_root):
+    from codecks_cli.client import CodecksClient
+
+    target = project_root / "mockup.png"
+    target.write_bytes(b"png")
+
+    with (
+        patch("codecks_cli.client._get_user_id") as mock_user,
+        patch("codecks_cli.attachments.session_request") as mock_session,
+    ):
+        client = CodecksClient(validate_token=False)
+        result = client.attach_files("card-1", [str(target)], dry_run=True)
+
+    mock_user.assert_not_called()
+    mock_session.assert_not_called()
+    assert result["dry_run"] is True

@@ -101,6 +101,34 @@ class TestFilePermissions:
         finally:
             s.close()
 
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions only")
+    def test_sidecars_are_tightened_even_under_a_loose_umask(self, tmp_path):
+        """A permissive umask must not leak into the -wal/-shm sidecars."""
+        db_path = tmp_path / "store.db"
+        old_umask = os.umask(0o000)
+        try:
+            s = CardStore(str(db_path))
+        finally:
+            os.umask(old_umask)
+        try:
+            s.upsert_cards([_make_card()])
+            s._restrict_wal_sidecars()
+            for suffix in ("-wal", "-shm"):
+                sidecar = db_path.with_name("store.db" + suffix)
+                if sidecar.exists():
+                    mode = stat.S_IMODE(sidecar.stat().st_mode)
+                    assert mode == 0o600, f"{sidecar.name}: expected 0o600, got {oct(mode)}"
+        finally:
+            s.close()
+
+    def test_restrict_wal_sidecars_is_safe_when_absent(self, tmp_path):
+        """Missing sidecars are ignored, not raised."""
+        s = CardStore(str(tmp_path / "store.db"))
+        try:
+            s._restrict_wal_sidecars()  # no exception
+        finally:
+            s.close()
+
     def test_memory_store_does_not_raise(self):
         """In-memory store skips chmod cleanly (no file to restrict)."""
         s = CardStore(":memory:")

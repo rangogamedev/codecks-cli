@@ -34,6 +34,14 @@ def _doc_files() -> list[Path]:
     return [p for p in paths if p.name not in _SKIP_FILES]
 
 
+def _rel(path: Path) -> str:
+    """Repo-relative POSIX path, so --fix can reopen the file it found."""
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def _scan_docs(
     pattern: str,
     actual: int,
@@ -63,7 +71,9 @@ def _scan_docs(
                 if found != actual:
                     issues.append(
                         {
-                            "file": f"{path.name}:{line_num}",
+                            # Repo-relative so --fix can reopen files under docs/
+                            # too; a bare basename missed every non-root doc.
+                            "file": f"{_rel(path)}:{line_num}",
                             "field": field,
                             "expected": actual,
                             "found": found,
@@ -269,7 +279,7 @@ def check_mcp_counts() -> list[dict]:
                     continue
                 issues.append(
                     {
-                        "file": f"{path.name}:{line_num}",
+                        "file": f"{_rel(path)}:{line_num}",
                         "field": "mcp_tool_count",
                         "expected": actual,
                         "found": found,
@@ -338,7 +348,7 @@ def check_mypy_sync() -> list[dict]:
                 line_num = content[:offset].count("\n") + 1
                 issues.append(
                     {
-                        "file": f"{path.name}:{line_num}",
+                        "file": f"{_rel(path)}:{line_num}",
                         "field": "mypy_command",
                         "expected": canonical,
                         "found": found,

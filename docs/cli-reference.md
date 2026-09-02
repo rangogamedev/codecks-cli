@@ -198,9 +198,29 @@ codecks-cli update <id> --status started --priority a --effort 3
 
 ```bash
 codecks-cli attach <card-id> mockup.png notes.txt
+codecks-cli attach <card-id> mockup.png --dry-run   # validate only, upload nothing
 ```
 
-Attachment paths must point to local readable files. The CLI refuses known local credential/cache files such as `.env`, `.gdd_tokens.json`, `.pm_store.db*`, and `.pm_claims.json`.
+`--dry-run` reports each file's resolved path, size and SHA-256 without contacting the API.
+
+### Path policy
+
+Every path is resolved (symlinks followed) and must land inside an **allowed root**:
+
+- the project root, and
+- any directory listed in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated — `:` on Unix, `;` on Windows; each entry is expanded and resolved).
+
+```bash
+CODECKS_ATTACH_ALLOW_DIRS=/srv/art:/mnt/renders codecks-cli attach <card-id> /srv/art/hero.png
+```
+
+Regardless of root, these are always refused:
+
+- any path component under the root that starts with `.` (covers `.ssh/`, `.aws/`, `.env*`, `.gdd_tokens.json`)
+- basenames matching `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*token*`, `*secret*` (case-insensitive)
+- anything under `/etc`, `/proc`, or `/sys`
+- the known local credential/cache files `.env`, `.gdd_tokens.json`, `.gdd_cache.md`, `.pm_store.db*`, `.pm_claims.json`
+- file names containing `"`, CR, or LF (they would corrupt the upload's `Content-Disposition` header)
 
 ## Hand Management
 

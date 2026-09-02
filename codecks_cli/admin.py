@@ -115,7 +115,8 @@ def create_tag(name: str, color: str | None = None, project: str | None = None) 
 
     Args:
         name: Tag name.
-        color: Optional hex color (reserved for future use).
+        color: Accepted for signature compatibility and ignored — the
+            `projects/addTag` endpoint has no color field.
         project: Project name (defaults to primary project).
 
     Returns:

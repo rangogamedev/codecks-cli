@@ -607,9 +607,34 @@ class TestAttachments:
 
         cmd_attach(ns)
 
-        mock_client.attach_files.assert_called_once_with("card-1", ["a.png", "b.txt"])
+        mock_client.attach_files.assert_called_once_with(
+            "card-1", ["a.png", "b.txt"], dry_run=False
+        )
         out = json.loads(capsys.readouterr().out)
         assert out["attached"] == 2
+
+    @patch("codecks_cli.commands._get_client")
+    def test_attach_dry_run_previews_instead_of_uploading(self, mock_get_client, capsys):
+        """The global --dry-run flag reaches the client as a real preview request."""
+        mock_client = mock_get_client.return_value
+        mock_client.attach_files.return_value = {
+            "ok": True,
+            "dry_run": True,
+            "card_id": "card-1",
+            "attached": 0,
+            "failed": 0,
+            "files": [{"path": "a.png", "resolved": "/p/a.png", "size": 1, "sha256": "ab"}],
+        }
+        ns = argparse.Namespace(card_id="card-1", files=["a.png"], format="json")
+        config.RUNTIME_DRY_RUN = True
+        try:
+            cmd_attach(ns)
+        finally:
+            config.RUNTIME_DRY_RUN = False
+
+        mock_client.attach_files.assert_called_once_with("card-1", ["a.png"], dry_run=True)
+        out = json.loads(capsys.readouterr().out)
+        assert out["dry_run"] is True
 
 
 class TestUpdateValidation:
