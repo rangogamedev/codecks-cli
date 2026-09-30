@@ -17,7 +17,7 @@ from codecks_cli._utils import (  # noqa: F401 — re-exported for existing cons
     _parse_multi_value,
     get_card_tags,
 )
-from codecks_cli.api import _try_call, query, session_request, warn_if_empty
+from codecks_cli.api import _try_call, query, session_request
 from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,6 @@ def list_decks():
         return config._cache["decks"]
     q = {"_root": [{"account": [{"decks": ["title", "id", "projectId", "isDeleted"]}]}]}
     result = query(q)
-    warn_if_empty(result, "deck")
 
     # Whitelist: only keep decks from active projects (excludes archived and deleted projects).
     # Falls back gracefully if the projects query fails — returns all non-deleted decks.
@@ -197,10 +196,6 @@ def list_cards(
 
     q = {"_root": [{"account": [{f"cards({json.dumps(card_query)})": card_fields}]}]}
     result = query(q)
-    # Only warn about token expiry when no server-side filters are applied —
-    # a filtered query returning 0 results is normal (e.g. no "started" cards).
-    if not status_filter and not deck_filter and not archived:
-        warn_if_empty(result, "card")
 
     # Client-side multi-value status filter (when >1 status specified)
     if status_values:

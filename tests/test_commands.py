@@ -747,8 +747,18 @@ class TestUpdateValidation:
 
 class TestFilteredEmptyResults:
     """Known bug: cards --status started returning 0 cards triggered a
-    false TOKEN_EXPIRED warning. Fixed by only calling warn_if_empty
-    when no server-side filters are applied."""
+    false TOKEN_EXPIRED warning. API tokens get a 401 when rejected, so an
+    empty result is just empty and the warning was removed entirely."""
+
+    @patch("codecks_cli.cards.query")
+    def test_unfiltered_empty_results_no_false_warning(self, mock_query, capsys):
+        # e.g. a new organization, or an org token with no projects selected yet
+        mock_query.return_value = {}
+        from codecks_cli.cards import list_cards, list_decks
+
+        list_cards()
+        list_decks()
+        assert "[TOKEN_EXPIRED]" not in capsys.readouterr().err
 
     @patch("codecks_cli.cards.query")
     def test_status_filter_no_false_warning(self, mock_query, capsys):
@@ -772,15 +782,6 @@ class TestFilteredEmptyResults:
         list_cards(deck_filter="Features")
         err = capsys.readouterr().err
         assert "[TOKEN_EXPIRED]" not in err
-
-    @patch("codecks_cli.cards.query")
-    def test_unfiltered_empty_does_warn(self, mock_query, capsys):
-        mock_query.return_value = {"card": {}}
-        from codecks_cli.cards import list_cards
-
-        list_cards()
-        err = capsys.readouterr().err
-        assert "[TOKEN_EXPIRED]" in err
 
 
 class TestOwnerNoneFilter:

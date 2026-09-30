@@ -135,7 +135,6 @@ class TestSyncFromApi:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 mock_query.return_value = {
                     "masterTag": {
@@ -158,7 +157,6 @@ class TestSyncFromApi:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 mock_query.return_value = {
                     "masterTag": {
@@ -175,7 +173,7 @@ class TestSyncFromApi:
 
         from codecks_cli import tags
 
-        with patch("codecks_cli.api.query") as mock_query, patch("codecks_cli.api.warn_if_empty"):
+        with patch("codecks_cli.api.query") as mock_query:
             mock_query.return_value = {"masterTag": {}}
             count = tags.sync_from_api()
             assert count == 0
@@ -189,7 +187,6 @@ class TestSyncFromApi:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 mock_query.return_value = {
                     "masterTag": {
@@ -218,7 +215,6 @@ class TestSyncQueryShape:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 mock_query.return_value = {"masterTag": {}}
                 tags.sync_from_api()
@@ -236,7 +232,6 @@ class TestSyncQueryShape:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 # Shape the real API returns for the account-nested query.
                 mock_query.return_value = {
@@ -260,7 +255,6 @@ class TestSyncQueryShape:
         try:
             with (
                 patch("codecks_cli.api.query") as mock_query,
-                patch("codecks_cli.api.warn_if_empty"),
             ):
                 mock_query.return_value = {"masterTag": {"t1": {"title": "Code"}}}
                 assert tags.sync_from_api() == 0

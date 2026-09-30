@@ -85,13 +85,12 @@ def sync_from_api() -> int:
     """
     global TAGS
 
-    from codecks_cli.api import query, warn_if_empty
+    from codecks_cli.api import query
 
     # masterTags live under `account`, and the tag label field is `title`
     # (see cards.list_tags / CodecksClient.list_tags). A bare _root query or a
     # `name` field silently returns nothing.
     result = query({"_root": [{"account": [{"masterTags": ["title", "color"]}]}]})
-    warn_if_empty(result, "masterTag")
     api_tags = result.get("masterTag", {})
     if not api_tags:
         return 0
