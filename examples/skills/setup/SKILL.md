@@ -44,7 +44,7 @@ Copy `.env.example` to `.env` if it does not exist, then print this guide:
 | Token | What it does | Where to get it | Expires? |
 |-------|-------------|-----------------|----------|
 | `CODECKS_ACCOUNT` | Team subdomain | The `myteam` part of `myteam.codecks.io` | Never |
-| `CODECKS_TOKEN` | Read + write access | Browser DevTools (F12) > Application > Cookies > `at` value | With browser session |
+| `CODECKS_TOKEN` | Read + write access | Codecks > Your Profile > API Tokens (`cdxut_...`, shown once) | When revoked |
 | `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations > User Reporting | Never |
 | `CODECKS_REPORT_TOKEN` | Create cards | Run `codecks-cli generate-token` after setting access key | Never (until disabled) |
 

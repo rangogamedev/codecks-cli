@@ -154,6 +154,29 @@ class TestSessionRequest429:
         assert "X-Request-Id" in headers
         assert headers["X-Request-Id"]
 
+    @patch("codecks_cli.api._http_request")
+    def test_sends_bearer_token(self, mock_http, monkeypatch):
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "cdxut_id_secret")
+        session_request("/", {"query": {}}, idempotent=True)
+        headers = mock_http.call_args.args[2]
+        assert headers["Authorization"] == "Bearer cdxut_id_secret"
+        assert "X-Auth-Token" not in headers
+
+    @patch("codecks_cli.api._http_request")
+    def test_401_is_token_expired(self, mock_http):
+        mock_http.side_effect = HTTPError(401, "Unauthorized", "")
+        with pytest.raises(SetupError) as exc_info:
+            session_request("/", {"query": {}})
+        assert str(exc_info.value).startswith("[TOKEN_EXPIRED]")
+
+    @patch("codecks_cli.api._http_request")
+    def test_403_is_permission_error_with_server_message(self, mock_http):
+        mock_http.side_effect = HTTPError(403, "Forbidden", "token is read-only")
+        with pytest.raises(CliError) as exc_info:
+            session_request("/dispatch/cards/create", {})
+        assert not isinstance(exc_info.value, SetupError)
+        assert "read-only" in str(exc_info.value)
+
 
 class TestReportRequestAttachments:
     @patch("codecks_cli.api._http_request")
@@ -350,7 +373,10 @@ class TestCheckToken:
     def test_accepts_valid_account_payload(self, mock_session, monkeypatch):
         monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
         monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
-        mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
+        mock_session.return_value = {
+            "account": {"id1": {"id": "id1"}},
+            "project": {"p1": {"id": "p1"}},
+        }
         _check_token()
         mock_session.assert_called_once()
 
@@ -364,6 +390,16 @@ class TestCheckToken:
         msg = str(exc_info.value)
         assert "[TOKEN_EXPIRED]" in msg
         assert "setup" in msg.lower()
+
+    @patch("codecks_cli.api.session_request")
+    def test_raises_token_expired_when_anonymous(self, mock_session, monkeypatch):
+        """Unauthenticated requests still resolve the account but see no projects."""
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
+        mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
+        with pytest.raises(SetupError) as exc_info:
+            _check_token()
+        assert "[TOKEN_EXPIRED]" in str(exc_info.value)
 
     @patch("codecks_cli.api.session_request")
     def test_wraps_setup_error_with_setup_hint(self, mock_session, monkeypatch):

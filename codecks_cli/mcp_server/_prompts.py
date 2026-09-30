@@ -39,7 +39,7 @@ coordination. Add to your editor's MCP config:
 | Token | Where to get it |
 |-------|-----------------|
 | CODECKS_ACCOUNT | Your team subdomain (myteam.codecks.io) |
-| CODECKS_TOKEN | Browser DevTools > Cookies > `at` value |
+| CODECKS_TOKEN | Codecks > Your Profile > API Tokens (`cdxut_...`) |
 | CODECKS_ACCESS_KEY | Codecks > Settings > Integrations |
 | CODECKS_REPORT_TOKEN | `codecks-cli generate-token` |
 

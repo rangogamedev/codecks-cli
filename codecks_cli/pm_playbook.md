@@ -105,7 +105,7 @@ codecks-cli unhand <uuid1> --agent                    # remove completed
 | Error prefix | Meaning | Action |
 |-------------|---------|--------|
 | `[SETUP_NEEDED]` | `.env` is missing or incomplete | Ask user to run `codecks-cli setup` |
-| `[TOKEN_EXPIRED]` | Browser session cookie is stale | Ask user to refresh token |
+| `[TOKEN_EXPIRED]` | API token revoked or invalid | Ask user to create a new API token |
 | `[ERROR]` | Validation or API failure | Fix arguments, retry once |
 | HTTP 429 | Rate limited (40 req/5s) | Wait 5s, retry once |
 | Timeout | Network issue | Retry once, then report |

@@ -107,7 +107,7 @@ def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
     if dry_run:
         # A preview uploads nothing, so it must not need a token or a network
         # round-trip: run the path policy locally instead of going through
-        # _call() -> _get_client() (which validates the session token).
+        # _call() -> _get_client() (which validates the API token).
         from codecks_cli.attachments import preview_attachment_files
 
         try:

@@ -614,7 +614,7 @@ def create_card(title, content=None, severity=None, file_names=None):
 
 
 def update_card(card_id, **kwargs):
-    """Update card properties via dispatch (uses session token).
+    """Update card properties via dispatch (uses API token).
     Supported fields: status, priority, effort, deckId, title, content,
     milestoneId, parentCardId, assigneeId, masterTags, isDoc.
     None values are sent as JSON null to clear fields."""
@@ -624,7 +624,7 @@ def update_card(card_id, **kwargs):
 
 
 def archive_card(card_id):
-    """Archive a card (uses session token)."""
+    """Archive a card (uses API token)."""
     return session_request(
         "/dispatch/cards/update",
         {
@@ -635,7 +635,7 @@ def archive_card(card_id):
 
 
 def unarchive_card(card_id):
-    """Unarchive a card (uses session token)."""
+    """Unarchive a card (uses API token)."""
     return session_request(
         "/dispatch/cards/update",
         {
@@ -646,7 +646,7 @@ def unarchive_card(card_id):
 
 
 def delete_card(card_id):
-    """Delete a card — archives first, then deletes (uses session token)."""
+    """Delete a card — archives first, then deletes (uses API token)."""
     archive_card(card_id)
     try:
         return session_request(

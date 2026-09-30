@@ -28,7 +28,7 @@ cp .env.example .env         # then fill in your tokens
 
 | Variable | Purpose | Expiry |
 |----------|---------|--------|
-| `CODECKS_TOKEN` | Session cookie for read/write | Expires periodically |
+| `CODECKS_TOKEN` | API token (Bearer) for read/write | Until revoked |
 | `CODECKS_ACCOUNT` | Your Codecks org slug | Never |
 
 ### Optional tokens

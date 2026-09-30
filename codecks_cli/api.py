@@ -361,12 +361,30 @@ def raw_http_request(url, data=None, headers=None, method="POST"):
         ) from e
 
 
+API_TOKEN_PREFIXES = ("cdxut_", "cdxat_")
+TOKEN_HELP = (
+    "Create an API token in Codecks under Your Profile > API Tokens "
+    "(or Organization Settings > Integrations > API Tokens) and set CODECKS_TOKEN."
+)
+# Anonymous requests still resolve the account, but see no projects.
+AUTH_PROBE_QUERY = {"_root": [{"account": ["id", "name", {"projects": ["id"]}]}]}
+
+
+def is_authenticated(result):
+    """True if an AUTH_PROBE_QUERY result shows the token can see project data."""
+    return bool(result.get("account")) and bool(result.get("project"))
+
+
+def looks_like_api_token(token):
+    return token.startswith(API_TOKEN_PREFIXES)
+
+
 def session_request(path="/", data=None, method="POST", idempotent=False):
-    """Make an authenticated request using the session token (at cookie).
+    """Make an authenticated request using a Codecks API token (Bearer auth).
     Used for reading data and dispatch mutations."""
     url = config.BASE_URL + path
     headers = {
-        "X-Auth-Token": config.SESSION_TOKEN,
+        "Authorization": f"Bearer {config.SESSION_TOKEN}",
         "X-Account": config.ACCOUNT,
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -375,12 +393,13 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
     try:
         return _http_request(url, data, headers, method, idempotent=idempotent)
     except HTTPError as e:
-        if e.code in (401, 403):
-            raise SetupError(
-                "[TOKEN_EXPIRED] The Codecks session token has expired. "
-                "Please provide a fresh 'at' cookie from browser DevTools "
-                "(Brave > F12 > Network > api.codecks.io request > "
-                "Cookie header > at=...)."
+        if e.code == 401:
+            raise SetupError(f"[TOKEN_EXPIRED] Codecks rejected the API token. {TOKEN_HELP}") from e
+        if e.code == 403:
+            raise CliError(
+                "[ERROR] Codecks denied this request (HTTP 403). The API token may be "
+                "read-only or lack access to this project. "
+                f"Server said: {_sanitize_error(e.body)}"
             ) from e
         if e.code == 429:
             raise CliError(
@@ -478,7 +497,7 @@ def generate_report_token(label="claude-code"):
 
 
 def query(q):
-    """Run a Codecks query (uses session token)."""
+    """Run a Codecks query (uses API token)."""
     result = _expect_object_response(
         session_request("/", {"query": q}, idempotent=True),
         "query",
@@ -492,7 +511,7 @@ def query(q):
 
 
 def dispatch(path, data):
-    """Generic dispatch call for mutations (uses session token)."""
+    """Generic dispatch call for mutations (uses API token)."""
     result = _expect_object_response(
         session_request(f"/dispatch/{path}", data),
         "dispatch",
@@ -506,17 +525,14 @@ def dispatch(path, data):
 
 
 def warn_if_empty(result, relation):
-    """Warn if a query returned no results — likely means the token expired.
+    """Warn if a query returned no results — likely means the token is not accepted.
     Codecks silently returns empty data instead of 401 when unauthenticated."""
     if config.RUNTIME_QUIET:
         return
     if relation not in result or not result[relation]:
         print(
-            f"[TOKEN_EXPIRED] The Codecks session token may have expired "
-            f"(query returned 0 {relation}s). Please provide a fresh 'at' "
-            "cookie from browser DevTools "
-            "(Brave > F12 > Network > api.codecks.io request > "
-            "Cookie header > at=...).",
+            f"[TOKEN_EXPIRED] The Codecks API token may be invalid "
+            f"(query returned 0 {relation}s). {TOKEN_HELP}",
             file=sys.stderr,
         )
 
@@ -527,16 +543,16 @@ def warn_if_empty(result, relation):
 
 
 def _check_token():
-    """Validate session token before running a command. Exits if expired."""
+    """Validate the API token before running a command. Exits if it is not accepted."""
     if not config.SESSION_TOKEN or not config.ACCOUNT:
         raise SetupError("[SETUP_NEEDED] No configuration found.\n  Run: py codecks_api.py setup")
     try:
-        result = session_request("/", {"query": {"_root": [{"account": ["id"]}]}}, idempotent=True)
+        result = session_request("/", {"query": AUTH_PROBE_QUERY}, idempotent=True)
     except SetupError as e:
         raise SetupError(str(e) + "\n  Run: py codecks_api.py setup") from e
-    if "account" not in result or not result["account"]:
+    if not is_authenticated(result):
         raise SetupError(
-            "[TOKEN_EXPIRED] Your session token has expired.\n"
+            f"[TOKEN_EXPIRED] Codecks did not accept your API token. {TOKEN_HELP}\n"
             "  Run: py codecks_api.py setup\n"
             "  Or update CODECKS_TOKEN in .env manually."
         )

@@ -5,10 +5,17 @@ Guides users through configuration of tokens, projects, and milestones.
 
 from codecks_cli import config
 from codecks_cli._utils import _get_field
-from codecks_cli.api import _mask_token, _try_call, generate_report_token, query
+from codecks_cli.api import (
+    AUTH_PROBE_QUERY,
+    _mask_token,
+    _try_call,
+    generate_report_token,
+    is_authenticated,
+    looks_like_api_token,
+    query,
+)
 from codecks_cli.cards import (
     _get_active_project_ids,
-    get_account,
     list_cards,
     list_decks,
     load_milestone_names,
@@ -203,7 +210,7 @@ def _setup_done():
     print("Your configuration:")
     print(f"  Account:       {final_env.get('CODECKS_ACCOUNT', '(not set)')}")
     tok = final_env.get("CODECKS_TOKEN", "")
-    print(f"  Session token: {_mask_token(tok) if tok else '(not set)'}")
+    print(f"  API token:     {_mask_token(tok) if tok else '(not set)'}")
     ak = final_env.get("CODECKS_ACCESS_KEY", "")
     print(f"  Access key:    {'configured' if ak else '(not set)'}")
     rt = final_env.get("CODECKS_REPORT_TOKEN", "")
@@ -221,7 +228,7 @@ def _setup_done():
     print("  py codecks_api.py account --format table")
     print("  py codecks_api.py cards --format table")
     print()
-    print("If your session token expires, run setup again:")
+    print("If you revoke or replace your API token, run setup again:")
     print("  py codecks_api.py setup")
 
 
@@ -254,10 +261,10 @@ def cmd_setup():
 
         config.ACCOUNT = existing_account
         config.SESSION_TOKEN = existing_token
-        print("Checking if your session token still works...")
-        account_result = _try_call(get_account)
+        print("Checking if your API token still works...")
+        account_result = _try_call(query, AUTH_PROBE_QUERY)
 
-        if account_result and account_result.get("account"):
+        if account_result and is_authenticated(account_result):
             acc_data = next(iter(account_result["account"].values()), None)
             acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token is valid! Connected to: {acc_name}")
@@ -265,7 +272,7 @@ def cmd_setup():
             choice = input(
                 "What would you like to do?\n"
                 "  1. Refresh projects and milestones\n"
-                "  2. Update session token\n"
+                "  2. Update API token\n"
                 "  3. Run full setup from scratch\n"
                 "  Choice [1]: "
             ).strip()
@@ -290,8 +297,12 @@ def cmd_setup():
                 full_setup = True
                 has_config = False
         else:
-            print("  Token has expired or is invalid.")
-            print("  Let's get a fresh one.\n")
+            if not looks_like_api_token(existing_token):
+                print("  This looks like an old browser session token.")
+                print("  Codecks now uses official API tokens instead.\n")
+            else:
+                print("  Token was rejected (revoked or invalid).")
+                print("  Let's set a new one.\n")
             full_setup = False
             # Fall through to token prompt
 
@@ -316,41 +327,42 @@ def cmd_setup():
             print("  Account name cannot be empty. Try again.")
         print()
 
-    # --- Step 2: Session token ---
-    step = "STEP 2" if full_setup and not has_config else "Session token"
-    print(f"{step}: Session token")
+    # --- Step 2: API token ---
+    step = "STEP 2" if full_setup and not has_config else "API token"
+    print(f"{step}: API token")
     print("-" * 40)
-    print("This token lets the tool read your Codecks data.")
-    print("It comes from your browser and expires when your session ends.")
+    print("This token lets the tool read and change your Codecks data.")
+    print("It does not expire until you revoke it.")
     print()
     print("How to get it:")
     acct = config.ACCOUNT or "your-account"
-    print(f"  1. Open your browser and go to {acct}.codecks.io")
-    print("  2. Press F12 to open Developer Tools")
-    print("  3. Click the Network tab")
-    print("  4. Refresh the page (F5)")
-    print("  5. Click any request to api.codecks.io")
-    print("  6. In the Headers tab, find the Cookie header")
-    print("  7. Copy the value after at= (a string of letters and numbers)")
+    print(f"  1. Go to {acct}.codecks.io")
+    print("  2. Open Your Profile > API Tokens")
+    print("  3. Create a token with read & write access")
+    print("     (Org owners/admins can use Organization Settings > Integrations > API Tokens)")
+    print("  4. Copy it now: the full token is only shown once")
+    print("     It starts with cdxut_ (personal) or cdxat_ (organization)")
     print()
 
     for attempt in range(3):
-        token_input = input("Paste your session token: ").strip()
+        token_input = input("Paste your API token: ").strip()
         if not token_input:
             print("  Token cannot be empty. Try again.")
             continue
 
         # Clean common paste mistakes
-        if token_input.startswith("at="):
-            token_input = token_input[3:]
+        if token_input.lower().startswith("bearer "):
+            token_input = token_input[7:]
         token_input = token_input.strip('"').strip("'").strip()
+        if not looks_like_api_token(token_input):
+            print("  Warning: API tokens start with cdxut_ or cdxat_.")
 
         config.save_env_value("CODECKS_TOKEN", token_input)
         config.SESSION_TOKEN = token_input
 
         print("  Validating...")
-        account_result = _try_call(get_account)
-        if account_result and account_result.get("account"):
+        account_result = _try_call(query, AUTH_PROBE_QUERY)
+        if account_result and is_authenticated(account_result):
             acc_data = next(iter(account_result["account"].values()), None)
             acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token works! Connected to: {acc_name}")
@@ -359,7 +371,7 @@ def cmd_setup():
             remaining = 2 - attempt
             if remaining > 0:
                 print(f"  Token did not work. {remaining} attempt(s) left.")
-                print("  Make sure you copied only the value after at=")
+                print("  Make sure you copied the whole token (cdxut_... or cdxat_...).")
             else:
                 print("  Token did not work after 3 attempts.")
                 print("  Saving it anyway — you can update later with: py codecks_api.py setup")

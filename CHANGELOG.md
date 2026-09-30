@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Authentication uses the official Codecks API (v2.96, "The Magic Key"): requests send `Authorization: Bearer <token>` with a personal (`cdxut_…`) or organization (`cdxat_…`) API token instead of the deprecated `X-Auth-Token` browser-session header, which the server now treats as anonymous and which stops working on 2026-12-31. Existing browser `at` cookies must be replaced: run `setup` or put a new API token in `CODECKS_TOKEN`.
+- Token validation (`_check_token`, `setup`) now requires the account's projects to be visible, so an anonymous or rejected token no longer reports "Token works!".
+- HTTP 403 is reported as a permission error with the server's message (for example, a read-only token trying to write) instead of `[TOKEN_EXPIRED]`.
+
 ### Security
 - MCP HTTP runner (`scripts/run_mcp_http.py`) binds `127.0.0.1` by default instead of `0.0.0.0`, and the `mcp-http` Compose service publishes its port on loopback only (`127.0.0.1:${MCP_HTTP_PORT:-8808}:8808`) while setting `MCP_HTTP_HOST=0.0.0.0` inside the container. The MCP SDK only auto-enables DNS-rebinding (Host/Origin) protection for loopback binds, so a non-loopback `MCP_HTTP_HOST` now gets explicit `TransportSecuritySettings` built from `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (defaults `localhost:*,127.0.0.1:*,[::1]:*` and `http://localhost:*,http://127.0.0.1:*,http://[::1]:*`, mirroring the SDK's own loopback allowlists — IPv6 loopback included).
 - `.gitignore` covers the atomic-write temp files (`.gdd_tmp_*`, `.env_tmp_*`, `tmp*.tmp`) that a crash can leave behind holding `.env` contents or a Google refresh token.

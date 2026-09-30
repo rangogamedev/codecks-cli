@@ -78,7 +78,7 @@ Global flags:
 
 Commands:
   setup                   - Interactive setup wizard (run this first!)
-  query <json>            - Run a raw query against the API (uses session token)
+  query <json>            - Run a raw query against the API (uses API token)
   account                 - Show account info
   cards                   - List all cards
     -d, --deck <name>       Filter by deck name (e.g. -d Features)
@@ -216,7 +216,7 @@ Commands:
   gdd-revoke              - Revoke Google Drive authorization and delete tokens
   generate-token          - Generate a new Report Token using the Access Key
     --label <text>          Label for the token (default: claude-code)
-  dispatch <path> <json>  - Raw dispatch call (uses session token)
+  dispatch <path> <json>  - Raw dispatch call (uses API token)
 """
 
 

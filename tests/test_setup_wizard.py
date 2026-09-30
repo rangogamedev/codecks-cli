@@ -70,9 +70,12 @@ class TestCmdSetupFastPath:
     ):
         mock_load_env.return_value = {
             "CODECKS_ACCOUNT": "acct",
-            "CODECKS_TOKEN": "token",
+            "CODECKS_TOKEN": "cdxut_id_secret",
         }
-        mock_try_call.return_value = {"account": {"a1": {"name": "Acct"}}}
+        mock_try_call.return_value = {
+            "account": {"a1": {"name": "Acct"}},
+            "project": {"p1": {"id": "p1"}},
+        }
         setup_wizard.cmd_setup()
         mock_projects.assert_called_once()
         mock_milestones.assert_called_once()

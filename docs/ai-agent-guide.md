@@ -75,7 +75,7 @@ codecks-cli cards --deck Backlog --limit 10 --agent && codecks-cli done @last --
 
 | Token | Purpose | Where to get it | Expires? |
 |-------|---------|-----------------|----------|
-| `CODECKS_TOKEN` | Read + write | Browser DevTools > Cookies > `at` value | With browser session |
+| `CODECKS_TOKEN` | Read + write | Codecks > Your Profile > API Tokens (`cdxut_...`) | When revoked |
 | `CODECKS_REPORT_TOKEN` | Create cards | `codecks-cli generate-token` | Never (until disabled) |
 | `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations | Never |
 
@@ -153,7 +153,7 @@ The base workflow covers any project. To add domain-specific patterns:
 | Problem | Fix |
 |---------|-----|
 | `[SETUP_NEEDED]` | Run `codecks-cli setup` |
-| `[TOKEN_EXPIRED]` | Refresh `CODECKS_TOKEN` from browser cookies |
+| `[TOKEN_EXPIRED]` | Create a new API token and update `CODECKS_TOKEN` |
 | MCP server not found | Run `pip install codecks-cli[mcp]` then `codecks-mcp` |
 | `invalid choice` for a command | Ensure you installed the latest version |
 | 429 rate limit | Wait 5s, retry. CLI auto-retries reads. |

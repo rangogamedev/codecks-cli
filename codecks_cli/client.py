@@ -161,7 +161,7 @@ class CodecksClient:
         """Initialize the client.
 
         Args:
-            validate_token: If True, check that the session token is valid
+            validate_token: If True, check that the API token is valid
                 before any API call. Set to False for commands that don't
                 need a token (setup, gdd-auth, etc.).
         """
