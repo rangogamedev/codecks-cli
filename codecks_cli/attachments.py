@@ -355,27 +355,6 @@ def _file_result(attachment: AttachmentFile) -> dict[str, object]:
     }
 
 
-def upload_report_files(
-    attachments: list[AttachmentFile],
-    upload_urls: list[dict[str, object]],
-) -> dict[str, object]:
-    """Upload files returned by the user-report card creation endpoint."""
-    if len(upload_urls) < len(attachments):
-        raise CliError(
-            "[ERROR] Card creation response did not include enough upload URLs "
-            f"({len(upload_urls)} for {len(attachments)} file(s))."
-        )
-
-    uploaded: list[dict[str, object]] = []
-    for attachment, upload_info in zip(attachments, upload_urls, strict=False):
-        if not isinstance(upload_info, dict):
-            raise CliError(f"[ERROR] Invalid upload info for attachment '{attachment.file_name}'.")
-        _upload_to_url(attachment, upload_info, url_keys=("url", "signedUrl", "signed_url"))
-        uploaded.append(_file_result(attachment))
-
-    return {"ok": True, "attached": len(uploaded), "failed": 0, "files": uploaded}
-
-
 def attach_files_to_card(
     card_id: str, paths: list[str], *, user_id: str, dry_run: bool = False
 ) -> dict[str, object]:

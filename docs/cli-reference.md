@@ -34,7 +34,7 @@ Run commands with `codecks-cli <command>` (or `py codecks_api.py <command>` if n
 | `unarchive` | Restore archived cards |
 | `delete` | Permanently delete a card (requires `--confirm`) |
 | `setup` | Interactive setup wizard |
-| `generate-token` | Create a report token |
+| `default-deck [name]` | Show or set the deck new cards go to |
 | `completion` | Shell completions (bash/zsh/fish) |
 | `gdd` | View parsed GDD tasks |
 | `gdd-sync` | Sync GDD tasks to Codecks cards |
@@ -79,7 +79,7 @@ codecks-cli cards --project "My Project" --status started --search "bug"
 codecks-cli cards --stats
 codecks-cli cards --project "My Project" --stats
 
-# Single card details (includes sub-cards, severity, hero parent)
+# Single card details (includes sub-cards, hero parent)
 codecks-cli card <card-id>
 
 # Decks (with card counts), projects, milestones
@@ -126,8 +126,8 @@ PM Focus sections: **Blocked**, **Unassigned** (started cards with no owner), **
 # Simple card (lands in Inbox by default)
 codecks-cli create "Fix login bug"
 
-# Card with description and severity
-codecks-cli create "Server crash on startup" --content "Happens after the latest deploy" --severity critical
+# Card with description and priority (goes to your default deck unless --deck)
+codecks-cli create "Server crash on startup" --content "Happens after the latest deploy" --priority a
 
 # Create into a specific deck or project
 codecks-cli create "Refactor save system" --deck "Backlog"
@@ -163,7 +163,7 @@ codecks-cli feature "Economy Tuning" \
   --skip-art
 ```
 
-Transaction safety: if scaffolding fails mid-way, created cards are rolled back (archived). Severity levels: `critical`, `high`, `low`, or `null`.
+Transaction safety: if scaffolding fails mid-way, created cards are rolled back (archived).
 
 ## Updating Cards
 

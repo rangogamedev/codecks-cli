@@ -5,10 +5,16 @@ Guides users through configuration of tokens, projects, and milestones.
 
 from codecks_cli import config
 from codecks_cli._utils import _get_field
-from codecks_cli.api import _mask_token, _try_call, generate_report_token, query
+from codecks_cli.api import (
+    AUTH_PROBE_QUERY,
+    _mask_token,
+    _try_call,
+    is_authenticated,
+    looks_like_api_token,
+    query,
+)
 from codecks_cli.cards import (
     _get_active_project_ids,
-    get_account,
     list_cards,
     list_decks,
     load_milestone_names,
@@ -193,6 +199,54 @@ def _setup_gdd_optional():
     print()
 
 
+def _deck_choices():
+    """Return [(label, deck_id)] sorted by label; label is "Deck (Project)"."""
+    decks_result = _try_call(list_decks) or {}
+    projects = load_project_names() or {}
+    choices = []
+    for key, deck in (decks_result.get("deck") or {}).items():
+        title = deck.get("title")
+        if not title or deck.get("isDeleted"):
+            continue
+        project = projects.get(_get_field(deck, "project_id", "projectId") or "")
+        label = f"{title} ({project})" if project else title
+        choices.append((label, deck.get("id") or key))
+    return sorted(choices, key=lambda c: c[0].lower())
+
+
+def _setup_default_deck():
+    """Ask once which deck new cards go to; saved as CODECKS_DEFAULT_DECK (the deck ID)."""
+    print("Default deck")
+    print("-" * 40)
+    print("New cards go to this deck unless you pick another with --deck.")
+    print("You can change it later with: codecks-cli default-deck <deck name>")
+    print()
+    choices = _deck_choices()
+    if not choices:
+        print("  Could not load your decks. Set it later with: codecks-cli default-deck <name>")
+        print()
+        return
+    for i, (label, _deck_id) in enumerate(choices, 1):
+        print(f"  {i}. {label}")
+    suggested = next((i for i, c in enumerate(choices) if c[0].lower().startswith("inbox")), 0)
+    print()
+    while True:
+        answer = input(f"Deck number [{suggested + 1}]: ").strip()
+        if not answer:
+            index = suggested
+        elif answer.isdigit() and 1 <= int(answer) <= len(choices):
+            index = int(answer) - 1
+        else:
+            print("  Enter one of the numbers above.")
+            continue
+        break
+    label, deck_id = choices[index]
+    config.save_env_value("CODECKS_DEFAULT_DECK", deck_id)
+    config.DEFAULT_DECK = deck_id
+    print(f"  Saved: new cards go to '{label}'")
+    print()
+
+
 def _setup_done():
     """Print setup completion summary."""
     final_env = config.load_env()
@@ -203,11 +257,8 @@ def _setup_done():
     print("Your configuration:")
     print(f"  Account:       {final_env.get('CODECKS_ACCOUNT', '(not set)')}")
     tok = final_env.get("CODECKS_TOKEN", "")
-    print(f"  Session token: {_mask_token(tok) if tok else '(not set)'}")
-    ak = final_env.get("CODECKS_ACCESS_KEY", "")
-    print(f"  Access key:    {'configured' if ak else '(not set)'}")
-    rt = final_env.get("CODECKS_REPORT_TOKEN", "")
-    print(f"  Report token:  {'configured' if rt else '(not set)'}")
+    print(f"  API token:     {_mask_token(tok) if tok else '(not set)'}")
+    print(f"  Default deck:  {'set' if final_env.get('CODECKS_DEFAULT_DECK') else '(not set)'}")
     proj = final_env.get("CODECKS_PROJECTS", "")
     proj_count = len([p for p in proj.split(",") if "=" in p]) if proj else 0
     print(f"  Projects:      {proj_count} mapped")
@@ -221,7 +272,7 @@ def _setup_done():
     print("  py codecks_api.py account --format table")
     print("  py codecks_api.py cards --format table")
     print()
-    print("If your session token expires, run setup again:")
+    print("If you revoke or replace your API token, run setup again:")
     print("  py codecks_api.py setup")
 
 
@@ -254,10 +305,10 @@ def cmd_setup():
 
         config.ACCOUNT = existing_account
         config.SESSION_TOKEN = existing_token
-        print("Checking if your session token still works...")
-        account_result = _try_call(get_account)
+        print("Checking if your API token still works...")
+        account_result = _try_call(query, AUTH_PROBE_QUERY)
 
-        if account_result and account_result.get("account"):
+        if account_result and is_authenticated(account_result):
             acc_data = next(iter(account_result["account"].values()), None)
             acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token is valid! Connected to: {acc_name}")
@@ -265,8 +316,9 @@ def cmd_setup():
             choice = input(
                 "What would you like to do?\n"
                 "  1. Refresh projects and milestones\n"
-                "  2. Update session token\n"
+                "  2. Update API token\n"
                 "  3. Run full setup from scratch\n"
+                "  4. Change default deck (where new cards go)\n"
                 "  Choice [1]: "
             ).strip()
             if choice == "" or choice == "1":
@@ -274,6 +326,8 @@ def cmd_setup():
                 _setup_discover_projects()
                 _setup_discover_milestones()
                 _setup_discover_user()
+                if not config.DEFAULT_DECK:
+                    _setup_default_deck()
                 _setup_gdd_optional()
                 _setup_done()
                 return
@@ -281,6 +335,11 @@ def cmd_setup():
                 full_setup = False
                 print()
                 # Fall through to token prompt
+            elif choice == "4":
+                print()
+                _setup_default_deck()
+                _setup_done()
+                return
             elif choice == "3":
                 full_setup = True
                 has_config = False
@@ -290,8 +349,12 @@ def cmd_setup():
                 full_setup = True
                 has_config = False
         else:
-            print("  Token has expired or is invalid.")
-            print("  Let's get a fresh one.\n")
+            if not looks_like_api_token(existing_token):
+                print("  This looks like an old browser session token.")
+                print("  Codecks now uses official API tokens instead.\n")
+            else:
+                print("  Token was rejected (revoked or invalid).")
+                print("  Let's set a new one.\n")
             full_setup = False
             # Fall through to token prompt
 
@@ -316,94 +379,67 @@ def cmd_setup():
             print("  Account name cannot be empty. Try again.")
         print()
 
-    # --- Step 2: Session token ---
-    step = "STEP 2" if full_setup and not has_config else "Session token"
-    print(f"{step}: Session token")
+    # --- Step 2: API token ---
+    step = "STEP 2" if full_setup and not has_config else "API token"
+    print(f"{step}: API token")
     print("-" * 40)
-    print("This token lets the tool read your Codecks data.")
-    print("It comes from your browser and expires when your session ends.")
+    print("This token lets the tool read and change your Codecks data.")
+    print("It lasts until you revoke it, or until its expiry date if you set one.")
     print()
     print("How to get it:")
     acct = config.ACCOUNT or "your-account"
-    print(f"  1. Open your browser and go to {acct}.codecks.io")
-    print("  2. Press F12 to open Developer Tools")
-    print("  3. Click the Network tab")
-    print("  4. Refresh the page (F5)")
-    print("  5. Click any request to api.codecks.io")
-    print("  6. In the Headers tab, find the Cookie header")
-    print("  7. Copy the value after at= (a string of letters and numbers)")
+    print(f"  1. Go to {acct}.codecks.io")
+    print("  2. Open Your Profile > API Tokens")
+    print("  3. Create a token with read & write access")
+    print("     (Org owners/admins can use Organization Settings > Integrations > API Tokens)")
+    print("  4. Copy it now: the full token is only shown once")
+    print("     It starts with cdxut_ (personal) or cdxat_ (organization)")
     print()
 
     for attempt in range(3):
-        token_input = input("Paste your session token: ").strip()
+        token_input = input("Paste your API token: ").strip()
         if not token_input:
             print("  Token cannot be empty. Try again.")
             continue
 
         # Clean common paste mistakes
-        if token_input.startswith("at="):
-            token_input = token_input[3:]
+        if token_input.lower().startswith("bearer "):
+            token_input = token_input[7:]
         token_input = token_input.strip('"').strip("'").strip()
+        if not looks_like_api_token(token_input):
+            print("  Warning: API tokens start with cdxut_ or cdxat_.")
 
         config.save_env_value("CODECKS_TOKEN", token_input)
         config.SESSION_TOKEN = token_input
 
         print("  Validating...")
-        account_result = _try_call(get_account)
-        if account_result and account_result.get("account"):
+        account_result = _try_call(query, AUTH_PROBE_QUERY)
+        if account_result and is_authenticated(account_result):
             acc_data = next(iter(account_result["account"].values()), None)
             acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token works! Connected to: {acc_name}")
+            if not account_result.get("project"):
+                print("  Note: this token can't see any projects yet. Create a project,")
+                print("  or (organization token) add projects to the token in Codecks.")
             break
         else:
             remaining = 2 - attempt
             if remaining > 0:
                 print(f"  Token did not work. {remaining} attempt(s) left.")
-                print("  Make sure you copied only the value after at=")
+                print("  Make sure you copied the whole token (cdxut_... or cdxat_...).")
             else:
                 print("  Token did not work after 3 attempts.")
                 print("  Saving it anyway — you can update later with: py codecks_api.py setup")
     print()
 
-    # --- Step 3: Access Key (full setup only) ---
-    if full_setup and not has_config:
-        print("STEP 3: Access Key (for creating cards)")
-        print("-" * 40)
-        print("The Access Key lets the tool create new cards.")
-        print("If you skip this, you can still read data but not create cards.")
-        print()
-        print("How to get it:")
-        print(f"  1. Go to {acct}.codecks.io")
-        print("  2. Click the gear icon (Settings)")
-        print("  3. Go to Integrations > User Reporting")
-        print("  4. Copy the Access Key value")
-        print()
-
-        access_input = input("Paste your Access Key (or press Enter to skip): ").strip()
-        if access_input:
-            access_input = access_input.strip('"').strip("'").strip()
-            config.save_env_value("CODECKS_ACCESS_KEY", access_input)
-            config.ACCESS_KEY = access_input
-            print("  Saved: CODECKS_ACCESS_KEY")
-
-            print("  Generating a Report Token...")
-            result = _try_call(generate_report_token, "codecks-cli")
-            if result and result.get("token"):
-                config.REPORT_TOKEN = result["token"]
-                print(f"  Report Token created: {_mask_token(result['token'])}")
-                print("  Saved to .env")
-            else:
-                print("  Could not generate Report Token. Try later:")
-                print("    py codecks_api.py generate-token")
-        else:
-            print("  Skipped. Card creation won't work until you add this.")
-            print("  Re-run setup later to add it.")
-        print()
-
     # --- Auto-discover projects, milestones, user ---
     _setup_discover_projects()
     _setup_discover_milestones()
     _setup_discover_user()
+
+    # --- Default deck (after project discovery, so decks show their project) ---
+    if (full_setup and not has_config) or not config.DEFAULT_DECK:
+        _setup_default_deck()
 
     # --- Optional GDD ---
     if full_setup and not has_config:

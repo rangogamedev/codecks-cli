@@ -19,15 +19,20 @@ def _load_playbook() -> str:
 SETUP_GUIDE = """\
 # codecks-cli Quick Setup
 
-1. Install: `pip install codecks-cli`
-2. Configure tokens: `codecks-cli setup` (interactive wizard in your terminal)
-3. Verify: `codecks-cli agent-init --agent`
+1. Install: `pip install "git+https://github.com/rangogamedev/codecks-cli.git"`
+2. Create an API token: Codecks > Your Profile > API Tokens (Read & write,
+   shown once; starts with `cdxut_`)
+3. Configure: `codecks-cli setup` (terminal wizard: token + default deck)
+4. Verify: `codecks-cli agent-init --agent`
+
+Upgrading from 0.5.x? See docs/migration-0.6.md — the browser-cookie token,
+CODECKS_REPORT_TOKEN and CODECKS_ACCESS_KEY are gone.
 
 That's it. Use `codecks-cli <command> --agent` for any PM operation.
 
 ## Optional: MCP server
 
-`pip install codecks-cli[mcp]` adds 53 MCP tools with caching and team
+`pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"` adds 53 MCP tools with caching and team
 coordination. Add to your editor's MCP config:
 
 ```json
@@ -39,9 +44,8 @@ coordination. Add to your editor's MCP config:
 | Token | Where to get it |
 |-------|-----------------|
 | CODECKS_ACCOUNT | Your team subdomain (myteam.codecks.io) |
-| CODECKS_TOKEN | Browser DevTools > Cookies > `at` value |
-| CODECKS_ACCESS_KEY | Codecks > Settings > Integrations |
-| CODECKS_REPORT_TOKEN | `codecks-cli generate-token` |
+| CODECKS_TOKEN | Codecks > Your Profile > API Tokens (`cdxut_...`) |
+| CODECKS_DEFAULT_DECK | Deck new cards go to (`codecks-cli default-deck <name>`) |
 
 Tokens go in `.env` (gitignored). Never paste tokens in chat.
 """

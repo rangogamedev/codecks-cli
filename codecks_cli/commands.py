@@ -13,7 +13,7 @@ import sys
 from datetime import UTC, datetime
 
 from codecks_cli import config
-from codecks_cli.api import _mask_token, _safe_json_parse, dispatch, generate_report_token, query
+from codecks_cli.api import _safe_json_parse, dispatch, query
 from codecks_cli.client import CodecksClient, _normalize_dispatch_path
 from codecks_cli.exceptions import CliError
 from codecks_cli.formatters import (
@@ -215,7 +215,8 @@ def cmd_create(ns):
         content=ns.content,
         deck=ns.deck,
         project=ns.project,
-        severity=ns.severity,
+        severity=getattr(ns, "severity", None),
+        priority=getattr(ns, "priority", None),
         doc=ns.doc,
         allow_duplicate=getattr(ns, "allow_duplicate", False),
         parent=getattr(ns, "parent", None),
@@ -614,10 +615,31 @@ def cmd_gdd_revoke(ns):
 # ---------------------------------------------------------------------------
 
 
-def cmd_generate_token(ns):
-    result = generate_report_token(ns.label)
-    print(f"Report Token created: {_mask_token(result['token'])}")
-    print("Full token saved to .env as CODECKS_REPORT_TOKEN")
+def cmd_default_deck(ns):
+    """Show (offline) or set CODECKS_DEFAULT_DECK, stored as the deck ID."""
+    from codecks_cli.api import _check_token, _try_call
+    from codecks_cli.cards import list_decks, resolve_deck_id
+
+    if not ns.name:
+        value = config.DEFAULT_DECK
+        # Best-effort name lookup; offline or with a bad token this just shows the stored value.
+        decks = (_try_call(list_decks) or {}).get("deck", {}) if value else {}
+        title = next((d.get("title") for d in decks.values() if d.get("id") == value), None)
+        output(
+            {"ok": True, "default_deck": value or None, "title": title},
+            lambda d: (
+                f"Default deck: {d['title'] or d['default_deck']}"
+                if d["default_deck"]
+                else "No default deck set. Set it with: codecks-cli default-deck <deck name>"
+            ),
+            ns.format,
+        )
+        return
+    _check_token()
+    deck_id = resolve_deck_id(ns.name, project=ns.project)
+    config.save_env_value("CODECKS_DEFAULT_DECK", deck_id)
+    config.DEFAULT_DECK = deck_id
+    mutation_response("Default deck set", details=f"deck='{ns.name}' ({deck_id})", fmt=ns.format)
 
 
 def cmd_completion(ns):

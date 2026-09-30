@@ -4,6 +4,7 @@ for codecks-cli.
 """
 
 import json
+import re
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -16,7 +17,7 @@ from codecks_cli._utils import (  # noqa: F401 — re-exported for existing cons
     _parse_multi_value,
     get_card_tags,
 )
-from codecks_cli.api import _try_call, query, report_request, session_request, warn_if_empty
+from codecks_cli.api import _try_call, query, session_request, warn_if_empty
 from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
@@ -594,9 +595,13 @@ def compute_card_stats(cards_dict):
 # ---------------------------------------------------------------------------
 
 
-def create_card(title, content=None, severity=None, file_names=None):
-    """Create a card using the Report Token (stable, no expiry).
+def create_card(title, content=None, deck_id=None, **fields):
+    """Create a card via the official API (``dispatch/cards/create``).
     First line of content becomes the card title.
+
+    Without ``deck_id`` the card goes to the CODECKS_DEFAULT_DECK deck; the API
+    itself would create a private, deck-less card. Extra ``fields`` (priority,
+    effort, assigneeId, milestoneId, masterTags) are sent in the same request.
 
     If ``content`` already begins with the title (followed by newline) or
     equals it exactly, it is used as-is rather than re-prepended — this
@@ -610,11 +615,39 @@ def create_card(title, content=None, severity=None, file_names=None):
             full_content = title + "\n\n" + content
     else:
         full_content = title
-    return report_request(full_content, severity=severity, file_names=file_names)
+    payload = {
+        "content": full_content,
+        "deckId": deck_id or default_deck_id(),
+        "assigneeId": None,
+        "milestoneId": None,
+        "masterTags": [],
+        "attachments": [],
+    }
+    payload.update(fields)
+    result = session_request("/dispatch/cards/create", payload)
+    card_id = (result.get("payload") or {}).get("id", "")
+    return {"cardId": card_id}
+
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def default_deck_id():
+    """Return the CODECKS_DEFAULT_DECK deck ID, or explain how to set it.
+
+    Setup and ``default-deck`` store the deck ID (unambiguous across projects,
+    survives renames); a hand-written deck name is still resolved."""
+    value = config.DEFAULT_DECK
+    if not value:
+        raise CliError(
+            "[ERROR] No default deck set, so the card has nowhere to go. "
+            "Run: codecks-cli default-deck <deck name>  (or pass --deck)"
+        )
+    return value if _UUID_RE.match(value) else resolve_deck_id(value)
 
 
 def update_card(card_id, **kwargs):
-    """Update card properties via dispatch (uses session token).
+    """Update card properties via dispatch (uses API token).
     Supported fields: status, priority, effort, deckId, title, content,
     milestoneId, parentCardId, assigneeId, masterTags, isDoc.
     None values are sent as JSON null to clear fields."""
@@ -624,7 +657,7 @@ def update_card(card_id, **kwargs):
 
 
 def archive_card(card_id):
-    """Archive a card (uses session token)."""
+    """Archive a card (uses API token)."""
     return session_request(
         "/dispatch/cards/update",
         {
@@ -635,7 +668,7 @@ def archive_card(card_id):
 
 
 def unarchive_card(card_id):
-    """Unarchive a card (uses session token)."""
+    """Unarchive a card (uses API token)."""
     return session_request(
         "/dispatch/cards/update",
         {
@@ -646,7 +679,7 @@ def unarchive_card(card_id):
 
 
 def delete_card(card_id):
-    """Delete a card — archives first, then deletes (uses session token)."""
+    """Delete a card — archives first, then deletes (uses API token)."""
     archive_card(card_id)
     try:
         return session_request(
@@ -688,7 +721,16 @@ def _get_user_id():
     cached = config._cache.get("user_id")
     if cached:
         return cached
-    # Auto-discover: query account roles, pick the first owner
+    # Personal tokens know their own user (manual.codecks.io/api "own user ID").
+    # session_request, not query(): query() drops the "_root" key this answer lives in.
+    me = _try_call(
+        session_request, "/", {"query": {"_root": [{"loggedInUser": ["id"]}]}}, idempotent=True
+    )
+    uid = ((me or {}).get("_root") or {}).get("loggedInUser")
+    if isinstance(uid, str) and uid:
+        config._cache["user_id"] = uid
+        return uid
+    # Organization tokens have no user: pick the first account owner.
     result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
     for entry in (result.get("accountRole") or {}).values():
         if entry.get("role") == "owner":

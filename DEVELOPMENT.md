@@ -28,15 +28,14 @@ cp .env.example .env         # then fill in your tokens
 
 | Variable | Purpose | Expiry |
 |----------|---------|--------|
-| `CODECKS_TOKEN` | Session cookie for read/write | Expires periodically |
+| `CODECKS_TOKEN` | API token (Bearer) for read/write | Until revoked or its optional expiry date |
 | `CODECKS_ACCOUNT` | Your Codecks org slug | Never |
 
 ### Optional tokens
 
 | Variable | Purpose |
 |----------|---------|
-| `CODECKS_REPORT_TOKEN` | Card creation (never expires) |
-| `CODECKS_ACCESS_KEY` | Generates report tokens (never expires) |
+| `CODECKS_DEFAULT_DECK` | Deck for `create` without `--deck` |
 | `CODECKS_USER_ID` | Hand operations (auto-discovered if unset) |
 
 Run `py codecks_api.py setup` for an interactive setup wizard that handles all of this.

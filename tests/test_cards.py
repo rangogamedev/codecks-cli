@@ -899,35 +899,57 @@ class TestResolveMilestoneId:
 class TestMutationHelpers:
     """Low-level card mutation dispatch functions."""
 
-    @patch("codecks_cli.cards.report_request")
+    @patch("codecks_cli.cards.session_request")
     def test_create_card_dispatch(self, mock_request):
         from codecks_cli.cards import create_card
 
-        mock_request.return_value = {"cardId": "new-1"}
-        result = create_card("Test Card", "Body content", None)
+        mock_request.return_value = {"payload": {"id": "new-1", "accountSeq": 7}}
+        result = create_card("Test Card", "Body content", deck_id="deck-1", priority="b")
         assert result["cardId"] == "new-1"
-        mock_request.assert_called_once()
+        path, payload = mock_request.call_args.args
+        assert path == "/dispatch/cards/create"
+        assert payload["content"] == "Test Card\n\nBody content"
+        assert payload["deckId"] == "deck-1"
+        assert payload["priority"] == "b"
 
-    @patch("codecks_cli.cards.report_request")
+    @patch("codecks_cli.cards.session_request")
     def test_create_card_content_with_title_echo_not_duplicated(self, mock_request):
         # Regression for issue #25: when content already begins with the
         # title-echo line, do not re-prepend the title.
         from codecks_cli.cards import create_card
 
-        mock_request.return_value = {"cardId": "new-1"}
-        create_card("X", "X\n\nBody content", None)
-        sent_content = mock_request.call_args.args[0]
+        mock_request.return_value = {"payload": {"id": "new-1"}}
+        create_card("X", "X\n\nBody content", deck_id="deck-1")
+        sent_content = mock_request.call_args.args[1]["content"]
         assert sent_content == "X\n\nBody content"
         assert sent_content.count("X") == 1
 
-    @patch("codecks_cli.cards.report_request")
+    @patch("codecks_cli.cards.session_request")
     def test_create_card_content_equal_to_title_not_duplicated(self, mock_request):
         from codecks_cli.cards import create_card
 
-        mock_request.return_value = {"cardId": "new-1"}
-        create_card("Just A Title", "Just A Title", None)
-        sent_content = mock_request.call_args.args[0]
-        assert sent_content == "Just A Title"
+        mock_request.return_value = {"payload": {"id": "new-1"}}
+        create_card("Just A Title", "Just A Title", deck_id="deck-1")
+        assert mock_request.call_args.args[1]["content"] == "Just A Title"
+
+    @patch("codecks_cli.cards.resolve_deck_id", return_value="inbox-id")
+    @patch("codecks_cli.cards.session_request")
+    def test_create_card_uses_default_deck(self, mock_request, mock_resolve, monkeypatch):
+        from codecks_cli.cards import create_card
+
+        monkeypatch.setattr("codecks_cli.cards.config.DEFAULT_DECK", "Inbox")
+        mock_request.return_value = {"payload": {"id": "new-1"}}
+        create_card("T")
+        mock_resolve.assert_called_once_with("Inbox")
+        assert mock_request.call_args.args[1]["deckId"] == "inbox-id"
+
+    @patch("codecks_cli.cards.session_request")
+    def test_create_card_without_any_deck_refuses(self, mock_request):
+        from codecks_cli.cards import create_card
+
+        with pytest.raises(CliError, match="default-deck"):
+            create_card("T")
+        mock_request.assert_not_called()
 
     @patch("codecks_cli.cards.session_request")
     def test_update_card_dispatch(self, mock_request):
@@ -972,3 +994,23 @@ class TestCardFieldSets:
         fields = next(iter(sent["_root"][0]["account"][0].values()))
         assert "isDoc" in fields
         assert "content" not in fields
+
+
+class TestOfficialApiHelpers:
+    @patch("codecks_cli.cards.session_request")
+    def test_user_id_comes_from_logged_in_user(self, mock_request, monkeypatch):
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "")
+        mock_request.return_value = {"_root": {"loggedInUser": "me-id"}, "user": {}}
+        assert _get_user_id() == "me-id"
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.resolve_deck_id")
+    def test_default_deck_id_stored_as_uuid_is_used_directly(self, mock_resolve, monkeypatch):
+        from codecks_cli.cards import default_deck_id
+
+        deck = "83c11c54-033d-11f1-8801-bfe8bce8b192"
+        monkeypatch.setattr("codecks_cli.cards.config.DEFAULT_DECK", deck)
+        assert default_deck_id() == deck
+        mock_resolve.assert_not_called()

@@ -34,7 +34,7 @@ Use MCP when you need cache-heavy reads, team coordination, batch creates, or
 ## 3-Minute Setup
 
 ```bash
-pip install codecks-cli          # CLI only, zero runtime deps
+pip install "git+https://github.com/rangogamedev/codecks-cli.git"  # CLI only, zero runtime deps
 codecks-cli setup                # interactive token wizard (runs in terminal)
 codecks-cli agent-init --agent   # verify: returns account + project context
 ```
@@ -51,7 +51,7 @@ That's it. Your agent can now use `codecks-cli <command> --agent` via Bash.
 | `overview` | Aggregate counts only (~500 bytes) |
 | `cards --status X` | List cards with filters |
 | `card <uuid>` | Single card detail |
-| `create "Title" --deck X` | Create a card |
+| `create "Title" --deck X` | Create a card (no `--deck`: your default deck) |
 | `update <uuid> --status X` | Update card properties |
 | `done <uuid>` | Mark done |
 | `start <uuid>` | Mark started |
@@ -75,9 +75,8 @@ codecks-cli cards --deck Backlog --limit 10 --agent && codecks-cli done @last --
 
 | Token | Purpose | Where to get it | Expires? |
 |-------|---------|-----------------|----------|
-| `CODECKS_TOKEN` | Read + write | Browser DevTools > Cookies > `at` value | With browser session |
-| `CODECKS_REPORT_TOKEN` | Create cards | `codecks-cli generate-token` | Never (until disabled) |
-| `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations | Never |
+| `CODECKS_TOKEN` | Read + write | Codecks > Your Profile > API Tokens (`cdxut_...`) | When revoked or at its optional expiry date |
+| `CODECKS_DEFAULT_DECK` | Deck for new cards | `codecks-cli default-deck <name>` | — |
 
 Tokens go in `.env` (gitignored). Never paste tokens in agent chat — use
 `codecks-cli setup` or edit `.env` directly.
@@ -85,7 +84,7 @@ Tokens go in `.env` (gitignored). Never paste tokens in agent chat — use
 ## MCP Setup (Optional)
 
 ```bash
-pip install codecks-cli[mcp]
+pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"
 ```
 
 ### Claude Code
@@ -153,8 +152,8 @@ The base workflow covers any project. To add domain-specific patterns:
 | Problem | Fix |
 |---------|-----|
 | `[SETUP_NEEDED]` | Run `codecks-cli setup` |
-| `[TOKEN_EXPIRED]` | Refresh `CODECKS_TOKEN` from browser cookies |
-| MCP server not found | Run `pip install codecks-cli[mcp]` then `codecks-mcp` |
+| `[TOKEN_EXPIRED]` | Create a new API token and update `CODECKS_TOKEN` |
+| MCP server not found | Run `pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"` then `codecks-mcp` |
 | `invalid choice` for a command | Ensure you installed the latest version |
 | 429 rate limit | Wait 5s, retry. CLI auto-retries reads. |
 | Card mutation returns error | Re-read the card first; the UUID may be stale |

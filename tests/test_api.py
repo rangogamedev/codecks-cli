@@ -17,10 +17,8 @@ from codecks_cli.api import (
     _sanitize_url_for_log,
     _try_call,
     dispatch,
-    generate_report_token,
     query,
     raw_http_request,
-    report_request,
     session_request,
     warn_if_empty,
 )
@@ -154,17 +152,55 @@ class TestSessionRequest429:
         assert "X-Request-Id" in headers
         assert headers["X-Request-Id"]
 
-
-class TestReportRequestAttachments:
     @patch("codecks_cli.api._http_request")
-    def test_sends_file_names_when_provided(self, mock_http):
-        mock_http.return_value = {"cardId": "c1", "uploadUrls": []}
+    def test_sends_bearer_token(self, mock_http, monkeypatch):
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "cdxut_id_secret")
+        session_request("/", {"query": {}}, idempotent=True)
+        headers = mock_http.call_args.args[2]
+        assert headers["Authorization"] == "Bearer cdxut_id_secret"
+        assert "X-Auth-Token" not in headers
 
-        report_request("Title", file_names=["mockup.png", "notes.txt"])
+    @patch("codecks_cli.api._http_request")
+    def test_401_is_token_expired(self, mock_http):
+        mock_http.side_effect = HTTPError(401, "Unauthorized", "")
+        with pytest.raises(SetupError) as exc_info:
+            session_request("/", {"query": {}})
+        assert str(exc_info.value).startswith("[TOKEN_EXPIRED]")
 
-        payload = mock_http.call_args.args[1]
-        assert payload["content"] == "Title"
-        assert payload["fileNames"] == ["mockup.png", "notes.txt"]
+    @patch("codecks_cli.api._http_request")
+    def test_401_names_the_documented_reason(self, mock_http):
+        mock_http.side_effect = HTTPError(401, "Unauthorized", '{"error":"token_expired"}')
+        with pytest.raises(SetupError, match="expiry date"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
+    def test_401_reason_read_from_message_field(self, mock_http):
+        """The manual documents the refusal reason in `message`."""
+        mock_http.side_effect = HTTPError(401, "Unauthorized", '{"message":"not_a_member"}')
+        with pytest.raises(SetupError, match="disabled"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
+    def test_403_missing_scope_names_the_scope(self, mock_http):
+        body = '{"error":"missing_scope","requiredScope":"card:write"}'
+        mock_http.side_effect = HTTPError(403, "Forbidden", body)
+        with pytest.raises(CliError, match="card:write"):
+            session_request("/dispatch/cards/create", {})
+
+    @patch("codecks_cli.api._http_request")
+    def test_400_account_mismatch_points_at_config(self, mock_http):
+        body = '{"error":"token_account_mismatch"}'
+        mock_http.side_effect = HTTPError(400, "Bad Request", body)
+        with pytest.raises(SetupError, match="CODECKS_ACCOUNT"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
+    def test_403_is_permission_error_with_server_message(self, mock_http):
+        mock_http.side_effect = HTTPError(403, "Forbidden", "token is read-only")
+        with pytest.raises(CliError) as exc_info:
+            session_request("/dispatch/cards/create", {})
+        assert not isinstance(exc_info.value, SetupError)
+        assert "read-only" in str(exc_info.value)
 
 
 class TestRawHttpRequest:
@@ -311,30 +347,6 @@ class TestContentTypeCheck:
         assert "not valid JSON" in str(exc_info.value)
 
 
-class TestGenerateReportTokenLeak:
-    """Error message must not leak raw API response values."""
-
-    @patch("codecks_cli.api._http_request")
-    def test_error_shows_keys_not_values(self, mock_http, monkeypatch):
-        monkeypatch.setattr("codecks_cli.config.ACCESS_KEY", "fake-key")
-        mock_http.return_value = {"ok": False, "secret_field": "s3cret"}
-        with pytest.raises(CliError) as exc_info:
-            generate_report_token()
-        msg = str(exc_info.value)
-        assert "s3cret" not in msg
-        assert "keys:" in msg
-        assert "ok" in msg
-
-    @patch("codecks_cli.api._http_request")
-    def test_error_on_missing_token_field(self, mock_http, monkeypatch):
-        monkeypatch.setattr("codecks_cli.config.ACCESS_KEY", "fake-key")
-        mock_http.return_value = {"ok": True}
-        with pytest.raises(CliError) as exc_info:
-            generate_report_token()
-        msg = str(exc_info.value)
-        assert "generate-token" in msg
-
-
 class TestCheckToken:
     @patch("codecks_cli.api.session_request")
     def test_raises_setup_needed_when_missing_config(self, mock_session, monkeypatch):
@@ -350,7 +362,10 @@ class TestCheckToken:
     def test_accepts_valid_account_payload(self, mock_session, monkeypatch):
         monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
         monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
-        mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
+        mock_session.return_value = {
+            "account": {"id1": {"id": "id1"}},
+            "project": {"p1": {"id": "p1"}},
+        }
         _check_token()
         mock_session.assert_called_once()
 
@@ -364,6 +379,14 @@ class TestCheckToken:
         msg = str(exc_info.value)
         assert "[TOKEN_EXPIRED]" in msg
         assert "setup" in msg.lower()
+
+    @patch("codecks_cli.api.session_request")
+    def test_accepts_token_that_sees_no_projects(self, mock_session, monkeypatch):
+        """A new org, or an org token with no projects selected, is still a valid token."""
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
+        mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
+        _check_token()
 
     @patch("codecks_cli.api.session_request")
     def test_wraps_setup_error_with_setup_hint(self, mock_session, monkeypatch):

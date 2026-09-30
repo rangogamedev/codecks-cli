@@ -310,12 +310,12 @@ def scaffold_feature(
     created_ids: list[str] = []
 
     try:
-        hero_result = create_card(hero_title, hero_body)
+        hero_result = create_card(hero_title, hero_body, deck_id=hero_deck_id)
         hero_id = hero_result.get("cardId")
         if not hero_id:
             raise CliError("[ERROR] Hero creation failed: missing cardId.")
         created_ids.append(hero_id)
-        update_card(hero_id, deckId=hero_deck_id, masterTags=list(HERO_TAGS), **hero_update)
+        update_card(hero_id, masterTags=list(HERO_TAGS), **hero_update)
 
         def _make_sub(lane_def_inner, deck_id):
             sub_title = f"[{lane_def_inner.display_name}] {spec.title}"
@@ -332,7 +332,7 @@ def scaffold_feature(
                     f"- {lane_def_inner.display_name} lane execution for feature goal\n\n"
                     "Checklist:\n" + "\n".join(f"- [] {line}" for line in checklist_lines)
                 )
-            res = create_card(sub_title, sub_body)
+            res = create_card(sub_title, sub_body, deck_id=deck_id)
             sub_id = res.get("cardId")
             if not sub_id:
                 raise CliError(
@@ -351,7 +351,6 @@ def scaffold_feature(
             update_card(
                 sub_id,
                 parentCardId=hero_id,
-                deckId=deck_id,
                 masterTags=list(lane_def_inner.tags),
                 **sub_update,
             )
@@ -523,7 +522,7 @@ def split_features(
                     f"- {lane_def.display_name} lane execution for feature goal\n\n"
                     "Checklist:\n" + "\n".join(f"- [] {item}" for item in checklist)
                 )
-                res = create_card(sub_title, sub_body)
+                res = create_card(sub_title, sub_body, deck_id=lane_deck_id)
                 sub_id = res.get("cardId")
                 if not sub_id:
                     raise CliError(
@@ -533,7 +532,6 @@ def split_features(
 
                 update_kwargs: dict[str, Any] = {
                     "parentCardId": cid,
-                    "deckId": lane_deck_id,
                     "masterTags": list(lane_def.tags),
                 }
                 if pri is not None:

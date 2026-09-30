@@ -23,19 +23,18 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 
 | Token | Used for | Auth method | Expiry |
 |-------|----------|-------------|--------|
-| `CODECKS_TOKEN` | Reading data, mutations | `X-Auth-Token` header | Session (browser cookie) |
-| `CODECKS_REPORT_TOKEN` | Creating cards | URL query parameter | Never (until disabled) |
-| `CODECKS_ACCESS_KEY` | Generating report tokens | URL query parameter | Never |
+| `CODECKS_TOKEN` | Reading data, mutations | `Authorization: Bearer` header | Until revoked or its optional expiry date (API token, `cdxut_`/`cdxat_`) |
+| `CODECKS_DEFAULT_DECK` | Where `create` puts cards without `--deck` | — (deck name, not a secret) | — |
 | `CODECKS_USER_ID` | Hand operations | Auto-discovered if unset | N/A |
 
-- Session token validated on every command. Expired tokens return empty data (not 401).
-- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `generate-token`, `--version`
+- API token validated on every command (the account must resolve). Bad, revoked or expired API tokens return 401 with a reason code; the deprecated `X-Auth-Token` header returns empty data instead.
+- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `--version`
 
 ## Error Patterns
 
 | Pattern | Meaning | Agent action |
 |---------|---------|-------------|
-| `[TOKEN_EXPIRED]` | Session token expired | Re-run `setup` or refresh browser cookie |
+| `[TOKEN_EXPIRED]` | API token revoked or invalid | Create a new token in Profile > API Tokens, re-run `setup` |
 | `[SETUP_NEEDED]` | No `.env` configuration | Run `py codecks_api.py setup` |
 | `[ERROR] ...` | General error | Check message for details |
 | JSON on stderr: `{"ok": false, ...}` | Structured error (with `--format json`) | Parse `error_code` and `retryable` fields |

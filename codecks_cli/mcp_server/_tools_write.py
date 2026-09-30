@@ -22,7 +22,7 @@ def create_card(
     content: str | None = None,
     deck: str | None = None,
     project: str | None = None,
-    severity: Literal["critical", "high", "low", "null"] | None = None,
+    severity: str | None = None,
     doc: bool = False,
     allow_duplicate: bool = False,
     parent: str | None = None,
@@ -41,9 +41,10 @@ def create_card(
         content: Card body/description (max 10000 chars). Use ``- []`` for checkboxes.
             May be raw body text, OR the full content string (starting with a
             title-echo line) — the title is deduplicated either way.
-        deck: Destination deck name.
+        deck: Destination deck name (defaults to CODECKS_DEFAULT_DECK).
         project: Project name.
-        severity: Card severity level, or 'null' to clear.
+        severity: Removed; any value other than 'null' errors (Codecks cards have no
+            severity field). Use priority instead.
         doc: True to create a doc card instead of a normal card.
         allow_duplicate: True to skip duplicate-title check.
         parent: Parent card UUID to nest this as a sub-card.
@@ -107,7 +108,7 @@ def attach_files(card_id: str, files: list[str], dry_run: bool = False) -> dict:
     if dry_run:
         # A preview uploads nothing, so it must not need a token or a network
         # round-trip: run the path policy locally instead of going through
-        # _call() -> _get_client() (which validates the session token).
+        # _call() -> _get_client() (which validates the API token).
         from codecks_cli.attachments import preview_attachment_files
 
         try:
@@ -779,7 +780,9 @@ def batch_create_cards(
         cards: JSON array of card objects. Max 20 per call. Each object:
             - title (required): Card title (max 500 chars).
             - content: Card body/description.
-            - deck: Destination deck name.
+            - deck: Destination deck name. Without it the card goes to
+              CODECKS_DEFAULT_DECK; if that is unset, that item fails with
+              "No default deck set" (other items still run).
             - project: Project name.
             - priority: "a", "b", or "c".
             - owner: Owner name (e.g., "Thomas").

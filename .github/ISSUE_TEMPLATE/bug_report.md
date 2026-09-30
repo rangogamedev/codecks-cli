@@ -32,5 +32,4 @@ py codecks_api.py ...
 
 ## Token status
 
-- [ ] Session token is fresh (no `[TOKEN_EXPIRED]` message)
-- [ ] Report token works (`py codecks_api.py create "test"` succeeds)
+- [ ] API token is valid (no `[TOKEN_EXPIRED]` message)

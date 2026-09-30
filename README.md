@@ -18,7 +18,7 @@ Also works as a standalone CLI and Python API. Zero runtime dependencies.
 
 ### What is Codecks?
 
-[Codecks](https://codecks.io) is a card-based project management tool built for game studios — think Trello meets collectible card games. It organizes work into decks (boards), cards (tasks), and supports effort estimation, milestones, and team workflows. Codecks has no official API or CLI — codecks-cli fills that gap.
+[Codecks](https://codecks.io) is a card-based project management tool built for game studios — think Trello meets collectible card games. It organizes work into decks (boards), cards (tasks), and supports effort estimation, milestones, and team workflows. Codecks has an official API (since [v2.96](https://www.codecks.io/changelog/release/2.96-the-magic-key-api-2fa/)) but no CLI — codecks-cli fills that gap.
 
 ## Agent Quick Start
 
@@ -27,6 +27,16 @@ pip install git+https://github.com/rangogamedev/codecks-cli.git
 codecks-cli setup                # walks you through tokens — no DevTools needed
 codecks-cli agent-init --agent   # verify: returns account + project context
 ```
+
+## Upgrading from 0.5 (Codecks v2.96)
+
+Codecks now has official API tokens, and the old browser-cookie token has stopped working reliably (it is officially retired on 2026-12-31). Upgrading takes two minutes:
+
+1. In Codecks, open **Your Profile → API Tokens**, create a token with read & write access, and copy it (it is shown once; it starts with `cdxut_`).
+2. Run `codecks-cli setup`, paste the token, and pick the deck new cards should go to.
+3. Delete `CODECKS_REPORT_TOKEN` and `CODECKS_ACCESS_KEY` from your `.env`; they are no longer used.
+
+Full migration guide — breaking changes, token best practices, troubleshooting: [docs/migration-0.6.md](docs/migration-0.6.md). Summary: [0.6.0 changelog](CHANGELOG.md#060---2026-09-30).
 
 Your agent can now use `codecks-cli <command> --agent` via Bash. No special prompt needed — the CLI outputs stable JSON.
 
@@ -109,6 +119,7 @@ If you prefer manual setup, see `.env.example` for the configuration format and 
 | Document | Contents |
 |----------|----------|
 | [docs/ai-agent-guide.md](docs/ai-agent-guide.md) | Full AI agent setup, CLI reference, MCP setup, customization |
+| [docs/migration-0.6.md](docs/migration-0.6.md) | Upgrading from 0.5.x: breaking changes, API token best practices, troubleshooting |
 | [docs/cli-reference.md](docs/cli-reference.md) | CLI command reference and Python API |
 | [docs/mcp-reference.md](docs/mcp-reference.md) | MCP tool inventory, caching, error contract, team coordination |
 | [examples/](examples/) | Setup wizard, PM skill, game-dev agent example |

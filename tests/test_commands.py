@@ -1824,3 +1824,45 @@ class TestCmdTagsRegistry:
         hero = next(t for t in data["tags"] if t["name"] == "hero")
         assert hero["category"] == "system"
         assert "description" in hero
+
+
+class TestCmdDefaultDeck:
+    @patch("codecks_cli.cards.list_decks", side_effect=SetupError("[TOKEN_EXPIRED] offline"))
+    def test_show_works_offline(self, _mock_decks, monkeypatch, capsys):
+        from codecks_cli.commands import cmd_default_deck
+
+        monkeypatch.setattr(config, "DEFAULT_DECK", "deck-1")
+        cmd_default_deck(argparse.Namespace(name=None, project=None, format="json"))
+        out = json.loads(capsys.readouterr().out)
+        assert out["default_deck"] == "deck-1"
+        assert out["title"] is None
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_show_names_the_deck_when_online(self, mock_decks, monkeypatch, capsys):
+        from codecks_cli.commands import cmd_default_deck
+
+        monkeypatch.setattr(config, "DEFAULT_DECK", "deck-1")
+        mock_decks.return_value = {"deck": {"deck-1": {"id": "deck-1", "title": "Inbox"}}}
+        cmd_default_deck(argparse.Namespace(name=None, project=None, format="table"))
+        assert "Default deck: Inbox" in capsys.readouterr().out
+
+    @patch("codecks_cli.config.save_env_value")
+    @patch("codecks_cli.cards.resolve_deck_id", return_value="deck-2")
+    @patch("codecks_cli.api._check_token")
+    def test_set_saves_deck_id_scoped_to_project(self, _check, mock_resolve, mock_save):
+        from codecks_cli.commands import cmd_default_deck
+
+        cmd_default_deck(argparse.Namespace(name="Backlog", project="Web", format="json"))
+        mock_resolve.assert_called_once_with("Backlog", project="Web")
+        mock_save.assert_called_once_with("CODECKS_DEFAULT_DECK", "deck-2")
+        assert config.DEFAULT_DECK == "deck-2"
+
+    @patch("codecks_cli.config.save_env_value")
+    @patch("codecks_cli.cards.resolve_deck_id", side_effect=CliError("[ERROR] Deck 'X' not found."))
+    @patch("codecks_cli.api._check_token")
+    def test_unknown_deck_saves_nothing(self, _check, _resolve, mock_save):
+        from codecks_cli.commands import cmd_default_deck
+
+        with pytest.raises(CliError):
+            cmd_default_deck(argparse.Namespace(name="X", project=None, format="json"))
+        mock_save.assert_not_called()

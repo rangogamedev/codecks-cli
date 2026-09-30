@@ -16,7 +16,9 @@ This returns account info, aggregate overview, deck list, tag registry, and
 lane registry in a single JSON response (~2 KB).
 
 If the command fails with `[SETUP_NEEDED]` or `[TOKEN_EXPIRED]`, stop and ask
-the user to run `codecks-cli setup` or refresh their token.
+the user to run `codecks-cli setup` with a new API token (Codecks > Your Profile >
+API Tokens). If `create` fails with "No default deck set", ask which deck to use
+and run `codecks-cli default-deck <name>` or pass `--deck`.
 
 ## Core Execution Loop
 
@@ -105,7 +107,7 @@ codecks-cli unhand <uuid1> --agent                    # remove completed
 | Error prefix | Meaning | Action |
 |-------------|---------|--------|
 | `[SETUP_NEEDED]` | `.env` is missing or incomplete | Ask user to run `codecks-cli setup` |
-| `[TOKEN_EXPIRED]` | Browser session cookie is stale | Ask user to refresh token |
+| `[TOKEN_EXPIRED]` | API token revoked or invalid | Ask user to create a new API token |
 | `[ERROR]` | Validation or API failure | Fix arguments, retry once |
 | HTTP 429 | Rate limited (40 req/5s) | Wait 5s, retry once |
 | Timeout | Network issue | Retry once, then report |

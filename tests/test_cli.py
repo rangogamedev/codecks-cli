@@ -262,9 +262,14 @@ class TestBuildParser:
         with pytest.raises(CliError):
             self.parser.parse_args(["cards", "--sort", "invalid"])
 
-    def test_create_severity_validation(self):
-        with pytest.raises(CliError):
-            self.parser.parse_args(["create", "title", "--severity", "urgent"])
+    def test_create_severity_left_to_client(self):
+        # The client rejects every severity with a pointer to --priority.
+        ns = self.parser.parse_args(["create", "title", "--severity", "urgent"])
+        assert ns.severity == "urgent"
+
+    def test_create_priority(self):
+        ns = self.parser.parse_args(["create", "title", "--priority", "b"])
+        assert ns.priority == "b"
 
     def test_create_severity_valid(self):
         ns = self.parser.parse_args(["create", "title", "--severity", "critical"])

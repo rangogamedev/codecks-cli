@@ -15,7 +15,7 @@ Starter files for using codecks-cli with AI agents.
 ### Just the tool (any agent)
 
 ```bash
-pip install codecks-cli
+pip install "git+https://github.com/rangogamedev/codecks-cli.git"
 codecks-cli setup               # interactive token wizard
 codecks-cli agent-init --agent  # verify connection
 ```
@@ -35,7 +35,7 @@ Now type `/pm` in Claude Code to start a PM session.
 ### Full setup with MCP
 
 ```bash
-pip install codecks-cli[mcp]
+pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"
 ```
 
 Add to your editor's MCP config:

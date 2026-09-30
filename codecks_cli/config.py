@@ -32,8 +32,7 @@ def load_env():
     # .env file values take precedence when present.
     for key in (
         "CODECKS_TOKEN",
-        "CODECKS_ACCESS_KEY",
-        "CODECKS_REPORT_TOKEN",
+        "CODECKS_DEFAULT_DECK",
         "CODECKS_ACCOUNT",
         "CODECKS_USER_ID",
         "CODECKS_PROJECTS",
@@ -132,7 +131,7 @@ def _env_float(key: str, default: float) -> float:
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "0.5.1"
+VERSION = "0.6.0"
 CONTRACT_SCHEMA_VERSION = "1.0"
 
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
@@ -140,7 +139,6 @@ VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
 VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title", "owner", "updated", "created"}
 VALID_CARD_TYPES = {"hero", "doc"}
-VALID_SEVERITIES = {"critical", "high", "low", "null"}
 
 BASE_URL = "https://api.codecks.io"
 
@@ -151,10 +149,9 @@ BASE_URL = "https://api.codecks.io"
 env = load_env()
 
 SESSION_TOKEN = env.get("CODECKS_TOKEN", "")
-ACCESS_KEY = env.get("CODECKS_ACCESS_KEY", "")
-REPORT_TOKEN = env.get("CODECKS_REPORT_TOKEN", "")
 ACCOUNT = env.get("CODECKS_ACCOUNT", "")
 USER_ID = env.get("CODECKS_USER_ID", "")
+DEFAULT_DECK = env.get("CODECKS_DEFAULT_DECK", "")
 HTTP_TIMEOUT_SECONDS = _env_int("CODECKS_HTTP_TIMEOUT_SECONDS", 30)
 HTTP_MAX_RETRIES = _env_int("CODECKS_HTTP_MAX_RETRIES", 2)
 HTTP_RETRY_BASE_SECONDS = _env_float("CODECKS_HTTP_RETRY_BASE_SECONDS", 1.0)
