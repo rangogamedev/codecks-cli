@@ -36,7 +36,7 @@ Codecks now has official API tokens, and the old browser-cookie token no longer 
 2. Run `codecks-cli setup`, paste the token, and pick the deck new cards should go to.
 3. Delete `CODECKS_REPORT_TOKEN` and `CODECKS_ACCESS_KEY` from your `.env`; they are no longer used.
 
-Why, and what else changed: see the [0.6.0 changelog](CHANGELOG.md#060---2026-09-30).
+Full migration guide — breaking changes, token best practices, troubleshooting: [docs/migration-0.6.md](docs/migration-0.6.md). Summary: [0.6.0 changelog](CHANGELOG.md#060---2026-09-30).
 
 Your agent can now use `codecks-cli <command> --agent` via Bash. No special prompt needed — the CLI outputs stable JSON.
 
@@ -119,6 +119,7 @@ If you prefer manual setup, see `.env.example` for the configuration format and 
 | Document | Contents |
 |----------|----------|
 | [docs/ai-agent-guide.md](docs/ai-agent-guide.md) | Full AI agent setup, CLI reference, MCP setup, customization |
+| [docs/migration-0.6.md](docs/migration-0.6.md) | Upgrading from 0.5.x: breaking changes, API token best practices, troubleshooting |
 | [docs/cli-reference.md](docs/cli-reference.md) | CLI command reference and Python API |
 | [docs/mcp-reference.md](docs/mcp-reference.md) | MCP tool inventory, caching, error contract, team coordination |
 | [examples/](examples/) | Setup wizard, PM skill, game-dev agent example |

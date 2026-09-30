@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Why this is changing.** Codecks v2.96 ("The Magic Key: API & 2FA", 2026-09-24) replaced its unofficial, browser-based API access with official API tokens. Until now codecks-cli worked by borrowing your browser login (the `at` cookie), which expired whenever your session ended, so card creation had to go through a separate User Reports "report token" that didn't expire. Codecks now treats the borrowed browser login as anonymous — the CLI saw empty decks and reported `[TOKEN_EXPIRED]` — and the old `X-Auth-Token` header stops working completely on 2026-12-31. The official token lasts until you revoke it (or until an expiry date you choose), can read and write everything the CLI needs, and shows you as the author of the cards you create. So one token now replaces three.
 
-**What you need to do.**
+**What you need to do** (full guide with best practices and troubleshooting: [docs/migration-0.6.md](docs/migration-0.6.md)).
 1. In Codecks, open **Your Profile → API Tokens** and create a token with read & write access. Copy it right away — it is only shown once. It starts with `cdxut_` (organization tokens from Organization Settings → Integrations → API Tokens start with `cdxat_` and work too).
 2. Run `codecks-cli setup`, paste the token, and choose your default deck.
 3. Delete `CODECKS_REPORT_TOKEN` and `CODECKS_ACCESS_KEY` from `.env`. They are ignored now.
@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CODECKS_REPORT_TOKEN`, `CODECKS_ACCESS_KEY`, and the `generate-token` command. Codecks' User Reports feature itself is unchanged and still meant for in-game player feedback; codecks-cli just no longer needs it.
 - `--severity` on `create` (and the MCP `severity` argument) now returns an error: severity only existed on user reports, and Codecks cards have no severity field. Use `--priority a|b|c`.
 
+**Docs**
+- New [migration guide](docs/migration-0.6.md) with the breaking changes, API token best practices (personal vs organization tokens, least privilege, expiry dates, one token per machine) and a troubleshooting table.
+- Setup skill, PM skill, PM playbook and the MCP `setup-guide` prompt now cover API tokens, the default deck, and detecting a 0.5.x install.
+- Install commands in the setup skill, the MCP setup prompt, `docs/ai-agent-guide.md` and `examples/README.md` use the GitHub URL. `pip install codecks-cli` does not work, because the package is not on PyPI.
+
 **Official documentation**
 - Release notes: [Codecks v2.96 — The Magic Key: API & 2FA](https://www.codecks.io/changelog/release/2.96-the-magic-key-api-2fa/)
 - [Quick Guide to the Codecks API](https://manual.codecks.io/api/) — tokens, permissions, card creation, file uploads, error codes, rate limits
@@ -38,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [User Reports & Unity Integration](https://manual.codecks.io/user-reports/) — the report-token feature codecks-cli no longer uses
 
 ### Security
+- `pyjwt` (pulled in by the `mcp` extra) bumped 2.13.0 → 2.15.1 for ten advisories fixed in 2.14.0.
 - MCP HTTP runner (`scripts/run_mcp_http.py`) binds `127.0.0.1` by default instead of `0.0.0.0`, and the `mcp-http` Compose service publishes its port on loopback only (`127.0.0.1:${MCP_HTTP_PORT:-8808}:8808`) while setting `MCP_HTTP_HOST=0.0.0.0` inside the container. The MCP SDK only auto-enables DNS-rebinding (Host/Origin) protection for loopback binds, so a non-loopback `MCP_HTTP_HOST` now gets explicit `TransportSecuritySettings` built from `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (defaults `localhost:*,127.0.0.1:*,[::1]:*` and `http://localhost:*,http://127.0.0.1:*,http://[::1]:*`, mirroring the SDK's own loopback allowlists — IPv6 loopback included).
 - `.gitignore` covers the atomic-write temp files (`.gdd_tmp_*`, `.env_tmp_*`, `tmp*.tmp`) that a crash can leave behind holding `.env` contents or a Google refresh token.
 - Multipart upload fields from the `/s3/sign` response are validated before use: CR/LF in a field name or value is refused, and field names get the same backslash/quote escaping as the file name. `build_multipart_body` re-checks the file name for CR/LF defensively.

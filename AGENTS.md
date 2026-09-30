@@ -28,7 +28,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 | `CODECKS_USER_ID` | Hand operations | Auto-discovered if unset | N/A |
 
 - API token validated on every command (account projects must be visible). Anonymous requests return empty data, not 401; revoked tokens return 401.
-- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `default-deck`, `--version`
+- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `--version`
 
 ## Error Patterns
 

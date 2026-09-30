@@ -15,7 +15,8 @@ codecks-cli agent-init --agent
 ```
 
 If this fails with `[SETUP_NEEDED]` or `[TOKEN_EXPIRED]`, ask the user to run
-`codecks-cli setup` or refresh their browser token.
+`codecks-cli setup` (it asks for a Codecks API token from Your Profile > API
+Tokens). Never ask for the token in chat.
 
 ## Common Workflows
 
@@ -70,7 +71,7 @@ codecks-cli unhand <uuid> --agent          # remove card
 | Prefix | Action |
 |--------|--------|
 | `[SETUP_NEEDED]` | Ask user to run `codecks-cli setup` |
-| `[TOKEN_EXPIRED]` | Ask user to refresh browser token |
+| `[TOKEN_EXPIRED]` | Ask user to create a new API token and run `codecks-cli setup` |
 | `[ERROR]` | Fix arguments, retry once |
 | HTTP 429 | Wait 5s, retry once |
 

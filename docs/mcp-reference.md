@@ -191,5 +191,6 @@ Built-in safety checks that prevent common agent mistakes:
 - **UUID validation**: suggests full 36-char UUID from cache when agent sends a short ID
 - **Deck fuzzy matching**: `resolve_deck_id` suggests closest match ("Did you mean 'X'?") on failure
 - **Duplicate detection**: `create_card` blocks exact title matches (override with `allow_duplicate=True`)
+- **Default deck**: `create_card` / `batch_create_cards` without `deck` use `CODECKS_DEFAULT_DECK`; if it is unset they fail with a hint instead of creating a private, deck-less card
 - **Rate limiting**: enforces Codecks 40 req/5s limit with headroom tracking
 - **Prompt injection detection**: sanitizes user content fields
