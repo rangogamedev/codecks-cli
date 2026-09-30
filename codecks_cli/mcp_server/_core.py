@@ -1101,8 +1101,6 @@ _SLIM_DROP = {
     "assignee",
     "projectId",
     "project_id",
-    "childCardInfo",
-    "child_card_info",
     "masterTags",
 }
 

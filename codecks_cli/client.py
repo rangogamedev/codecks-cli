@@ -299,11 +299,11 @@ class CodecksClient:
             elif card_type == "hero":
                 card_filter = json.dumps({"visibility": "default"})
                 hero_q = {
-                    "_root": [{"account": [{f"cards({card_filter})": [{"childCards": ["title"]}]}]}]
+                    "_root": [{"account": [{f"cards({card_filter})": ["exists:childCards"]}]}]
                 }
                 hero_result = query(hero_q)
                 hero_ids = {
-                    k for k, v in hero_result.get("card", {}).items() if v.get("childCards")
+                    k for k, v in hero_result.get("card", {}).items() if v.get("exists:childCards")
                 }
                 result["card"] = {k: v for k, v in result.get("card", {}).items() if k in hero_ids}
 

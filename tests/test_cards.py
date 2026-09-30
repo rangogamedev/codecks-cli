@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from codecks_cli import cards as cards_mod
 from codecks_cli import config
 from codecks_cli.cards import (
     _build_project_map,
@@ -469,15 +470,16 @@ class TestEnrichCards:
         result = enrich_cards(cards)
         assert result["c1"]["milestone_name"] == "MVP"
 
-    def test_child_card_info_dict(self):
-        cards = {"c1": {"childCardInfo": {"count": 5}}}
+    def test_sub_card_count_from_count_aggregate(self):
+        # Live API: hero cards return childCardInfo "{}", so only the aggregate is reliable.
+        cards = {"c1": {"childCardInfo": "{}", "count:childCards": 5}, "c2": {}}
         result = enrich_cards(cards)
         assert result["c1"]["sub_card_count"] == 5
+        assert "count:childCards" not in result["c1"]
+        assert "sub_card_count" not in result["c2"]
 
-    def test_child_card_info_json_string(self):
-        cards = {"c1": {"childCardInfo": '{"count": 3}'}}
-        result = enrich_cards(cards)
-        assert result["c1"]["sub_card_count"] == 3
+    def test_full_fields_request_child_count(self):
+        assert "count:childCards" in cards_mod._FIELDS_FULL
 
 
 # ---------------------------------------------------------------------------

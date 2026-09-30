@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Why this is changing.** Codecks v2.96 ("The Magic Key: API & 2FA", 2026-09-24) replaced its unofficial, browser-based API access with official API tokens. Until now codecks-cli worked by borrowing your browser login (the `at` cookie), which expired whenever your session ended, so card creation had to go through a separate User Reports "report token" that didn't expire. The old `X-Auth-Token` header is deprecated and officially stops working on 2026-12-31; in practice, since v2.96 requests using it come back as if unauthenticated (empty decks, which the CLI reported as `[TOKEN_EXPIRED]`; see #60). The official token lasts until you revoke it (or until an expiry date you choose), can read and write everything the CLI needs, and shows you as the author of the cards you create. So one token now replaces three.
 
+Thanks to @AncientNimbus for reporting the break and diagnosing it in #60.
+
 **What you need to do** (full guide with best practices and troubleshooting: [docs/migration-0.6.md](docs/migration-0.6.md)).
 1. In Codecks, open **Your Profile → API Tokens** and create a token with read & write access. Copy it right away — it is only shown once. It starts with `cdxut_` (organization tokens from Organization Settings → Integrations → API Tokens start with `cdxat_` and work too).
 2. Run `codecks-cli setup`, paste the token, and choose your default deck.
@@ -68,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dockerfile installs dev+mcp dependencies from the committed `uv.lock` via `uv export` instead of a hardcoded version list — `pyproject.toml`/`uv.lock` are now the single source of truth (no version drift).
 
 ### Fixed
+- Sub-card counts: hero cards reported `sub_card_count` 0 because Codecks now returns `childCardInfo` as `{}`. Counts now come from the `count:childCards` aggregate (Codecks v2.96). This also stops `split-features` / MCP `split_features` from splitting a feature that already has sub-cards a second time.
+- `cards --type hero` asks the API whether each card has sub-cards (`exists:childCards`) instead of downloading every sub-card's title.
 - Thread safety under MCP SDK v2: the SDK runs synchronous tool functions on a worker-thread pool (v1 ran them inline on the event loop), so the unguarded module globals in `mcp_server/_core.py` (client/store singletons, snapshot cache, batch flag, rate-limit timestamps, agent claims) and the `CardRepository` indexes could interleave. `_core` now has a module-level `RLock` around every state mutation — never held across a Codecks API request — `CardRepository` has its own `RLock` and returns snapshot copies from its read accessors, and the `.pm_undo.json` read-modify-write is serialized.
 - MCP `attach_files(dry_run=True)` built a `CodecksClient` (and therefore validated the session token over the network) just to preview paths — it now runs the path policy locally via `preview_attachment_files()`, so a preview needs neither a token nor a network call.
 - `gdd._write_private_file` leaked the `mkstemp` descriptor if `os.fdopen` raised, and the Google OAuth callback `HTTPServer` was constructed outside the `try:` whose `finally` closes it — both now close on every path.

@@ -113,6 +113,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 9 | Tags in body create wrong tag type | Use `masterTags` dispatch, not `#tag` in body | Covered in API pitfalls |
 | 10 | Content update duplicates title | Auto-detect and skip via `_content.py` | Test title-in-content edge case |
 | 11 | Error responses lack structure | Added `retryable`, `error_code`, cache `stale_warning` | Test error shapes |
+| 12 | Hero cards show `sub_card_count` 0 (`childCardInfo` is `"{}"`), so `split-features` re-splits | Read `count:childCards` aggregate | Never read counts from `childCardInfo` |
 
 ## Docker
 

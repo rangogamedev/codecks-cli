@@ -152,6 +152,19 @@ class TestListCards:
             client.list_cards(card_type="invalid_type")
         assert "Invalid card type" in str(exc_info.value)
 
+    @patch("codecks_cli.client.query")
+    @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
+    @patch("codecks_cli.client.list_cards")
+    def test_hero_filter_uses_exists_aggregate(self, mock_list, mock_enrich, mock_query):
+        mock_list.return_value = {"card": {"h1": {"title": "Hero"}, "c1": {"title": "Plain"}}}
+        mock_query.return_value = {
+            "card": {"h1": {"exists:childCards": True}, "c1": {"exists:childCards": False}}
+        }
+        result = _client().list_cards(card_type="hero")
+        assert [c["id"] for c in result["cards"]] == ["h1"]
+        fields = next(iter(mock_query.call_args.args[0]["_root"][0]["account"][0].values()))
+        assert fields == ["exists:childCards"]
+
     @patch("codecks_cli.client.extract_hand_card_ids")
     @patch("codecks_cli.client.list_hand")
     @patch("codecks_cli.client.enrich_cards", side_effect=lambda c, u: c)
