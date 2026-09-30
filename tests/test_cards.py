@@ -1013,6 +1013,31 @@ class TestOfficialApiHelpers:
         assert _get_user_id() == "me-id"
         mock_request.assert_called_once()
 
+    @patch("codecks_cli.cards.query")
+    def test_list_hand_only_asks_for_own_queue_entries(self, mock_query, monkeypatch):
+        # account.queueEntries lists every member's hand; only ours belongs in "my hand".
+        from codecks_cli.cards import list_hand
+
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "me-id")
+        mock_query.return_value = {}
+        list_hand()
+        relation = next(iter(mock_query.call_args.args[0]["_root"][0]["account"][0]))
+        assert relation == 'queueEntries({"userId": "me-id"})'
+
+    @patch("codecks_cli.cards.query", return_value={})
+    @patch("codecks_cli.cards.session_request")
+    def test_user_lookup_survives_cache_clear(self, mock_request, _mock_query, monkeypatch):
+        # The MCP server clears config._cache after mutations; the hand query needs the
+        # user every time, so the looked-up ID must not be re-fetched each refresh.
+        from codecks_cli.cards import list_hand
+
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "")
+        mock_request.return_value = {"_root": {"loggedInUser": "me-id"}}
+        list_hand()
+        config._cache.clear()
+        list_hand()
+        mock_request.assert_called_once()
+
     @patch("codecks_cli.cards.resolve_deck_id")
     def test_default_deck_id_stored_as_uuid_is_used_directly(self, mock_resolve, monkeypatch):
         from codecks_cli.cards import default_deck_id

@@ -23,6 +23,7 @@ from typing import Any
 
 from codecks_cli import api, config
 from codecks_cli._utils import _get_field
+from codecks_cli.cards import _get_user_id
 from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
@@ -36,15 +37,6 @@ def _get_account_id() -> str:
     for _key, acc in result.get("account", {}).items():
         return str(acc["id"])
     raise CliError("[ERROR] Could not resolve account ID.")
-
-
-def _get_user_id() -> str:
-    """Get the current user's UUID via the Codecks query API."""
-    result = api.query({"_root": [{"account": [{"roles": ["userId", {"user": ["id", "name"]}]}]}]})
-    # Return first user (account owner / primary user)
-    for _key, user in result.get("user", {}).items():
-        return str(user["id"])
-    raise CliError("[ERROR] Could not resolve user ID.")
 
 
 def _get_primary_project_id() -> str:

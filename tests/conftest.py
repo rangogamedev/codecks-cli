@@ -11,12 +11,14 @@ _TEST_CACHE_FILE = "__test_no_cache__.json"
 
 
 @pytest.fixture(autouse=True)
-def _isolate_config(monkeypatch):
+def _isolate_config(monkeypatch, tmp_path):
     """Ensure every test starts with a clean config state.
-    Prevents tests from reading the real .env or sharing cached data."""
+    Prevents tests from reading or writing the real .env or sharing cached data."""
     from codecks_cli import config
 
     monkeypatch.setattr(config, "env", {})
+    # save_env_value() (e.g. milestone auto-register) must never touch the real .env
+    monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / ".env"))
     monkeypatch.setattr(config, "SESSION_TOKEN", "fake-token")
     monkeypatch.setattr(config, "DEFAULT_DECK", "")
     monkeypatch.setattr(config, "ACCOUNT", "fake-account")
