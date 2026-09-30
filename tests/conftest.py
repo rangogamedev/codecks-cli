@@ -32,6 +32,11 @@ def _isolate_config(monkeypatch, tmp_path):
     # Attachment allowlist must not leak in from the developer's environment
     monkeypatch.delenv("CODECKS_ATTACH_ALLOW_DIRS", raising=False)
 
+    # Fresh rate-limit window so request-heavy tests never sleep on each other
+    from codecks_cli import api
+
+    monkeypatch.setattr(api, "_request_times", [])
+
     # Reset the client singleton so tests don't share state
     from codecks_cli import commands
 

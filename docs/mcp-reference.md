@@ -209,5 +209,5 @@ Built-in safety checks that prevent common agent mistakes:
 - **Deck fuzzy matching**: `resolve_deck_id` suggests closest match ("Did you mean 'X'?") on failure
 - **Duplicate detection**: `create_card` blocks exact title matches (override with `allow_duplicate=True`)
 - **Default deck**: `create_card` / `batch_create_cards` without `deck` use `CODECKS_DEFAULT_DECK`; if it is unset they fail with a hint instead of creating a private, deck-less card
-- **Rate limiting**: enforces Codecks 40 req/5s limit with headroom tracking
+- **Rate limiting**: every Codecks HTTP request (not every tool call) takes a slot in a per-process 35-per-5-seconds window, below Codecks' documented 40 requests / 5 s per IP; a 429 is retried after its `retry-after` wait (up to `CODECKS_HTTP_MAX_RETRIES`, default 2), then returned as `RATE_LIMITED`
 - **Prompt injection detection**: sanitizes user content fields

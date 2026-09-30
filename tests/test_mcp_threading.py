@@ -120,37 +120,35 @@ def test_repository_load_and_read_concurrently(monkeypatch):
     assert repo.count == len(cards)
 
 
-def test_rate_limit_timestamps_survive_concurrent_calls(monkeypatch):
-    """The shared rate-limit list must not be corrupted by parallel _call()s."""
-    monkeypatch.setattr(_core, "_api_call_timestamps", [])
+def test_rate_limit_counts_http_requests_not_tool_calls(monkeypatch):
+    """One tool call can make several Codecks requests; each one takes a slot.
+
+    The limiter used to sit in _core._call and counted one slot per tool call,
+    while warm_cache (4 parallel requests) and batch tools bypassed it.
+    """
+    from unittest.mock import MagicMock
+
+    from codecks_cli import api
+
+    resp = MagicMock()
+    resp.headers.get.return_value = "application/json"
+    resp.read.return_value = b"{}"
+    urlopen = MagicMock()
+    urlopen.return_value.__enter__.return_value = resp
+    monkeypatch.setattr(api.urllib.request, "urlopen", urlopen)
 
     class FakeClient:
         def get_account(self):
+            for _ in range(3):
+                api._http_request("https://api.example/", {"query": {}})
             return {"ok": True}
 
     monkeypatch.setattr(_core, "_client", FakeClient())
 
-    results: list[dict] = []
-    results_lock = threading.Lock()
-
-    # Stay under _RATE_LIMIT_MAX so the limiter never sleeps mid-test.
-    per_thread = 5
-    threads = 4
-
-    def call(_index):
-        for _ in range(per_thread):
-            out = _core._call("get_account")
-            with results_lock:
-                results.append(out)
-
-    errors = _run_threads(call, threads)
+    errors = _run_threads(lambda _i: _core._call("get_account"), 4)
 
     assert errors == []
-    assert len(results) == per_thread * threads
-    assert all(r.get("ok") for r in results)
-    # Every call recorded exactly one timestamp — no lost or duplicated writes.
-    assert len(_core._api_call_timestamps) == per_thread * threads
-    assert all(isinstance(t, float) for t in _core._api_call_timestamps)
+    assert len(api._request_times) == 12
 
 
 def test_rate_limiter_never_over_admits_under_concurrency(monkeypatch):
@@ -160,11 +158,12 @@ def test_rate_limiter_never_over_admits_under_concurrency(monkeypatch):
     threads that all see room cannot all be admitted. A fake clock (advanced
     only by the limiter's own sleep) keeps this deterministic and fast.
     """
+    from codecks_cli import api
+
     max_calls = 5
     window = 1.0
-    monkeypatch.setattr(_core, "_api_call_timestamps", [])
-    monkeypatch.setattr(_core, "_RATE_LIMIT_MAX", max_calls)
-    monkeypatch.setattr(_core, "_RATE_LIMIT_WINDOW", window)
+    monkeypatch.setattr(api, "_RATE_LIMIT_MAX", max_calls)
+    monkeypatch.setattr(api, "_RATE_LIMIT_WINDOW", window)
 
     clock = {"now": 0.0}
     clock_lock = threading.Lock()
@@ -177,27 +176,25 @@ def test_rate_limiter_never_over_admits_under_concurrency(monkeypatch):
         with clock_lock:
             clock["now"] += max(seconds, 0.001)
 
-    monkeypatch.setattr(_core.time, "monotonic", fake_monotonic)
-    monkeypatch.setattr(_core.time, "sleep", fake_sleep)
+    monkeypatch.setattr(api.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(api.time, "sleep", fake_sleep)
 
     observed: list[int] = []
 
-    class FakeClient:
-        def get_account(self):
-            # Sample the reservation list; pruning only happens at admission, so
-            # its length is the number of admissions in the current window.
-            with _core._state_lock:
-                observed.append(len(_core._api_call_timestamps))
-            return {"ok": True}
+    def admitted(_index):
+        api._throttle()
+        # Pruning only happens at admission, so the list length is the number
+        # of admissions in the current window.
+        with api._rate_lock:
+            observed.append(len(api._request_times))
 
-    monkeypatch.setattr(_core, "_client", FakeClient())
-
-    errors = _run_threads(lambda _i: _core._call("get_account"), 50)
+    errors = _run_threads(admitted, 50)
 
     assert errors == []
     assert len(observed) == 50
     assert max(observed) <= max_calls, f"over-admitted: {max(observed)} > {max_calls}"
-    assert len(_core._api_call_timestamps) <= max_calls
+    # 50 admissions at 5 per window need at least 9 full windows of waiting.
+    assert clock["now"] >= (50 // max_calls - 1) * window
 
 
 def test_overlapping_batches_suppress_disk_writes_until_the_last_exit(tmp_path, monkeypatch):
