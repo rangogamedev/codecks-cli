@@ -130,13 +130,14 @@ _FIELDS_LIST = _FIELDS_MINIMAL + [
     "masterTags",
     "lastUpdatedAt",
     "isDoc",
+    # childCardInfo comes back as "{}" for hero cards; the aggregate is exact (v2.96).
+    # In the list set so cached cards (MCP) can tell hero cards apart too.
+    "count:childCards",
 ]
 
 _FIELDS_FULL = _FIELDS_LIST + [
     "createdAt",
     "milestoneId",
-    # childCardInfo comes back as "{}" for hero cards; the aggregate is exact (v2.96).
-    "count:childCards",
     "content",
 ]
 

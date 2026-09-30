@@ -245,7 +245,7 @@ def _filter_cached_cards(
         result = [c for c in result if c.get("priority") in priorities]
 
     if card_type == "hero":
-        result = [c for c in result if c.get("child_cards") or c.get("childCards")]
+        result = [c for c in result if c.get("sub_card_count")]
     elif card_type == "doc":
         result = [c for c in result if c.get("is_doc") or c.get("cardType") == "doc"]
 
@@ -352,7 +352,7 @@ def _append_hand_suggestions(result: dict) -> dict:
     ]
 
     if exclude_heroes:
-        candidates = [c for c in candidates if not c.get("child_cards") and not c.get("childCards")]
+        candidates = [c for c in candidates if not c.get("sub_card_count")]
 
     # Sort by priority (a > b > c > null)
     priority_order = {"a": 0, "b": 1, "c": 2}

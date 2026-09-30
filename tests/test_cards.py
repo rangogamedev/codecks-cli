@@ -478,8 +478,13 @@ class TestEnrichCards:
         assert "count:childCards" not in result["c1"]
         assert "sub_card_count" not in result["c2"]
 
-    def test_full_fields_request_child_count(self):
-        assert "count:childCards" in cards_mod._FIELDS_FULL
+    @patch("codecks_cli.cards.warn_if_empty")
+    @patch("codecks_cli.cards.query")
+    def test_list_fields_request_child_count(self, mock_query, _mock_warn):
+        mock_query.return_value = {"card": {}}
+        cards_mod.list_cards(include_content=False)
+        fields = next(iter(mock_query.call_args.args[0]["_root"][0]["account"][0].values()))
+        assert "count:childCards" in fields
 
 
 # ---------------------------------------------------------------------------
