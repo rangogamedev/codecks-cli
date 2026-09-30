@@ -728,7 +728,7 @@ def _get_user_id():
         me = session_request("/", {"query": {"_root": [{"loggedInUser": ["id"]}]}}, idempotent=True)
         uid = ((me or {}).get("_root") or {}).get("loggedInUser")
     if not (isinstance(uid, str) and uid):
-        if config.USER_ID:
+        if config.USER_ID and not token.startswith("cdxut_"):
             return config.USER_ID
         uid = _first_owner_id()
     _looked_up_user_id = uid

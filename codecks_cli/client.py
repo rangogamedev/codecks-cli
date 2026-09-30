@@ -858,7 +858,10 @@ class CodecksClient:
             except CliError as e:
                 raise CliError(
                     f"[ERROR] Card {card_id} was created, but attachment upload failed: {e}\n"
-                    f"[ERROR] Retry attachments with: codecks-cli attach {card_id} <file...>"
+                    f"[ERROR] Retry attachments with: codecks-cli attach {card_id} <file...>",
+                    # Keep the cause's code, but never retryable: retrying the
+                    # create would duplicate the card that already exists.
+                    error_code=e.error_code,
                 ) from e
 
         post_update = dict(pre_resolved)

@@ -1068,6 +1068,17 @@ class TestOfficialApiHelpers:
 
     @patch("codecks_cli.cards.query")
     @patch("codecks_cli.cards.session_request")
+    def test_org_token_prefers_configured_user(self, mock_request, mock_query, monkeypatch):
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.SESSION_TOKEN", "cdxat_x")
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "picked-id")
+        assert _get_user_id() == "picked-id"
+        mock_request.assert_not_called()
+        mock_query.assert_not_called()
+
+    @patch("codecks_cli.cards.query")
+    @patch("codecks_cli.cards.session_request")
     def test_org_token_uses_first_owner(self, mock_request, mock_query, monkeypatch):
         from codecks_cli.cards import _get_user_id
 
