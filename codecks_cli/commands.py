@@ -617,15 +617,18 @@ def cmd_gdd_revoke(ns):
 
 def cmd_default_deck(ns):
     """Show (offline) or set CODECKS_DEFAULT_DECK, stored as the deck ID."""
-    from codecks_cli.api import _check_token
-    from codecks_cli.cards import resolve_deck_id
+    from codecks_cli.api import _check_token, _try_call
+    from codecks_cli.cards import list_decks, resolve_deck_id
 
     if not ns.name:
         value = config.DEFAULT_DECK
+        # Best-effort name lookup; offline or with a bad token this just shows the stored value.
+        decks = (_try_call(list_decks) or {}).get("deck", {}) if value else {}
+        title = next((d.get("title") for d in decks.values() if d.get("id") == value), None)
         output(
-            {"ok": True, "default_deck": value or None},
+            {"ok": True, "default_deck": value or None, "title": title},
             lambda d: (
-                f"Default deck: {d['default_deck']}"
+                f"Default deck: {d['title'] or d['default_deck']}"
                 if d["default_deck"]
                 else "No default deck set. Set it with: codecks-cli default-deck <deck name>"
             ),
@@ -636,7 +639,7 @@ def cmd_default_deck(ns):
     deck_id = resolve_deck_id(ns.name, project=ns.project)
     config.save_env_value("CODECKS_DEFAULT_DECK", deck_id)
     config.DEFAULT_DECK = deck_id
-    mutation_response("Default deck set", deck_id, f"deck='{ns.name}'", fmt=ns.format)
+    mutation_response("Default deck set", details=f"deck='{ns.name}' ({deck_id})", fmt=ns.format)
 
 
 def cmd_completion(ns):

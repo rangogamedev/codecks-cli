@@ -1827,14 +1827,24 @@ class TestCmdTagsRegistry:
 
 
 class TestCmdDefaultDeck:
-    @patch("codecks_cli.api.session_request")
-    def test_show_needs_no_network(self, mock_request, monkeypatch, capsys):
+    @patch("codecks_cli.cards.list_decks", side_effect=SetupError("[TOKEN_EXPIRED] offline"))
+    def test_show_works_offline(self, _mock_decks, monkeypatch, capsys):
         from codecks_cli.commands import cmd_default_deck
 
         monkeypatch.setattr(config, "DEFAULT_DECK", "deck-1")
         cmd_default_deck(argparse.Namespace(name=None, project=None, format="json"))
-        assert json.loads(capsys.readouterr().out)["default_deck"] == "deck-1"
-        mock_request.assert_not_called()
+        out = json.loads(capsys.readouterr().out)
+        assert out["default_deck"] == "deck-1"
+        assert out["title"] is None
+
+    @patch("codecks_cli.cards.list_decks")
+    def test_show_names_the_deck_when_online(self, mock_decks, monkeypatch, capsys):
+        from codecks_cli.commands import cmd_default_deck
+
+        monkeypatch.setattr(config, "DEFAULT_DECK", "deck-1")
+        mock_decks.return_value = {"deck": {"deck-1": {"id": "deck-1", "title": "Inbox"}}}
+        cmd_default_deck(argparse.Namespace(name=None, project=None, format="table"))
+        assert "Default deck: Inbox" in capsys.readouterr().out
 
     @patch("codecks_cli.config.save_env_value")
     @patch("codecks_cli.cards.resolve_deck_id", return_value="deck-2")
