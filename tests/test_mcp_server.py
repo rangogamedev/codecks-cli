@@ -2091,6 +2091,24 @@ class TestErrorContract:
         assert result["error_code"] == "NETWORK_ERROR"
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_call_passes_api_error_code_and_retryable(self, MockClient):
+        MockClient.return_value.get_account.side_effect = CliError(
+            "[ERROR] Rate limit reached", error_code="RATE_LIMITED", retryable=True
+        )
+        _core._client = None
+        result = _core._call("get_account")
+        assert result["error_code"] == "RATE_LIMITED"
+        assert result["retryable"] is True
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_call_token_error_code(self, MockClient):
+        MockClient.return_value.get_account.side_effect = SetupError(
+            "[TOKEN_EXPIRED] x", error_code="TOKEN_EXPIRED"
+        )
+        _core._client = None
+        assert _core._call("get_account")["error_code"] == "TOKEN_EXPIRED"
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_call_cli_error_not_retryable(self, MockClient):
         MockClient.return_value.get_account.side_effect = CliError("bad id")
         _core._client = None

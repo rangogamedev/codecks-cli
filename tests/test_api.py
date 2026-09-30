@@ -203,6 +203,58 @@ class TestSessionRequest429:
         assert "read-only" in str(exc_info.value)
 
 
+class TestSessionRequestErrorCodes:
+    """Documented API errors (manual.codecks.io/api) carry machine-readable codes."""
+
+    @pytest.mark.parametrize(
+        ("status", "body", "exc", "code", "retryable"),
+        [
+            (401, '{"error":"invalid_token"}', SetupError, "TOKEN_EXPIRED", False),
+            (400, '{"error":"token_account_mismatch"}', SetupError, "SETUP_NEEDED", False),
+            (403, '{"error":"missing_scope"}', CliError, "PERMISSION_DENIED", False),
+            (429, "", CliError, "RATE_LIMITED", True),
+            (503, "", CliError, "HTTP_ERROR", True),
+            (500, "", CliError, "HTTP_ERROR", False),
+        ],
+    )
+    @patch("codecks_cli.api._http_request")
+    def test_codes(self, mock_http, status, body, exc, code, retryable):
+        mock_http.side_effect = HTTPError(status, "x", body)
+        with pytest.raises(exc) as exc_info:
+            session_request("/", {"query": {}})
+        assert exc_info.value.error_code == code
+        assert exc_info.value.retryable is retryable
+
+    @patch("codecks_cli.api._http_request")
+    def test_graph_400_shows_code_path_and_message(self, mock_http):
+        body = (
+            '{"error":"unknown_relation","message":"unknown relation \'queueEntries\' '
+            'for model \'user\'","statusCode":400,"path":"_root.loggedInUser.queueEntries"}'
+        )
+        mock_http.side_effect = HTTPError(400, "Bad Request", body)
+        with pytest.raises(CliError) as exc_info:
+            session_request("/", {"query": {}})
+        msg = str(exc_info.value)
+        assert "unknown_relation at _root.loggedInUser.queueEntries" in msg
+        assert "unknown relation 'queueEntries' for model 'user'" in msg
+        assert exc_info.value.error_code == "INVALID_QUERY"
+
+    @patch("codecks_cli.api._http_request")
+    def test_429_names_retry_after(self, mock_http):
+        mock_http.side_effect = HTTPError(429, "x", "", headers={"Retry-After": "3"})
+        with pytest.raises(CliError, match="Wait 3 seconds"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api.session_request")
+    def test_check_token_keeps_code_when_wrapping(self, mock_request, monkeypatch):
+        monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "cdxut_x")
+        monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
+        mock_request.side_effect = SetupError("[TOKEN_EXPIRED] x", error_code="TOKEN_EXPIRED")
+        with pytest.raises(SetupError) as exc_info:
+            _check_token()
+        assert exc_info.value.error_code == "TOKEN_EXPIRED"
+
+
 class TestRawHttpRequest:
     @patch("codecks_cli.api.urllib.request.urlopen")
     def test_sends_raw_body_and_returns_bytes(self, mock_urlopen):

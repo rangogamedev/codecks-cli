@@ -39,7 +39,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 | `[ERROR] ...` | General error | Check message for details |
 | JSON on stderr: `{"ok": false, ...}` | Structured error (with `--format json`) | Parse `error_code` and `retryable` fields |
 
-MCP error responses include `error_code` (e.g., `NOT_FOUND`, `DOC_CARD_VIOLATION`, `RATE_LIMITED`) and `retryable` (bool) for automated decision-making.
+MCP and CLI JSON error responses include `error_code` (e.g., `TOKEN_EXPIRED`, `PERMISSION_DENIED`, `RATE_LIMITED`, `INVALID_QUERY`; full list in [docs/mcp-reference.md](docs/mcp-reference.md#error-contract)) and `retryable` (bool) for automated decision-making. API errors set them via `CliError(error_code=..., retryable=...)` in `api.session_request`.
 
 ## API Pitfalls (will cause bugs if ignored)
 

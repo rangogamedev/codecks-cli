@@ -117,9 +117,9 @@ All error responses include structured fields for agent decision-making:
 {
   "ok": false,
   "schema_version": "1.0",
-  "error": "Card not found",
-  "error_code": "NOT_FOUND",
-  "retryable": false
+  "error": "[ERROR] Rate limit reached (Codecks allows 40 requests per 5 seconds). Wait 5 seconds and retry.",
+  "error_code": "RATE_LIMITED",
+  "retryable": true
 }
 ```
 
@@ -127,8 +127,22 @@ All error responses include structured fields for agent decision-making:
 |-------|---------|
 | `ok` | `true` on success, `false` on error |
 | `schema_version` | Response contract version (`"1.0"`) |
-| `error_code` | Machine-readable code: `NOT_FOUND`, `TOKEN_EXPIRED`, `DOC_CARD_VIOLATION`, `RATE_LIMITED` |
+| `error_code` | Machine-readable code (see below) |
 | `retryable` | Whether the agent should retry (e.g., `true` for rate limits, `false` for validation errors) |
+
+| `error_code` | Meaning | `retryable` |
+|--------------|---------|-------------|
+| `TOKEN_EXPIRED` | API token rejected (HTTP 401: invalid, expired, owner disabled, personal tokens off) | no |
+| `SETUP_NEEDED` | No configuration, or `CODECKS_ACCOUNT` doesn't match the token's organization | no |
+| `PERMISSION_DENIED` | HTTP 403, e.g. `missing_scope` on a read-only token; the message names the required scope | no |
+| `RATE_LIMITED` | HTTP 429 after the built-in retries; wait the seconds in the message | yes |
+| `INVALID_QUERY` | HTTP 400 graph error; the message has the Codecks code, path and reason | no |
+| `HTTP_ERROR` | Any other HTTP error (retryable for 502/503/504) | varies |
+| `NETWORK_ERROR` | Connection or timeout failure | yes |
+| `INVALID_INPUT` / `DOC_CARD_VIOLATION` | Rejected by the MCP server before calling Codecks | no |
+| `SETUP_ERROR` / `CLI_ERROR` / `UNEXPECTED_ERROR` | Other setup, validation or internal errors | no / no / yes |
+
+The CLI's JSON errors (`--format json` / `--agent`) carry the same `error_code` and `retryable` fields.
 
 ## Response Modes
 
