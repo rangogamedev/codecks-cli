@@ -710,12 +710,13 @@ def bulk_status(card_ids, status):
 
 
 def _get_user_id():
-    """Return the current user's ID. Reads from .env, falls back to API (cached)."""
+    """Return the current user's ID. Reads from .env, falls back to API.
+
+    A looked-up ID is kept in config.USER_ID (it never changes within a process),
+    so it survives config._cache.clear() and every hand query doesn't re-ask.
+    """
     if config.USER_ID:
         return config.USER_ID
-    cached = config._cache.get("user_id")
-    if cached:
-        return cached
     # Personal tokens know their own user (manual.codecks.io/api "own user ID").
     # session_request, not query(): query() drops the "_root" key this answer lives in.
     me = _try_call(
@@ -723,7 +724,7 @@ def _get_user_id():
     )
     uid = ((me or {}).get("_root") or {}).get("loggedInUser")
     if isinstance(uid, str) and uid:
-        config._cache["user_id"] = uid
+        config.USER_ID = uid
         return uid
     # Organization tokens have no user: pick the first account owner.
     result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
@@ -731,13 +732,13 @@ def _get_user_id():
         if entry.get("role") == "owner":
             uid = _get_field(entry, "user_id", "userId")
             if uid:
-                config._cache["user_id"] = uid
+                config.USER_ID = uid
                 return uid
     # Fallback: first role found
     for entry in (result.get("accountRole") or {}).values():
         uid = _get_field(entry, "user_id", "userId")
         if uid:
-            config._cache["user_id"] = uid
+            config.USER_ID = uid
             return uid
     raise CliError("[ERROR] Could not determine your user ID. Run: py codecks_api.py setup")
 
