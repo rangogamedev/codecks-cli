@@ -20,7 +20,6 @@ from codecks_cli.api import (
     query,
     raw_http_request,
     session_request,
-    warn_if_empty,
 )
 from codecks_cli.exceptions import CliError, SetupError
 
@@ -120,20 +119,6 @@ class TestHTTPError:
         assert e.reason == "Not Found"
         assert e.body == "body"
         assert e.headers == {}
-
-
-class TestWarnIfEmpty:
-    def test_no_warning_with_data(self, capsys):
-        warn_if_empty({"card": {"id1": {}}}, "card")
-        assert "[TOKEN_EXPIRED]" not in capsys.readouterr().err
-
-    def test_warns_on_empty(self, capsys):
-        warn_if_empty({}, "card")
-        assert "[TOKEN_EXPIRED]" in capsys.readouterr().err
-
-    def test_warns_on_empty_dict(self, capsys):
-        warn_if_empty({"card": {}}, "card")
-        assert "[TOKEN_EXPIRED]" in capsys.readouterr().err
 
 
 class TestSessionRequest429:

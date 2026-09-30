@@ -478,9 +478,8 @@ class TestEnrichCards:
         assert "count:childCards" not in result["c1"]
         assert "sub_card_count" not in result["c2"]
 
-    @patch("codecks_cli.cards.warn_if_empty")
     @patch("codecks_cli.cards.query")
-    def test_list_fields_request_child_count(self, mock_query, _mock_warn):
+    def test_list_fields_request_child_count(self, mock_query):
         mock_query.return_value = {"card": {}}
         cards_mod.list_cards(include_content=False)
         fields = next(iter(mock_query.call_args.args[0]["_root"][0]["account"][0].values()))
@@ -990,9 +989,8 @@ class TestCardFieldSets:
         assert "isDoc" in _FIELDS_LIST
         assert _FIELDS_FULL.count("isDoc") == 1
 
-    @patch("codecks_cli.cards.warn_if_empty")
     @patch("codecks_cli.cards.query")
-    def test_list_cards_without_content_requests_is_doc(self, mock_query, _mock_warn):
+    def test_list_cards_without_content_requests_is_doc(self, mock_query):
         from codecks_cli.cards import list_cards
 
         mock_query.return_value = {"card": {}}

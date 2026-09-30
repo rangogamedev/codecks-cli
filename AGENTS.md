@@ -102,7 +102,7 @@ cards = client.list_cards(status="started", sort="priority")
 
 | # | Bug | Fix | Guard |
 |---|-----|-----|-------|
-| 1 | `warn_if_empty` fires false TOKEN_EXPIRED | Only warn when no server-side filters | Check filter args |
+| 1 | `warn_if_empty` fires false TOKEN_EXPIRED | Removed: API tokens get a 401, so empty data is just empty | Never guess token state from empty results |
 | 2 | Sort by effort puts blanks first | Tuple key `(0,val)`/`(1,"")` for blanks-last | Test with blank efforts |
 | 3 | `update_card()` drops None values | Pass None through (clear ops: `--priority null`) | Test null clears |
 | 4 | `_get_field()` loses `False`/`0` | Key-presence check, not truthiness | Test falsy values |
