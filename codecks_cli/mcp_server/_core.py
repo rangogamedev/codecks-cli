@@ -87,11 +87,6 @@ _disk_cache_mtime: float = 0.0  # st_mtime of .pm_cache.json when last loaded
 _batch_depth: int = 0  # >0 suppresses disk writes during (possibly overlapping) batches
 _repo = CardRepository()
 
-# Rate-limit tracking (Codecks API: 40 req/5s)
-_api_call_timestamps: list[float] = []
-_RATE_LIMIT_WINDOW = 5.0  # seconds
-_RATE_LIMIT_MAX = 35  # leave headroom below 40
-
 
 def get_repository() -> CardRepository:
     """Return the card repository (populated after cache warm or disk load)."""
@@ -1006,24 +1001,6 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
     """
     if method_name not in _ALLOWED_METHODS:
         return _contract_error(f"Unknown method: {method_name}", "error")
-
-    # Rate-limit awareness: pause if approaching the API limit. The timestamp
-    # list is shared across worker threads, so pruning, the window check *and*
-    # the slot reservation all happen in one critical section — splitting them
-    # lets N threads each see room and over-admit. Only the sleep (and the API
-    # call itself) happens with the lock released, after which the state is
-    # re-checked from scratch.
-    while True:
-        with _state_lock:
-            now = time.monotonic()
-            _api_call_timestamps[:] = [
-                t for t in _api_call_timestamps if now - t < _RATE_LIMIT_WINDOW
-            ]
-            if len(_api_call_timestamps) < _RATE_LIMIT_MAX:
-                _api_call_timestamps.append(now)
-                break
-            wait = _RATE_LIMIT_WINDOW - (now - _api_call_timestamps[0])
-        time.sleep(min(max(wait, 0.0), _RATE_LIMIT_WINDOW))
 
     try:
         client = _get_client()

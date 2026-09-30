@@ -68,7 +68,7 @@ MCP and CLI JSON error responses include `error_code` (e.g., `TOKEN_EXPIRED`, `P
 
 ### Rate Limit
 
-40 requests per 5 seconds per IP. HTTP 429 = specific error message. Transient errors (429/502/503/504) are retried with backoff.
+40 requests per 5 seconds per IP. `api._http_request` throttles every request to 35 per 5 s (shared across threads), so batch/MCP tools don't need their own limiter. HTTP 429 = specific error message. Transient errors (429/502/503/504) are retried with backoff (`retry-after` honoured).
 
 ## Paid-Only (do NOT use)
 

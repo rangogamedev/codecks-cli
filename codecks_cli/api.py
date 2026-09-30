@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -139,6 +140,32 @@ def _parse_retry_after(headers):
     return max(0, secs)
 
 
+# Codecks allows 40 requests per 5 seconds per IP (manual.codecks.io/api). Every
+# Codecks request goes through _http_request, so throttling here counts real
+# requests (a single MCP tool call can make several), shared across threads.
+_RATE_LIMIT_WINDOW = 5.0
+_RATE_LIMIT_MAX = 35  # headroom for other clients on the same IP
+_request_times: list[float] = []
+_rate_lock = threading.Lock()
+
+
+def _throttle():
+    """Block until another request fits in the rate-limit window, then reserve it.
+
+    Pruning, the check and the reservation share one critical section so racing
+    threads can't all see room and over-admit; only the sleep runs unlocked.
+    """
+    while True:
+        with _rate_lock:
+            now = time.monotonic()
+            _request_times[:] = [t for t in _request_times if now - t < _RATE_LIMIT_WINDOW]
+            if len(_request_times) < _RATE_LIMIT_MAX:
+                _request_times.append(now)
+                return
+            wait = _RATE_LIMIT_WINDOW - (now - _request_times[0])
+        time.sleep(min(max(wait, 0.0), _RATE_LIMIT_WINDOW))
+
+
 def _http_request(url, data=None, headers=None, method="POST", idempotent=False):
     """Make an HTTP request with standard error handling.
     Returns parsed JSON on success.
@@ -154,6 +181,7 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
     last_url_error = None
 
     for attempt in range(max_attempts):
+        _throttle()
         start = time.perf_counter()
         req = urllib.request.Request(url, data=body, headers=headers or {}, method=method)
         if sampled:
