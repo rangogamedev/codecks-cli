@@ -132,5 +132,6 @@ class TestMilestoneCreator:
         from codecks_cli.admin import create_milestone
 
         monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "me-id")
-        create_milestone("M1")
+        with patch("codecks_cli.config.save_env_value"):
+            create_milestone("M1")
         assert mock_dispatch.call_args.args[1]["userId"] == "me-id"
