@@ -1040,7 +1040,7 @@ class TestOfficialApiHelpers:
     def test_default_deck_id_stored_as_uuid_is_used_directly(self, mock_resolve, monkeypatch):
         from codecks_cli.cards import default_deck_id
 
-        deck = "83c11c54-033d-11f1-8801-bfe8bce8b192"
+        deck = "00000000-0000-4000-8000-000000000001"
         monkeypatch.setattr("codecks_cli.cards.config.DEFAULT_DECK", deck)
         assert default_deck_id() == deck
         mock_resolve.assert_not_called()
