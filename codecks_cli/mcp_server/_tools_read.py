@@ -40,8 +40,9 @@ def get_account() -> dict:
     """Get the organization (Codecks account) this API token belongs to.
 
     Returns:
-        Dict with 'account': {<account id>: {'id', 'name'}}. No user fields:
-        organization tokens have no user.
+        Dict with 'account': {<account id>: {'id', 'name'}}. Served from the
+        cache it also has cached, cache_age_seconds and cache_fetched_at
+        (plus stale_warning / cache_ttl_seconds when the cache is nearly stale).
     """
     cached = _try_cache("account")
     if cached is not None and isinstance(cached, dict):
