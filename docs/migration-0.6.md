@@ -13,10 +13,11 @@ session ended. Card creation therefore went through a second credential, the
 
 v2.96 added official, long-lived API tokens and deprecated the browser-login header:
 
-- The server now treats the `X-Auth-Token` header as **anonymous**. The account name still
-  resolves, but decks and cards come back empty. On 0.5.x the CLI showed that as a misleading
-  `[TOKEN_EXPIRED]`.
-- The header stops working completely on **2026-12-31**.
+- The `X-Auth-Token` header is deprecated and officially stops working on **2026-12-31**.
+- In practice it already fails. Since v2.96, requests sent with it have come back as if
+  unauthenticated: the account name resolves, but decks and cards are empty
+  ([reported in #60](https://github.com/rangogamedev/codecks-cli/pull/60), and reproduced with an
+  API token). On 0.5.x the CLI shows that as a misleading `[TOKEN_EXPIRED]`.
 - An API token can read, write and create cards, and it lasts until it's revoked or reaches an
   optional expiry date. One token now replaces three.
 
@@ -37,7 +38,8 @@ v2.96 added official, long-lived API tokens and deprecated the browser-login hea
 
 New in 0.6.0:
 - The `CODECKS_DEFAULT_DECK` setting.
-- The `codecks-cli default-deck [name]` command.
+- The `codecks-cli default-deck [name] [--project P]` command. It stores the deck's ID, so a
+  renamed deck keeps working and same-named decks in different projects can't be confused.
 - `create --priority`.
 - Error messages based on the codes the server returns (see [Troubleshooting](#troubleshooting)).
 
@@ -70,8 +72,10 @@ New in 0.6.0:
    codecks-cli default-deck     # shows the deck new cards go to
    ```
 
-To change the default deck later, run `codecks-cli default-deck <deck name>`, or re-run
-`codecks-cli setup` and choose "Change default deck".
+To change the default deck later, run `codecks-cli default-deck <deck name>` (add
+`--project <name>` if two projects have a deck with that name), or re-run `codecks-cli setup`
+and choose "Change default deck". Setup lists decks as "Deck (Project)". A deck name written
+into `.env` by hand also works; the CLI resolves it on each `create`.
 
 ## Best practices
 
@@ -85,8 +89,8 @@ To change the default deck later, run `codecks-cli default-deck <deck name>`, or
     organization token, set `CODECKS_USER_ID` so hand commands and attachments act for the
     right person.
 - **Least privilege.** Use *Read* for read-only dashboards and reporting agents. Use *Read & write*
-  only where the CLI changes cards. A read-only token that tries to write gets a 403 naming the
-  missing permission, for example `card:write`.
+  only where the CLI changes cards. A read-only token that tries to write gets a 403; the
+  server's message, which the CLI shows, names the missing permission.
 - **Use expiry dates.** Tokens can be created with an optional expiry date. Use one for temporary
   machines, contractors and CI. When a token expires, the CLI says so explicitly.
 - **Separate tokens.** Create one token per machine or agent, so you can revoke one without breaking the others.
@@ -108,11 +112,12 @@ To change the default deck later, run `codecks-cli default-deck <deck name>`, or
 |---|---|---|
 | `[TOKEN_EXPIRED] Codecks does not recognise the API token…` | typo, revoked, or cut-off token (`invalid_token`) | copy the whole token again, or create a new one |
 | `[TOKEN_EXPIRED] The API token has passed its expiry date.` | `token_expired` | create a new token |
-| `[TOKEN_EXPIRED] …no longer in the organization.` | the personal token's owner was removed (`not_a_member`) | use a token of a current member, or an organization token |
+| `[TOKEN_EXPIRED] …has been disabled in the organization.` | the personal token's owner was disabled (`not_a_member`) | use a token of an active member, or an organization token |
 | `[TOKEN_EXPIRED] An admin has turned off personal API tokens…` | `user_api_tokens_disabled` | ask an admin, or use an organization token |
-| `[TOKEN_EXPIRED] Codecks did not accept your API token` during setup/startup | the token can't see any projects (for example, an old browser cookie, which the server treats as anonymous) | create an API token, as above |
+| `[TOKEN_EXPIRED] Codecks did not accept your API token` during setup/startup | the account did not resolve for this token | check `CODECKS_ACCOUNT` and the token; an old browser-cookie value is not an API token |
+| setup says "this token can't see any projects yet" | a new organization with no projects, or an organization token with no projects selected | the token works; create a project or add projects to the token |
 | `[SETUP_NEEDED] CODECKS_ACCOUNT does not match…` | `token_account_mismatch` | fix `CODECKS_ACCOUNT`, or use a token from that organization |
-| `[ERROR] …HTTP 403… needs the 'card:write' permission` | `missing_scope`: read-only token, or a project not selected for an organization token | use a Read & write token, or add the project to the token |
+| `[ERROR] Codecks denied this request (HTTP 403)…` | read-only token trying to write, or a project not selected for an organization token; the server's message (and, for reads, `requiredScope`) names the missing permission | use a Read & write token, or add the project to the token |
 | `[ERROR] No default deck set…` | no `--deck` and no `CODECKS_DEFAULT_DECK` | `codecks-cli default-deck <deck name>` |
 | `[ERROR] --severity is no longer supported…` | severity was a User Reports field | use `--priority a\|b\|c` |
 

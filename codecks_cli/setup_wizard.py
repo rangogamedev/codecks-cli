@@ -199,39 +199,51 @@ def _setup_gdd_optional():
     print()
 
 
+def _deck_choices():
+    """Return [(label, deck_id)] sorted by label; label is "Deck (Project)"."""
+    decks_result = _try_call(list_decks) or {}
+    projects = load_project_names() or {}
+    choices = []
+    for key, deck in (decks_result.get("deck") or {}).items():
+        title = deck.get("title")
+        if not title or deck.get("isDeleted"):
+            continue
+        project = projects.get(_get_field(deck, "project_id", "projectId") or "")
+        label = f"{title} ({project})" if project else title
+        choices.append((label, deck.get("id") or key))
+    return sorted(choices, key=lambda c: c[0].lower())
+
+
 def _setup_default_deck():
-    """Ask once which deck new cards go to; saved as CODECKS_DEFAULT_DECK."""
+    """Ask once which deck new cards go to; saved as CODECKS_DEFAULT_DECK (the deck ID)."""
     print("Default deck")
     print("-" * 40)
     print("New cards go to this deck unless you pick another with --deck.")
     print("You can change it later with: codecks-cli default-deck <deck name>")
     print()
-    decks_result = _try_call(list_decks) or {}
-    titles = sorted(
-        {d.get("title", "") for d in (decks_result.get("deck") or {}).values() if d.get("title")}
-    )
-    if not titles:
+    choices = _deck_choices()
+    if not choices:
         print("  Could not load your decks. Set it later with: codecks-cli default-deck <name>")
         print()
         return
-    for i, title in enumerate(titles, 1):
-        print(f"  {i}. {title}")
-    suggested = next((t for t in titles if t.lower() == "inbox"), titles[0])
+    for i, (label, _deck_id) in enumerate(choices, 1):
+        print(f"  {i}. {label}")
+    suggested = next((i for i, c in enumerate(choices) if c[0].lower().startswith("inbox")), 0)
     print()
     while True:
-        answer = input(f"Deck number or name [{suggested}]: ").strip()
+        answer = input(f"Deck number [{suggested + 1}]: ").strip()
         if not answer:
-            choice = suggested
-        elif answer.isdigit() and 1 <= int(answer) <= len(titles):
-            choice = titles[int(answer) - 1]
+            index = suggested
+        elif answer.isdigit() and 1 <= int(answer) <= len(choices):
+            index = int(answer) - 1
         else:
-            choice = next((t for t in titles if t.lower() == answer.lower()), "")
-        if choice:
-            break
-        print("  Not one of your decks. Try again.")
-    config.save_env_value("CODECKS_DEFAULT_DECK", choice)
-    config.DEFAULT_DECK = choice
-    print(f"  Saved: new cards go to '{choice}'")
+            print("  Enter one of the numbers above.")
+            continue
+        break
+    label, deck_id = choices[index]
+    config.save_env_value("CODECKS_DEFAULT_DECK", deck_id)
+    config.DEFAULT_DECK = deck_id
+    print(f"  Saved: new cards go to '{label}'")
     print()
 
 
@@ -246,7 +258,7 @@ def _setup_done():
     print(f"  Account:       {final_env.get('CODECKS_ACCOUNT', '(not set)')}")
     tok = final_env.get("CODECKS_TOKEN", "")
     print(f"  API token:     {_mask_token(tok) if tok else '(not set)'}")
-    print(f"  Default deck:  {final_env.get('CODECKS_DEFAULT_DECK') or '(not set)'}")
+    print(f"  Default deck:  {'set' if final_env.get('CODECKS_DEFAULT_DECK') else '(not set)'}")
     proj = final_env.get("CODECKS_PROJECTS", "")
     proj_count = len([p for p in proj.split(",") if "=" in p]) if proj else 0
     print(f"  Projects:      {proj_count} mapped")
@@ -311,11 +323,11 @@ def cmd_setup():
             ).strip()
             if choice == "" or choice == "1":
                 print()
-                if not config.DEFAULT_DECK:
-                    _setup_default_deck()
                 _setup_discover_projects()
                 _setup_discover_milestones()
                 _setup_discover_user()
+                if not config.DEFAULT_DECK:
+                    _setup_default_deck()
                 _setup_gdd_optional()
                 _setup_done()
                 return
@@ -406,6 +418,9 @@ def cmd_setup():
             acc_data = next(iter(account_result["account"].values()), None)
             acc_name = acc_data.get("name", "?") if isinstance(acc_data, dict) else "?"
             print(f"  Token works! Connected to: {acc_name}")
+            if not account_result.get("project"):
+                print("  Note: this token can't see any projects yet. Create a project,")
+                print("  or (organization token) add projects to the token in Codecks.")
             break
         else:
             remaining = 2 - attempt
@@ -417,14 +432,14 @@ def cmd_setup():
                 print("  Saving it anyway — you can update later with: py codecks_api.py setup")
     print()
 
-    # --- Step 3: Default deck (full setup, or when none is set yet) ---
-    if (full_setup and not has_config) or not config.DEFAULT_DECK:
-        _setup_default_deck()
-
     # --- Auto-discover projects, milestones, user ---
     _setup_discover_projects()
     _setup_discover_milestones()
     _setup_discover_user()
+
+    # --- Default deck (after project discovery, so decks show their project) ---
+    if (full_setup and not has_config) or not config.DEFAULT_DECK:
+        _setup_default_deck()
 
     # --- Optional GDD ---
     if full_setup and not has_config:

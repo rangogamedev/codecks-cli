@@ -315,7 +315,7 @@ def scaffold_feature(
         if not hero_id:
             raise CliError("[ERROR] Hero creation failed: missing cardId.")
         created_ids.append(hero_id)
-        update_card(hero_id, deckId=hero_deck_id, masterTags=list(HERO_TAGS), **hero_update)
+        update_card(hero_id, masterTags=list(HERO_TAGS), **hero_update)
 
         def _make_sub(lane_def_inner, deck_id):
             sub_title = f"[{lane_def_inner.display_name}] {spec.title}"
@@ -351,7 +351,6 @@ def scaffold_feature(
             update_card(
                 sub_id,
                 parentCardId=hero_id,
-                deckId=deck_id,
                 masterTags=list(lane_def_inner.tags),
                 **sub_update,
             )
@@ -533,7 +532,6 @@ def split_features(
 
                 update_kwargs: dict[str, Any] = {
                     "parentCardId": cid,
-                    "deckId": lane_deck_id,
                     "masterTags": list(lane_def.tags),
                 }
                 if pri is not None:

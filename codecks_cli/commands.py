@@ -616,17 +616,27 @@ def cmd_gdd_revoke(ns):
 
 
 def cmd_default_deck(ns):
-    if not ns.name:
-        current = config.DEFAULT_DECK
-        print(f"Default deck: {current}" if current else "No default deck set.")
-        print("Change it with: codecks-cli default-deck <deck name>")
-        return
+    """Show (offline) or set CODECKS_DEFAULT_DECK, stored as the deck ID."""
+    from codecks_cli.api import _check_token
     from codecks_cli.cards import resolve_deck_id
 
-    resolve_deck_id(ns.name)  # fails with suggestions if the deck does not exist
-    config.save_env_value("CODECKS_DEFAULT_DECK", ns.name)
-    config.DEFAULT_DECK = ns.name
-    print(f"Default deck set to: {ns.name}")
+    if not ns.name:
+        value = config.DEFAULT_DECK
+        output(
+            {"ok": True, "default_deck": value or None},
+            lambda d: (
+                f"Default deck: {d['default_deck']}"
+                if d["default_deck"]
+                else "No default deck set. Set it with: codecks-cli default-deck <deck name>"
+            ),
+            ns.format,
+        )
+        return
+    _check_token()
+    deck_id = resolve_deck_id(ns.name, project=ns.project)
+    config.save_env_value("CODECKS_DEFAULT_DECK", deck_id)
+    config.DEFAULT_DECK = deck_id
+    mutation_response("Default deck set", deck_id, f"deck='{ns.name}'", fmt=ns.format)
 
 
 def cmd_completion(ns):

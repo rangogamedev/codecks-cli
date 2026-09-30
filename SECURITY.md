@@ -23,7 +23,7 @@ This tool handles Codecks API tokens. Please follow these practices:
 - **Never commit `.pm_store.db*` files.** These contain cached card data and are excluded by `.gitignore`.
 - **Never commit PM state files** (`.pm_claims.json`, `.pm_last_result.json`, `.pm_undo.json`). These contain session state and are excluded by `.gitignore`.
 - **Rotate tokens regularly.** API tokens last until revoked: revoke unused ones in Your Profile > API Tokens.
-- **If a token is exposed:** Rotate it immediately. Revoke an exposed API token in Codecks (Your Profile > API Tokens) and create a new one. Access keys should be rotated from Codecks settings.
+- **If a token is exposed:** Rotate it immediately. Revoke an exposed API token in Codecks (Your Profile > API Tokens) and create a new one.
 
 ## Attachment path policy
 

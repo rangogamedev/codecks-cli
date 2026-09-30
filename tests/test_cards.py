@@ -994,3 +994,23 @@ class TestCardFieldSets:
         fields = next(iter(sent["_root"][0]["account"][0].values()))
         assert "isDoc" in fields
         assert "content" not in fields
+
+
+class TestOfficialApiHelpers:
+    @patch("codecks_cli.cards.session_request")
+    def test_user_id_comes_from_logged_in_user(self, mock_request, monkeypatch):
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "")
+        mock_request.return_value = {"_root": {"loggedInUser": "me-id"}, "user": {}}
+        assert _get_user_id() == "me-id"
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.resolve_deck_id")
+    def test_default_deck_id_stored_as_uuid_is_used_directly(self, mock_resolve, monkeypatch):
+        from codecks_cli.cards import default_deck_id
+
+        deck = "83c11c54-033d-11f1-8801-bfe8bce8b192"
+        monkeypatch.setattr("codecks_cli.cards.config.DEFAULT_DECK", deck)
+        assert default_deck_id() == deck
+        mock_resolve.assert_not_called()

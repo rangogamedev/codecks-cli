@@ -174,6 +174,13 @@ class TestSessionRequest429:
             session_request("/", {"query": {}})
 
     @patch("codecks_cli.api._http_request")
+    def test_401_reason_read_from_message_field(self, mock_http):
+        """The manual documents the refusal reason in `message`."""
+        mock_http.side_effect = HTTPError(401, "Unauthorized", '{"message":"not_a_member"}')
+        with pytest.raises(SetupError, match="disabled"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
     def test_403_missing_scope_names_the_scope(self, mock_http):
         body = '{"error":"missing_scope","requiredScope":"card:write"}'
         mock_http.side_effect = HTTPError(403, "Forbidden", body)
@@ -374,14 +381,12 @@ class TestCheckToken:
         assert "setup" in msg.lower()
 
     @patch("codecks_cli.api.session_request")
-    def test_raises_token_expired_when_anonymous(self, mock_session, monkeypatch):
-        """Unauthenticated requests still resolve the account but see no projects."""
+    def test_accepts_token_that_sees_no_projects(self, mock_session, monkeypatch):
+        """A new org, or an org token with no projects selected, is still a valid token."""
         monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "tok")
         monkeypatch.setattr("codecks_cli.api.config.ACCOUNT", "acct")
         mock_session.return_value = {"account": {"id1": {"id": "id1"}}}
-        with pytest.raises(SetupError) as exc_info:
-            _check_token()
-        assert "[TOKEN_EXPIRED]" in str(exc_info.value)
+        _check_token()
 
     @patch("codecks_cli.api.session_request")
     def test_wraps_setup_error_with_setup_hint(self, mock_session, monkeypatch):

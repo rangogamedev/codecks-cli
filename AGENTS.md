@@ -27,7 +27,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 | `CODECKS_DEFAULT_DECK` | Where `create` puts cards without `--deck` | — (deck name, not a secret) | — |
 | `CODECKS_USER_ID` | Hand operations | Auto-discovered if unset | N/A |
 
-- API token validated on every command (account projects must be visible). Anonymous requests return empty data, not 401; revoked tokens return 401.
+- API token validated on every command (the account must resolve). Bad, revoked or expired API tokens return 401 with a reason code; the deprecated `X-Auth-Token` header returns empty data instead.
 - No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `--version`
 
 ## Error Patterns

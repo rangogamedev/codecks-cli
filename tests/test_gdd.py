@@ -246,9 +246,8 @@ class TestSyncGddDeduplication:
 
     @patch("codecks_cli.gdd.list_cards", return_value={"card": {}})
     @patch("codecks_cli.gdd.list_decks")
-    @patch("codecks_cli.gdd.update_card")
     @patch("codecks_cli.gdd.create_card")
-    def test_repeated_title_creates_one_card(self, mock_create, mock_update, mock_decks, mock_list):
+    def test_repeated_title_creates_one_card(self, mock_create, mock_decks, mock_list):
         mock_decks.return_value = self.MOCK_DECKS
         mock_create.return_value = {"cardId": "card-1"}
         sections = [

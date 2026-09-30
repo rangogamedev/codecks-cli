@@ -366,20 +366,20 @@ TOKEN_HELP = (
     "Create an API token in Codecks under Your Profile > API Tokens "
     "(or Organization Settings > Integrations > API Tokens) and set CODECKS_TOKEN."
 )
-# Anonymous requests still resolve the account, but see no projects.
+# A rejected token gets 401; the projects are read so setup can warn when none are visible.
 AUTH_PROBE_QUERY = {"_root": [{"account": ["id", "name", {"projects": ["id"]}]}]}
 
 
 def is_authenticated(result):
-    """True if an AUTH_PROBE_QUERY result shows the token can see project data."""
-    return bool(result.get("account")) and bool(result.get("project"))
+    """True if an AUTH_PROBE_QUERY result resolved the account for this token."""
+    return bool(result.get("account"))
 
 
 # 401 error codes from https://manual.codecks.io/api/ ("Token refusal reasons").
 _TOKEN_ERRORS = {
     "invalid_token": "Codecks does not recognise the API token (typo, revoked, or cut off).",
     "token_expired": "The API token has passed its expiry date.",
-    "not_a_member": "The owner of this personal API token is no longer in the organization.",
+    "not_a_member": "The owner of this personal API token has been disabled in the organization.",
     "user_api_tokens_disabled": "An admin has turned off personal API tokens for this organization.",
 }
 
@@ -392,7 +392,8 @@ def _server_error(body):
         return "", {}
     if not isinstance(info, dict):
         return "", {}
-    return str(info.get("error") or ""), info
+    # The manual documents the refusal reason in "message"; live responses also set "error".
+    return str(info.get("error") or info.get("message") or ""), info
 
 
 def looks_like_api_token(token):

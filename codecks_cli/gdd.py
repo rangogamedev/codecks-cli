@@ -19,7 +19,7 @@ import urllib.request
 import webbrowser
 
 from codecks_cli import config
-from codecks_cli.cards import create_card, list_cards, list_decks, update_card
+from codecks_cli.cards import create_card, list_cards, list_decks
 from codecks_cli.exceptions import CliError, SetupError
 
 # ---------------------------------------------------------------------------
@@ -612,21 +612,15 @@ def sync_gdd(sections, project_name, target_section=None, apply=False, quiet=Fal
 
             if apply:
                 try:
-                    result = create_card(task["title"], task.get("content"), deck_id=deck_id)
+                    fields = {k: task[k] for k in ("priority", "effort") if task.get(k)}
+                    result = create_card(
+                        task["title"], task.get("content"), deck_id=deck_id, **fields
+                    )
                     card_id = result.get("cardId", "")
                     if not card_id:
                         raise CliError(
                             f"[ERROR] create_card returned no cardId for '{task['title']}'"
                         )
-                    update_kwargs = {}
-                    if deck_id:
-                        update_kwargs["deckId"] = deck_id
-                    if task.get("priority"):
-                        update_kwargs["priority"] = task["priority"]
-                    if task.get("effort"):
-                        update_kwargs["effort"] = task["effort"]
-                    if update_kwargs:
-                        update_card(card_id, **update_kwargs)
                     task_entry["card_id"] = card_id
                     # Register the new title so a title repeated later in the
                     # same GDD matches it instead of creating a duplicate card.

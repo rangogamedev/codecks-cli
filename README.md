@@ -30,7 +30,7 @@ codecks-cli agent-init --agent   # verify: returns account + project context
 
 ## Upgrading from 0.5 (Codecks v2.96)
 
-Codecks now has official API tokens, and the old browser-cookie token no longer works. Upgrading takes two minutes:
+Codecks now has official API tokens, and the old browser-cookie token has stopped working reliably (it is officially retired on 2026-12-31). Upgrading takes two minutes:
 
 1. In Codecks, open **Your Profile → API Tokens**, create a token with read & write access, and copy it (it is shown once; it starts with `cdxut_`).
 2. Run `codecks-cli setup`, paste the token, and pick the deck new cards should go to.

@@ -55,7 +55,7 @@ Copy `.env.example` to `.env` if it does not exist, then print this guide:
 |-------|-------------|-----------------|----------|
 | `CODECKS_ACCOUNT` | Team subdomain | The `myteam` part of `myteam.codecks.io` | Never |
 | `CODECKS_TOKEN` | Read + write access | Codecks > Your Profile > API Tokens (`cdxut_...`, shown once) | When revoked or at its optional expiry date |
-| `CODECKS_DEFAULT_DECK` | Deck for new cards | Run `codecks-cli default-deck <name>` | — |
+| `CODECKS_DEFAULT_DECK` | Deck for new cards (stored as the deck ID) | Run `codecks-cli default-deck <name> [--project <name>]` | — |
 
 Tell the user: "Open `.env` in your editor, fill in the values, and let me
 know when you're done."
@@ -77,8 +77,9 @@ If it fails, read the message — it names the cause (see the Troubleshooting
 table in `docs/migration-0.6.md`): unrecognised/revoked token, expired token,
 personal tokens disabled by an admin, `CODECKS_ACCOUNT` not matching the
 token's organization, a read-only token trying to write (403 names the missing
-permission), or no default deck. An old browser-cookie token shows up as
-"did not accept your API token" — create an API token.
+permission), or no default deck. An old browser-cookie value is not an API
+token — create an API token. "Can't see any projects yet" is only a warning:
+the token works, but the organization (or token) has no projects.
 
 Then run security checks silently:
 

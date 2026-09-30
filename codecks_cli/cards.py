@@ -4,6 +4,7 @@ for codecks-cli.
 """
 
 import json
+import re
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -628,14 +629,21 @@ def create_card(title, content=None, deck_id=None, **fields):
     return {"cardId": card_id}
 
 
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
 def default_deck_id():
-    """Resolve CODECKS_DEFAULT_DECK to a deck ID, or explain how to set it."""
-    if not config.DEFAULT_DECK:
+    """Return the CODECKS_DEFAULT_DECK deck ID, or explain how to set it.
+
+    Setup and ``default-deck`` store the deck ID (unambiguous across projects,
+    survives renames); a hand-written deck name is still resolved."""
+    value = config.DEFAULT_DECK
+    if not value:
         raise CliError(
             "[ERROR] No default deck set, so the card has nowhere to go. "
             "Run: codecks-cli default-deck <deck name>  (or pass --deck)"
         )
-    return resolve_deck_id(config.DEFAULT_DECK)
+    return value if _UUID_RE.match(value) else resolve_deck_id(value)
 
 
 def update_card(card_id, **kwargs):
@@ -714,7 +722,10 @@ def _get_user_id():
     if cached:
         return cached
     # Personal tokens know their own user (manual.codecks.io/api "own user ID").
-    me = _try_call(query, {"_root": [{"loggedInUser": ["id"]}]})
+    # session_request, not query(): query() drops the "_root" key this answer lives in.
+    me = _try_call(
+        session_request, "/", {"query": {"_root": [{"loggedInUser": ["id"]}]}}, idempotent=True
+    )
     uid = ((me or {}).get("_root") or {}).get("loggedInUser")
     if isinstance(uid, str) and uid:
         config._cache["user_id"] = uid

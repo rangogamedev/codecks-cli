@@ -215,6 +215,7 @@ Commands:
   gdd-auth                - Authorize Google Drive access (opens browser, one-time)
   gdd-revoke              - Revoke Google Drive authorization and delete tokens
   default-deck [name]     - Show or set the deck new cards go to by default
+    --project <name>        Pick the deck from this project (same-named decks)
   dispatch <path> <json>  - Raw dispatch call (uses API token)
 """
 
@@ -431,7 +432,7 @@ def build_parser():
     p.add_argument("--deck", "-d")
     p.add_argument("--project")
     p.add_argument("--content", "-c")
-    p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
+    p.add_argument("--severity", help=argparse.SUPPRESS)  # removed; client explains why
     p.add_argument("--priority", "-p", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
@@ -631,6 +632,7 @@ def build_parser():
     # --- default-deck ---
     p = sub.add_parser("default-deck")
     p.add_argument("name", nargs="?")
+    p.add_argument("--project", help="Pick the deck from this project (same-named decks)")
     p.set_defaults(func=cmd_default_deck)
 
     # --- dispatch ---
@@ -714,6 +716,7 @@ def build_parser():
 
 NO_TOKEN_COMMANDS = {
     "setup",
+    "default-deck",  # shows offline; checks the token itself before setting
     "gdd-auth",
     "gdd-revoke",
     "version",
