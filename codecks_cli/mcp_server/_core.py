@@ -825,8 +825,15 @@ def _contract_error(
     *,
     retryable: bool = False,
     error_code: str = "UNKNOWN",
+    exc: BaseException | None = None,
 ) -> dict[str, Any]:
-    """Return a stable MCP error envelope with legacy compatibility fields."""
+    """Return a stable MCP error envelope with legacy compatibility fields.
+
+    Pass ``exc`` to keep the error_code/retryable an API error was raised with.
+    """
+    if getattr(exc, "error_code", None):
+        error_code = exc.error_code  # type: ignore[union-attr]
+        retryable = exc.retryable  # type: ignore[union-attr]
     return {
         "ok": False,
         "schema_version": CONTRACT_SCHEMA_VERSION,

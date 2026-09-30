@@ -369,7 +369,7 @@ def scaffold_feature(
         )
         if rollback_failed:
             detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
-        raise SetupError(detail) from err
+        raise SetupError(detail, error_code=err.error_code) from err
     except Exception as err:
         rolled_back, rollback_failed = _rollback_created(created_ids)
         detail = (
@@ -555,7 +555,7 @@ def split_features(
             )
             if rollback_failed:
                 detail_msg += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
-            raise SetupError(detail_msg) from err
+            raise SetupError(detail_msg, error_code=err.error_code) from err
         except Exception as err:
             rolled_back, rollback_failed = _rollback_created(created_ids)
             detail_msg = (

@@ -245,6 +245,33 @@ class TestSessionRequestErrorCodes:
         with pytest.raises(CliError, match="Wait 3 seconds"):
             session_request("/", {"query": {}})
 
+    @patch("codecks_cli.api._http_request")
+    def test_graph_400_includes_hint(self, mock_http):
+        body = '{"error":"invalid_limit","message":"bad","path":"_root.x","hint":"add $order"}'
+        mock_http.side_effect = HTTPError(400, "Bad Request", body)
+        with pytest.raises(CliError, match=r"\(invalid_limit at _root.x\): bad Hint: add \$order"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
+    def test_400_without_error_code_is_plain_http_error(self, mock_http):
+        mock_http.side_effect = HTTPError(400, "Bad Request", '{"message":"x","path":"_root"}')
+        with pytest.raises(CliError) as exc_info:
+            session_request("/", {"query": {}})
+        assert exc_info.value.error_code == "HTTP_ERROR"
+
+    @patch("codecks_cli.api._http_request")
+    def test_429_retry_after_zero(self, mock_http):
+        mock_http.side_effect = HTTPError(429, "x", "", headers={"Retry-After": "0"})
+        with pytest.raises(CliError, match="Wait 0 seconds"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api.urllib.request.urlopen", side_effect=TimeoutError())
+    def test_timeout_is_network_error(self, _mock_urlopen, monkeypatch):
+        monkeypatch.setattr("codecks_cli.api.config.HTTP_MAX_RETRIES", 0)
+        with pytest.raises(CliError) as exc_info:
+            _http_request("https://example.invalid/", {"q": 1})
+        assert exc_info.value.error_code == "NETWORK_ERROR"
+
     @patch("codecks_cli.api.session_request")
     def test_check_token_keeps_code_when_wrapping(self, mock_request, monkeypatch):
         monkeypatch.setattr("codecks_cli.api.config.SESSION_TOKEN", "cdxut_x")

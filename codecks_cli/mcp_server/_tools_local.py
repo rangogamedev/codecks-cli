@@ -508,7 +508,7 @@ def warm_cache(force: bool = False) -> dict:
             )
         return _finalize_tool_result(_warm_cache_impl())
     except Exception as e:
-        return _finalize_tool_result(_contract_error(f"Cache warming failed: {e}", "error"))
+        return _finalize_tool_result(_contract_error(f"Cache warming failed: {e}", "error", exc=e))
 
 
 def cache_status() -> dict:
@@ -563,7 +563,9 @@ def session_start(agent_name: str | None = None) -> dict:
         if not _core._is_cache_valid():
             _core._warm_cache_impl()
     except Exception as e:
-        return _finalize_tool_result(_contract_error(f"Session start failed (cache): {e}", "error"))
+        return _finalize_tool_result(
+            _contract_error(f"Session start failed (cache): {e}", "error", exc=e)
+        )
 
     snapshot = _core._get_snapshot()
     if snapshot is None:

@@ -2108,6 +2108,13 @@ class TestErrorContract:
         _core._client = None
         assert _core._call("get_account")["error_code"] == "TOKEN_EXPIRED"
 
+    def test_contract_error_takes_code_from_exception(self):
+        err = CliError("x", error_code="RATE_LIMITED", retryable=True)
+        result = _core._contract_error(str(err), "error", exc=err)
+        assert (result["error_code"], result["retryable"]) == ("RATE_LIMITED", True)
+        plain = _core._contract_error("x", "error", exc=CliError("x"))
+        assert (plain["error_code"], plain["retryable"]) == ("UNKNOWN", False)
+
     @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_call_cli_error_not_retryable(self, MockClient):
         MockClient.return_value.get_account.side_effect = CliError("bad id")

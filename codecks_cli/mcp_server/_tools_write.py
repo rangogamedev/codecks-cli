@@ -726,7 +726,7 @@ def tick_checkboxes(
             result = _ops_tick_all(_get_client(), card_id)
             return _finalize_tool_result(result)
         except CliError as e:
-            return _finalize_tool_result(_contract_error(str(e), "error"))
+            return _finalize_tool_result(_contract_error(str(e), "error", exc=e))
 
     # Items mode — parse JSON string to list
     import json
@@ -767,7 +767,7 @@ def tick_checkboxes(
         result = _ops_tick(_get_client(), card_id, item_list, untick=untick)
         return _finalize_tool_result(result)
     except CliError as e:
-        return _finalize_tool_result(_contract_error(str(e), "error"))
+        return _finalize_tool_result(_contract_error(str(e), "error", exc=e))
 
 
 def batch_create_cards(

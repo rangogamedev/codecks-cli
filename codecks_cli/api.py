@@ -249,7 +249,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
                     request_id=request_id,
                     retryable=False,
-                )
+                ),
+                error_code="NETWORK_ERROR",
             ) from e
         except urllib.error.URLError as e:
             last_url_error = e.reason
@@ -271,7 +272,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     f"Connection failed: {e.reason}",
                     request_id=request_id,
                     retryable=False,
-                )
+                ),
+                error_code="NETWORK_ERROR",
             ) from e
 
     if last_timeout:
@@ -280,7 +282,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
                 request_id=request_id,
                 retryable=False,
-            )
+            ),
+            error_code="NETWORK_ERROR",
         )
     if last_url_error is not None:
         raise CliError(
@@ -288,7 +291,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 f"Connection failed: {last_url_error}",
                 request_id=request_id,
                 retryable=False,
-            )
+            ),
+            error_code="NETWORK_ERROR",
         )
     raise CliError(_error_envelope("Request failed.", request_id=request_id))
 
@@ -426,7 +430,7 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 "this API token belongs to. Fix CODECKS_ACCOUNT or use a token from that org.",
                 error_code="SETUP_NEEDED",
             ) from e
-        if e.code == 400 and code and info.get("path"):
+        if e.code == 400 and info.get("error") and info.get("path"):
             # Graph errors (manual.codecks.io/api): stable "error" code, "message", "path".
             hint = f" Hint: {info['hint']}" if info.get("hint") else ""
             raise CliError(
@@ -444,7 +448,9 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 error_code="PERMISSION_DENIED",
             ) from e
         if e.code == 429:
-            wait = _parse_retry_after(e.headers) or 5
+            wait = _parse_retry_after(e.headers)
+            if wait is None:
+                wait = 5
             raise CliError(
                 "[ERROR] Rate limit reached (Codecks allows 40 requests per 5 seconds). "
                 f"Wait {wait} seconds and retry.",

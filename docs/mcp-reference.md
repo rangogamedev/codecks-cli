@@ -138,9 +138,12 @@ All error responses include structured fields for agent decision-making:
 | `RATE_LIMITED` | HTTP 429 after the built-in retries; wait the seconds in the message | yes |
 | `INVALID_QUERY` | HTTP 400 graph error; the message has the Codecks code, path and reason | no |
 | `HTTP_ERROR` | Any other HTTP error (retryable for 502/503/504) | varies |
-| `NETWORK_ERROR` | Connection or timeout failure | yes |
-| `INVALID_INPUT` / `DOC_CARD_VIOLATION` | Rejected by the MCP server before calling Codecks | no |
+| `NETWORK_ERROR` | Timeout or connection failure (reads are retried first); a write may have gone through, so re-read before retrying | no |
+| `INVALID_INPUT` / `DOC_CARD_VIOLATION` / `NO_CONTENT` | Rejected by the MCP server before calling Codecks | no |
+| `UNKNOWN` | Other MCP-side validation errors (the message says what to fix) | no |
 | `SETUP_ERROR` / `CLI_ERROR` / `UNEXPECTED_ERROR` | Other setup, validation or internal errors | no / no / yes |
+
+Before 0.6.0, every API error was `SETUP_ERROR` or `CLI_ERROR`. A rejected token is now `TOKEN_EXPIRED` (was `SETUP_ERROR`), and 403/429/HTTP/network errors have their own codes (were `CLI_ERROR`).
 
 The CLI's JSON errors (`--format json` / `--agent`) carry the same `error_code` and `retryable` fields.
 
