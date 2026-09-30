@@ -238,6 +238,13 @@ class TestSessionRequestErrorCodes:
             session_request("/", {"query": {}})
 
     @patch("codecks_cli.api._http_request")
+    def test_graph_400_joins_list_hint(self, mock_http):
+        body = '{"error":"invalid_order","message":"bad","path":"_root.x","hint":["use a", "or b"]}'
+        mock_http.side_effect = HTTPError(400, "Bad Request", body)
+        with pytest.raises(CliError, match=r"Hint: use a; or b$"):
+            session_request("/", {"query": {}})
+
+    @patch("codecks_cli.api._http_request")
     def test_400_without_error_code_is_plain_http_error(self, mock_http):
         mock_http.side_effect = HTTPError(400, "Bad Request", '{"message":"x","path":"_root"}')
         with pytest.raises(CliError) as exc_info:

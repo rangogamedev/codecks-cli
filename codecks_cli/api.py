@@ -460,7 +460,10 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
             ) from e
         if e.code == 400 and info.get("error") and info.get("path"):
             # Graph errors (manual.codecks.io/api): stable "error" code, "message", "path".
-            hint = f" Hint: {info['hint']}" if info.get("hint") else ""
+            raw_hint = info.get("hint")
+            if isinstance(raw_hint, list):
+                raw_hint = "; ".join(str(h) for h in raw_hint)
+            hint = f" Hint: {_sanitize_error(str(raw_hint))}" if raw_hint else ""
             raise CliError(
                 f"[ERROR] Codecks rejected the query ({code} at {info['path']}): "
                 f"{_sanitize_error(str(info.get('message', '')))}{hint}",

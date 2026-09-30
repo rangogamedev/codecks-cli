@@ -1036,6 +1036,52 @@ class TestOfficialApiHelpers:
         list_hand()
         mock_request.assert_called_once()
 
+    @patch("codecks_cli.cards.query")
+    @patch("codecks_cli.cards.session_request")
+    def test_transient_error_does_not_fall_back_to_owner(
+        self, mock_request, mock_query, monkeypatch
+    ):
+        # A 429 on the loggedInUser lookup used to be swallowed, and the first owner
+        # was cached for the whole process (their hand, their comments).
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.SESSION_TOKEN", "cdxut_x")
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "")
+        mock_request.side_effect = [
+            CliError("[ERROR] Rate limit", error_code="RATE_LIMITED", retryable=True),
+            {"_root": {"loggedInUser": "me-id"}},
+        ]
+        with pytest.raises(CliError):
+            _get_user_id()
+        assert _get_user_id() == "me-id"
+        mock_query.assert_not_called()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_personal_token_ignores_stale_user_id(self, mock_request, monkeypatch):
+        # Old setup saved "user [1]" on shared orgs, which can be a teammate.
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.SESSION_TOKEN", "cdxut_x")
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "teammate-id")
+        mock_request.return_value = {"_root": {"loggedInUser": "me-id"}}
+        assert _get_user_id() == "me-id"
+
+    @patch("codecks_cli.cards.query")
+    @patch("codecks_cli.cards.session_request")
+    def test_org_token_uses_first_owner(self, mock_request, mock_query, monkeypatch):
+        from codecks_cli.cards import _get_user_id
+
+        monkeypatch.setattr("codecks_cli.cards.config.SESSION_TOKEN", "cdxat_x")
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "")
+        mock_query.return_value = {
+            "accountRole": {
+                "r1": {"userId": "member-id", "role": "member"},
+                "r2": {"userId": "owner-id", "role": "owner"},
+            }
+        }
+        assert _get_user_id() == "owner-id"
+        mock_request.assert_not_called()
+
     @patch("codecks_cli.cards.resolve_deck_id")
     def test_default_deck_id_stored_as_uuid_is_used_directly(self, mock_resolve, monkeypatch):
         from codecks_cli.cards import default_deck_id

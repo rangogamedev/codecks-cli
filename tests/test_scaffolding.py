@@ -505,7 +505,9 @@ class TestSplitFeatures:
     def test_rollback_on_failure(self, mock_resolve, mock_create, mock_update, mock_archive):
         mock_resolve.side_effect = ["d-src", "d-code", "d-design"]
         mock_create.side_effect = [{"cardId": "sub-1"}]
-        mock_update.side_effect = CliError("[ERROR] update failed")
+        mock_update.side_effect = CliError(
+            "[ERROR] update failed", error_code="RATE_LIMITED", retryable=True
+        )
         mock_archive.return_value = {}
 
         client = _client()
@@ -529,6 +531,9 @@ class TestSplitFeatures:
                     design_deck="Design",
                 )
         assert "Split-features failed" in str(exc_info.value)
+        # The rollback re-raise keeps the API error's code for agents.
+        assert exc_info.value.error_code == "RATE_LIMITED"
+        assert exc_info.value.retryable is True
         assert mock_archive.call_count == 1
 
     @patch("codecks_cli.scaffolding.resolve_deck_id")

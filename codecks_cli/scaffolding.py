@@ -379,7 +379,11 @@ def scaffold_feature(
         )
         if rollback_failed:
             detail += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
-        raise CliError(detail) from err
+        raise CliError(
+            detail,
+            error_code=getattr(err, "error_code", None),
+            retryable=getattr(err, "retryable", False),
+        ) from err
 
     notes: list[str] = []
     for lane_def in LANES:
@@ -565,7 +569,11 @@ def split_features(
             )
             if rollback_failed:
                 detail_msg += f"\n[ERROR] Rollback failed for: {', '.join(rollback_failed)}"
-            raise CliError(detail_msg) from err
+            raise CliError(
+                detail_msg,
+                error_code=getattr(err, "error_code", None),
+                retryable=getattr(err, "retryable", False),
+            ) from err
 
     total_subs = sum(len(d.subcards) for d in details)
     for lane_def in LANES:

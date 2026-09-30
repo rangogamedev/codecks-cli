@@ -704,36 +704,44 @@ def bulk_status(card_ids, status):
 # ---------------------------------------------------------------------------
 
 
-def _get_user_id():
-    """Return the current user's ID. Reads from .env, falls back to API.
+# The token's user, looked up once per process (survives config._cache.clear()).
+_looked_up_user_id = ""
 
-    A looked-up ID is kept in config.USER_ID (it never changes within a process),
-    so it survives config._cache.clear() and every hand query doesn't re-ask.
+
+def _get_user_id():
+    """Return the user whose hand/comments this token acts on.
+
+    Personal tokens (cdxut_) always use the API's loggedInUser, so a stale
+    CODECKS_USER_ID can't point at a teammate. Organization tokens (cdxat_) have no
+    user: CODECKS_USER_ID, else the first account owner. API errors propagate: a
+    429 or 503 must not silently switch to the owner.
     """
-    if config.USER_ID:
+    global _looked_up_user_id
+    if _looked_up_user_id:
+        return _looked_up_user_id
+    token = config.SESSION_TOKEN or ""
+    if not token.startswith("cdxut_") and config.USER_ID:
         return config.USER_ID
-    # Personal tokens know their own user (manual.codecks.io/api "own user ID").
-    # session_request, not query(): query() drops the "_root" key this answer lives in.
-    me = _try_call(
-        session_request, "/", {"query": {"_root": [{"loggedInUser": ["id"]}]}}, idempotent=True
-    )
-    uid = ((me or {}).get("_root") or {}).get("loggedInUser")
-    if isinstance(uid, str) and uid:
-        config.USER_ID = uid
-        return uid
-    # Organization tokens have no user: pick the first account owner.
+    uid = None
+    if not token.startswith("cdxat_"):
+        # session_request, not query(): query() drops the "_root" key this answer lives in.
+        me = session_request("/", {"query": {"_root": [{"loggedInUser": ["id"]}]}}, idempotent=True)
+        uid = ((me or {}).get("_root") or {}).get("loggedInUser")
+    if not (isinstance(uid, str) and uid):
+        if config.USER_ID:
+            return config.USER_ID
+        uid = _first_owner_id()
+    _looked_up_user_id = uid
+    return uid
+
+
+def _first_owner_id():
+    """First account owner (else first member): the fallback user for org tokens."""
     result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
-    for entry in (result.get("accountRole") or {}).values():
-        if entry.get("role") == "owner":
-            uid = _get_field(entry, "user_id", "userId")
-            if uid:
-                config.USER_ID = uid
-                return uid
-    # Fallback: first role found
-    for entry in (result.get("accountRole") or {}).values():
+    roles = list((result.get("accountRole") or {}).values())
+    for entry in sorted(roles, key=lambda e: e.get("role") != "owner"):
         uid = _get_field(entry, "user_id", "userId")
         if uid:
-            config.USER_ID = uid
             return uid
     raise CliError("[ERROR] Could not determine your user ID. Run: py codecks_api.py setup")
 
