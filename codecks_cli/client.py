@@ -184,10 +184,10 @@ class CodecksClient:
     # -------------------------------------------------------------------
 
     def get_account(self) -> dict[str, Any]:
-        """Get current account info for the authenticated user.
+        """Get the organization (Codecks account) this API token belongs to.
 
         Returns:
-            dict with keys: name, id, email, organizationId, role.
+            dict with 'account': {<account id>: {'id', 'name'}}.
         """
         return get_account()  # type: ignore[no-any-return]
 

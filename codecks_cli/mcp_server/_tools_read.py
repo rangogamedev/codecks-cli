@@ -37,10 +37,12 @@ def _try_cache(key: str) -> dict | list | None:  # type: ignore[type-arg]
 
 
 def get_account() -> dict:
-    """Get current account info (name, id, email, role).
+    """Get the organization (Codecks account) this API token belongs to.
 
     Returns:
-        Dict with name, id, email, organizationId, role.
+        Dict with 'account': {<account id>: {'id', 'name'}}. Served from the
+        cache it also has cached, cache_age_seconds and cache_fetched_at
+        (plus stale_warning / cache_ttl_seconds when the cache is nearly stale).
     """
     cached = _try_cache("account")
     if cached is not None and isinstance(cached, dict):
