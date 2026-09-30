@@ -249,7 +249,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
                     request_id=request_id,
                     retryable=False,
-                )
+                ),
+                error_code="NETWORK_ERROR",
             ) from e
         except urllib.error.URLError as e:
             last_url_error = e.reason
@@ -271,7 +272,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                     f"Connection failed: {e.reason}",
                     request_id=request_id,
                     retryable=False,
-                )
+                ),
+                error_code="NETWORK_ERROR",
             ) from e
 
     if last_timeout:
@@ -280,7 +282,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 f"Request timed out after {timeout} seconds. Is Codecks API reachable?",
                 request_id=request_id,
                 retryable=False,
-            )
+            ),
+            error_code="NETWORK_ERROR",
         )
     if last_url_error is not None:
         raise CliError(
@@ -288,7 +291,8 @@ def _http_request(url, data=None, headers=None, method="POST", idempotent=False)
                 f"Connection failed: {last_url_error}",
                 request_id=request_id,
                 retryable=False,
-            )
+            ),
+            error_code="NETWORK_ERROR",
         )
     raise CliError(_error_envelope("Request failed.", request_id=request_id))
 
@@ -417,11 +421,22 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
         code, info = _server_error(e.body)
         if e.code == 401:
             reason = _TOKEN_ERRORS.get(code, "Codecks rejected the API token.")
-            raise SetupError(f"[TOKEN_EXPIRED] {reason} {TOKEN_HELP}") from e
+            raise SetupError(
+                f"[TOKEN_EXPIRED] {reason} {TOKEN_HELP}", error_code="TOKEN_EXPIRED"
+            ) from e
         if e.code == 400 and code == "token_account_mismatch":
             raise SetupError(
                 "[SETUP_NEEDED] CODECKS_ACCOUNT does not match the organization "
-                "this API token belongs to. Fix CODECKS_ACCOUNT or use a token from that org."
+                "this API token belongs to. Fix CODECKS_ACCOUNT or use a token from that org.",
+                error_code="SETUP_NEEDED",
+            ) from e
+        if e.code == 400 and info.get("error") and info.get("path"):
+            # Graph errors (manual.codecks.io/api): stable "error" code, "message", "path".
+            hint = f" Hint: {info['hint']}" if info.get("hint") else ""
+            raise CliError(
+                f"[ERROR] Codecks rejected the query ({code} at {info['path']}): "
+                f"{_sanitize_error(str(info.get('message', '')))}{hint}",
+                error_code="INVALID_QUERY",
             ) from e
         if e.code == 403:
             scope = info.get("requiredScope")
@@ -429,22 +444,31 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
             raise CliError(
                 "[ERROR] Codecks denied this request (HTTP 403). The API token may be "
                 f"read-only or lack access to this project.{need} "
-                f"Server said: {_sanitize_error(e.body)}"
+                f"Server said: {_sanitize_error(e.body)}",
+                error_code="PERMISSION_DENIED",
             ) from e
         if e.code == 429:
+            wait = _parse_retry_after(e.headers)
+            if wait is None:
+                wait = 5
             raise CliError(
-                "[ERROR] Rate limit reached (Codecks allows ~40 req/5s). "
-                "Wait a few seconds and retry."
+                "[ERROR] Rate limit reached (Codecks allows 40 requests per 5 seconds). "
+                f"Wait {wait} seconds and retry.",
+                error_code="RATE_LIMITED",
+                retryable=True,
             ) from e
         server_req_id = e.headers.get("X-Request-Id") if e.headers else None
+        retryable = e.code in _RETRYABLE_HTTP_CODES
         raise CliError(
             _error_envelope(
                 f"HTTP {e.code}: {e.reason}",
                 status=e.code,
                 request_id=server_req_id,
-                retryable=e.code in _RETRYABLE_HTTP_CODES,
+                retryable=retryable,
                 detail=_sanitize_error(e.body),
-            )
+            ),
+            error_code="HTTP_ERROR",
+            retryable=retryable,
         ) from e
 
 
@@ -502,14 +526,20 @@ def warn_if_empty(result, relation):
 def _check_token():
     """Validate the API token before running a command. Exits if it is not accepted."""
     if not config.SESSION_TOKEN or not config.ACCOUNT:
-        raise SetupError("[SETUP_NEEDED] No configuration found.\n  Run: py codecks_api.py setup")
+        raise SetupError(
+            "[SETUP_NEEDED] No configuration found.\n  Run: py codecks_api.py setup",
+            error_code="SETUP_NEEDED",
+        )
     try:
         result = session_request("/", {"query": AUTH_PROBE_QUERY}, idempotent=True)
     except SetupError as e:
-        raise SetupError(str(e) + "\n  Run: py codecks_api.py setup") from e
+        raise SetupError(
+            str(e) + "\n  Run: py codecks_api.py setup", error_code=e.error_code
+        ) from e
     if not is_authenticated(result):
         raise SetupError(
             f"[TOKEN_EXPIRED] Codecks did not accept your API token. {TOKEN_HELP}\n"
             "  Run: py codecks_api.py setup\n"
-            "  Or update CODECKS_TOKEN in .env manually."
+            "  Or update CODECKS_TOKEN in .env manually.",
+            error_code="TOKEN_EXPIRED",
         )

@@ -825,8 +825,15 @@ def _contract_error(
     *,
     retryable: bool = False,
     error_code: str = "UNKNOWN",
+    exc: BaseException | None = None,
 ) -> dict[str, Any]:
-    """Return a stable MCP error envelope with legacy compatibility fields."""
+    """Return a stable MCP error envelope with legacy compatibility fields.
+
+    Pass ``exc`` to keep the error_code/retryable an API error was raised with.
+    """
+    if getattr(exc, "error_code", None):
+        error_code = exc.error_code  # type: ignore[union-attr]
+        retryable = exc.retryable  # type: ignore[union-attr]
     return {
         "ok": False,
         "schema_version": CONTRACT_SCHEMA_VERSION,
@@ -1035,14 +1042,18 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
             _write_through_cache(method_name, result, **kwargs)
         return result
     except SetupError as e:
-        return _contract_error(str(e), "setup", retryable=False, error_code="SETUP_ERROR")
+        return _contract_error(
+            str(e), "setup", retryable=False, error_code=e.error_code or "SETUP_ERROR"
+        )
     except CliError as e:
         error_msg = str(e)
         # Enhance deck/milestone resolution errors with available values
         context = _suggest_valid_values(error_msg)
         if context:
             error_msg = f"{error_msg}\n{context}"
-        return _contract_error(error_msg, "error", retryable=False, error_code="CLI_ERROR")
+        return _contract_error(
+            error_msg, "error", retryable=e.retryable, error_code=e.error_code or "CLI_ERROR"
+        )
     except (ConnectionError, TimeoutError, OSError) as e:
         return _contract_error(
             f"Network error calling {method_name}: {e}. "

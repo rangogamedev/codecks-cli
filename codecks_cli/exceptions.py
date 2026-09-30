@@ -10,9 +10,12 @@ class CliError(Exception):
 
     exit_code = 1
 
-    def __init__(self, message, *, recovery_hint=None):
+    def __init__(self, message, *, recovery_hint=None, error_code=None, retryable=False):
         super().__init__(message)
         self.recovery_hint = recovery_hint
+        # Machine-readable code for JSON/MCP errors (e.g. RATE_LIMITED); None = generic.
+        self.error_code = error_code
+        self.retryable = retryable
 
 
 class SetupError(CliError):

@@ -754,7 +754,9 @@ def _emit_cli_error(err, fmt):
         payload = {
             "ok": False,
             "schema_version": config.CONTRACT_SCHEMA_VERSION,
-            "error_code": "SETUP_ERROR" if isinstance(err, SetupError) else "CLI_ERROR",
+            "error_code": getattr(err, "error_code", None)
+            or ("SETUP_ERROR" if isinstance(err, SetupError) else "CLI_ERROR"),
+            "retryable": getattr(err, "retryable", False),
             "error": error_detail,
         }
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)

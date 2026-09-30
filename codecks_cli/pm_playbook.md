@@ -109,7 +109,8 @@ codecks-cli unhand <uuid1> --agent                    # remove completed
 | `[SETUP_NEEDED]` | `.env` is missing or incomplete | Ask user to run `codecks-cli setup` |
 | `[TOKEN_EXPIRED]` | API token revoked or invalid | Ask user to create a new API token |
 | `[ERROR]` | Validation or API failure | Fix arguments, retry once |
-| HTTP 429 | Rate limited (40 req/5s) | Wait 5s, retry once |
+| `PERMISSION_DENIED` / HTTP 403 | Token is read-only or can't see that project | Don't retry; tell the user which permission the message names |
+| `RATE_LIMITED` / HTTP 429 | Rate limited (40 req/5s) | Wait the seconds the message names, retry once |
 | Timeout | Network issue | Retry once, then report |
 
 For doc cards, never retry with status, priority, or effort updates. Re-read the card before retrying any mutation.

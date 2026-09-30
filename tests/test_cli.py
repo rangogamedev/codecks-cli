@@ -577,6 +577,15 @@ class TestCliErrorOutput:
         assert payload["ok"] is False
         assert payload["error"]["recovery"] == "Run 'cards --search' to find it"
         assert payload["error_code"] == "CLI_ERROR"
+        assert payload["retryable"] is False
+
+    def test_emit_json_error_uses_api_error_code(self, capsys):
+        _emit_cli_error(
+            CliError("[ERROR] slow down", error_code="RATE_LIMITED", retryable=True), "json"
+        )
+        payload = json.loads(capsys.readouterr().err.strip())
+        assert payload["error_code"] == "RATE_LIMITED"
+        assert payload["retryable"] is True
 
 
 class TestAgentCLIFeatures:

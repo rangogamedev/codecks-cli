@@ -154,15 +154,19 @@ class TestScaffoldFeature:
             {"cardId": "hero-1"},
             {"cardId": "code-1"},
         ]
-        mock_update.side_effect = [None, SetupError("[TOKEN_EXPIRED] expired")]
+        mock_update.side_effect = [
+            None,
+            SetupError("[TOKEN_EXPIRED] expired", error_code="TOKEN_EXPIRED"),
+        ]
         client = _client()
-        with pytest.raises(SetupError):
+        with pytest.raises(SetupError) as exc_info:
             client.scaffold_feature(
                 "Test Feature",
                 hero_deck="Features",
                 code_deck="Code",
                 design_deck="Design",
             )
+        assert exc_info.value.error_code == "TOKEN_EXPIRED"
 
     @patch("codecks_cli.scaffolding.load_users")
     @patch("codecks_cli.scaffolding.list_cards")
