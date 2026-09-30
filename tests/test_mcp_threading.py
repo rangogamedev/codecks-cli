@@ -193,6 +193,8 @@ def test_rate_limiter_never_over_admits_under_concurrency(monkeypatch):
     assert errors == []
     assert len(observed) == 50
     assert max(observed) <= max_calls, f"over-admitted: {max(observed)} > {max_calls}"
+    # 50 admissions at 5 per window need at least 9 full windows of waiting.
+    assert clock["now"] >= (50 // max_calls - 1) * window
 
 
 def test_overlapping_batches_suppress_disk_writes_until_the_last_exit(tmp_path, monkeypatch):
