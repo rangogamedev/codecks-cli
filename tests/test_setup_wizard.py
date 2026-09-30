@@ -17,6 +17,15 @@ class TestSetupDiscoverProjects:
 class TestSetupDiscoverUser:
     @patch("codecks_cli.setup_wizard.config.save_env_value")
     @patch("codecks_cli.setup_wizard._try_call")
+    def test_personal_token_skips_user_picker(self, mock_try_call, mock_save, monkeypatch):
+        # A picker defaulting to "1" saved the first member, maybe a teammate.
+        monkeypatch.setattr(config, "SESSION_TOKEN", "cdxut_x")
+        setup_wizard._setup_discover_user()
+        mock_try_call.assert_not_called()
+        mock_save.assert_not_called()
+
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("codecks_cli.setup_wizard._try_call")
     def test_single_user_is_saved(self, mock_try_call, mock_save):
         mock_try_call.return_value = {
             "accountRole": {

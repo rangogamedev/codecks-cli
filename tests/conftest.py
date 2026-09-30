@@ -37,6 +37,10 @@ def _isolate_config(monkeypatch, tmp_path):
 
     monkeypatch.setattr(api, "_request_times", [])
 
+    from codecks_cli import cards
+
+    monkeypatch.setattr(cards, "_looked_up_user_id", "")
+
     # Reset the client singleton so tests don't share state
     from codecks_cli import commands
 

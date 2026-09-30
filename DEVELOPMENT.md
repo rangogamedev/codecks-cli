@@ -36,7 +36,7 @@ cp .env.example .env         # then fill in your tokens
 | Variable | Purpose |
 |----------|---------|
 | `CODECKS_DEFAULT_DECK` | Deck for `create` without `--deck` (stored as the deck ID by `default-deck <name>`; a deck name also works) |
-| `CODECKS_USER_ID` | Hand operations (auto-discovered if unset) |
+| `CODECKS_USER_ID` | Hand operations with an organization token (personal tokens use their own user) |
 
 Run `py codecks_api.py setup` for an interactive setup wizard that handles all of this.
 

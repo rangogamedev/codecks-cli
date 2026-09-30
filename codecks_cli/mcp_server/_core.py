@@ -1036,7 +1036,7 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
             f"Network error calling {method_name}: {e}. "
             f"The operation may have partially completed — check state before retrying.",
             "error",
-            retryable=True,
+            retryable=False,
             error_code="NETWORK_ERROR",
         )
     except Exception as e:

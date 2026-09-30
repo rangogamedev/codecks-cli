@@ -388,7 +388,9 @@ class TestCreateCard:
     ):
         mock_list.return_value = {"card": {}}
         mock_create.return_value = {"cardId": "new-id"}
-        mock_attach.side_effect = CliError("[ERROR] upload failed")
+        mock_attach.side_effect = CliError(
+            "[ERROR] upload failed", error_code="RATE_LIMITED", retryable=True
+        )
         client = _client()
 
         with pytest.raises(CliError) as exc_info:
@@ -396,6 +398,9 @@ class TestCreateCard:
 
         assert "new-id" in str(exc_info.value)
         assert "attach" in str(exc_info.value)
+        # Code kept for agents, but retrying the create would duplicate the card.
+        assert exc_info.value.error_code == "RATE_LIMITED"
+        assert exc_info.value.retryable is False
 
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")

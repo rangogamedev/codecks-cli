@@ -2087,7 +2087,8 @@ class TestErrorContract:
         _core._client = None
         result = _core._call("get_account")
         assert result["ok"] is False
-        assert result["retryable"] is True
+        # A write may have gone through; the api layer says not retryable too.
+        assert result["retryable"] is False
         assert result["error_code"] == "NETWORK_ERROR"
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
@@ -3662,34 +3663,34 @@ class TestCallErrorHandlers:
         assert result["error"] == "Some other CLI error"
 
     @patch("codecks_cli.mcp_server._core._get_client")
-    def test_connection_error_marked_retryable(self, mock_get_client):
+    def test_connection_error_not_retryable(self, mock_get_client):
         client = MagicMock()
         client.list_cards.side_effect = ConnectionError("DNS fail")
         mock_get_client.return_value = client
         result = _core._call("list_cards")
         assert result["ok"] is False
         assert result["error_code"] == "NETWORK_ERROR"
-        assert result["retryable"] is True
+        assert result["retryable"] is False
         assert "DNS fail" in result["error"]
         assert "partially completed" in result["error"]
 
     @patch("codecks_cli.mcp_server._core._get_client")
-    def test_timeout_error_marked_retryable(self, mock_get_client):
+    def test_timeout_error_not_retryable(self, mock_get_client):
         client = MagicMock()
         client.get_account.side_effect = TimeoutError("read timed out")
         mock_get_client.return_value = client
         result = _core._call("get_account")
         assert result["error_code"] == "NETWORK_ERROR"
-        assert result["retryable"] is True
+        assert result["retryable"] is False
 
     @patch("codecks_cli.mcp_server._core._get_client")
-    def test_os_error_marked_retryable(self, mock_get_client):
+    def test_os_error_not_retryable(self, mock_get_client):
         client = MagicMock()
         client.get_account.side_effect = OSError("socket broken")
         mock_get_client.return_value = client
         result = _core._call("get_account")
         assert result["error_code"] == "NETWORK_ERROR"
-        assert result["retryable"] is True
+        assert result["retryable"] is False
 
     @patch("codecks_cli.mcp_server._core._get_client")
     def test_generic_exception_marked_unexpected(self, mock_get_client):

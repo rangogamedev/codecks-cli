@@ -130,8 +130,15 @@ def _setup_discover_milestones():
 
 
 def _setup_discover_user():
-    """Discover current user ID from account roles and save to .env."""
-    print("Discovering your user ID...")
+    """Discover current user ID from account roles and save to .env.
+
+    Personal API tokens know their own user (loggedInUser), so they skip this: a
+    picker defaulting to the first member would save a teammate on shared orgs.
+    """
+    if config.SESSION_TOKEN.startswith("cdxut_"):
+        print("Your personal API token identifies you; no user ID needed.\n")
+        return
+    print("Discovering your user ID (organization token: whose hand should it use?)...")
     result = _try_call(
         query, {"_root": [{"account": [{"roles": ["userId", "role", {"user": ["id", "name"]}]}]}]}
     )

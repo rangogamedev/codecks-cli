@@ -25,7 +25,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 |-------|----------|-------------|--------|
 | `CODECKS_TOKEN` | Reading data, mutations | `Authorization: Bearer` header | Until revoked or its optional expiry date (API token, `cdxut_`/`cdxat_`) |
 | `CODECKS_DEFAULT_DECK` | Where `create` puts cards without `--deck` | — (deck ID, set with `default-deck <name>`; a hand-written deck name also works; not a secret) | — |
-| `CODECKS_USER_ID` | Hand operations | Auto-discovered if unset | N/A |
+| `CODECKS_USER_ID` | Hand operations with an organization token (personal tokens ignore it and use their own user) | First account owner if unset | N/A |
 
 - API token validated on every command (the account must resolve). Bad, revoked or expired API tokens return 401 with a reason code; the deprecated `X-Auth-Token` header returns empty data instead and stops working on 2026-12-31.
 - No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `--version`
