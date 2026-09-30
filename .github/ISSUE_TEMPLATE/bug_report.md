@@ -33,4 +33,3 @@ py codecks_api.py ...
 ## Token status
 
 - [ ] API token is valid (no `[TOKEN_EXPIRED]` message)
-- [ ] Report token works (`py codecks_api.py create "test"` succeeds)

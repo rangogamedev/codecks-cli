@@ -16,7 +16,7 @@ from codecks_cli._utils import (  # noqa: F401 — re-exported for existing cons
     _parse_multi_value,
     get_card_tags,
 )
-from codecks_cli.api import _try_call, query, report_request, session_request, warn_if_empty
+from codecks_cli.api import _try_call, query, session_request, warn_if_empty
 from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
@@ -594,9 +594,13 @@ def compute_card_stats(cards_dict):
 # ---------------------------------------------------------------------------
 
 
-def create_card(title, content=None, severity=None, file_names=None):
-    """Create a card using the Report Token (stable, no expiry).
+def create_card(title, content=None, deck_id=None, **fields):
+    """Create a card via the official API (``dispatch/cards/create``).
     First line of content becomes the card title.
+
+    Without ``deck_id`` the card goes to the CODECKS_DEFAULT_DECK deck; the API
+    itself would create a private, deck-less card. Extra ``fields`` (priority,
+    effort, assigneeId, milestoneId, masterTags) are sent in the same request.
 
     If ``content`` already begins with the title (followed by newline) or
     equals it exactly, it is used as-is rather than re-prepended — this
@@ -610,7 +614,28 @@ def create_card(title, content=None, severity=None, file_names=None):
             full_content = title + "\n\n" + content
     else:
         full_content = title
-    return report_request(full_content, severity=severity, file_names=file_names)
+    payload = {
+        "content": full_content,
+        "deckId": deck_id or default_deck_id(),
+        "assigneeId": None,
+        "milestoneId": None,
+        "masterTags": [],
+        "attachments": [],
+    }
+    payload.update(fields)
+    result = session_request("/dispatch/cards/create", payload)
+    card_id = (result.get("payload") or {}).get("id", "")
+    return {"cardId": card_id}
+
+
+def default_deck_id():
+    """Resolve CODECKS_DEFAULT_DECK to a deck ID, or explain how to set it."""
+    if not config.DEFAULT_DECK:
+        raise CliError(
+            "[ERROR] No default deck set, so the card has nowhere to go. "
+            "Run: codecks-cli default-deck <deck name>  (or pass --deck)"
+        )
+    return resolve_deck_id(config.DEFAULT_DECK)
 
 
 def update_card(card_id, **kwargs):
@@ -688,7 +713,13 @@ def _get_user_id():
     cached = config._cache.get("user_id")
     if cached:
         return cached
-    # Auto-discover: query account roles, pick the first owner
+    # Personal tokens know their own user (manual.codecks.io/api "own user ID").
+    me = _try_call(query, {"_root": [{"loggedInUser": ["id"]}]})
+    uid = ((me or {}).get("_root") or {}).get("loggedInUser")
+    if isinstance(uid, str) and uid:
+        config._cache["user_id"] = uid
+        return uid
+    # Organization tokens have no user: pick the first account owner.
     result = query({"_root": [{"account": [{"roles": ["userId", "role"]}]}]})
     for entry in (result.get("accountRole") or {}).values():
         if entry.get("role") == "owner":

@@ -310,7 +310,7 @@ def scaffold_feature(
     created_ids: list[str] = []
 
     try:
-        hero_result = create_card(hero_title, hero_body)
+        hero_result = create_card(hero_title, hero_body, deck_id=hero_deck_id)
         hero_id = hero_result.get("cardId")
         if not hero_id:
             raise CliError("[ERROR] Hero creation failed: missing cardId.")
@@ -332,7 +332,7 @@ def scaffold_feature(
                     f"- {lane_def_inner.display_name} lane execution for feature goal\n\n"
                     "Checklist:\n" + "\n".join(f"- [] {line}" for line in checklist_lines)
                 )
-            res = create_card(sub_title, sub_body)
+            res = create_card(sub_title, sub_body, deck_id=deck_id)
             sub_id = res.get("cardId")
             if not sub_id:
                 raise CliError(
@@ -523,7 +523,7 @@ def split_features(
                     f"- {lane_def.display_name} lane execution for feature goal\n\n"
                     "Checklist:\n" + "\n".join(f"- [] {item}" for item in checklist)
                 )
-                res = create_card(sub_title, sub_body)
+                res = create_card(sub_title, sub_body, deck_id=lane_deck_id)
                 sub_id = res.get("cardId")
                 if not sub_id:
                     raise CliError(

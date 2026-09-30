@@ -23,7 +23,6 @@ from codecks_cli.api import (
 from codecks_cli.attachments import (
     attach_files_to_card,
     prepare_attachment_files,
-    upload_report_files,
 )
 from codecks_cli.cards import (
     _get_user_id,
@@ -803,9 +802,10 @@ class CodecksClient:
         Args:
             title: Card title.
             content: Card body/description.
-            deck: Place card in this deck (by name).
+            deck: Place card in this deck (by name). Defaults to CODECKS_DEFAULT_DECK.
             project: Place card in the first deck of this project.
-            severity: Card severity (critical, high, low, null).
+            severity: Not supported by the official Codecks API (it was a
+                User Reports field); any value other than None/"null" raises.
             doc: If True, create as a doc card.
             allow_duplicate: Bypass duplicate title protection.
             parent: Parent card ID to nest under (creates a sub-card).
@@ -817,8 +817,14 @@ class CodecksClient:
         Returns:
             dict with ok=True, card_id, and title.
         """
+        if severity and severity != "null":
+            raise CliError(
+                "[ERROR] --severity is no longer supported: it was a User Reports field "
+                "and Codecks cards have no severity. Use --priority a|b|c instead."
+            )
         warnings = _guard_duplicate_title(title, allow_duplicate=allow_duplicate, context="card")
-        attachments = prepare_attachment_files(files) if files else []
+        if files:
+            prepare_attachment_files(files)  # validate paths before creating the card
 
         # Resolve deck/project BEFORE creating the card to avoid orphaned cards
         placed_in = None
@@ -837,8 +843,7 @@ class CodecksClient:
                 hint = f" Available: {', '.join(available)}" if available else ""
                 raise CliError(f"[ERROR] Project '{project}' not found.{hint}")
 
-        file_names = [attachment.file_name for attachment in attachments] or None
-        result = create_card(title, content, severity, file_names=file_names)
+        result = create_card(title, content, deck_id=pre_resolved.pop("deckId", None))
         card_id = result.get("cardId", "")
         if not card_id:
             raise CliError(
@@ -847,12 +852,9 @@ class CodecksClient:
             )
 
         attachment_result = None
-        if attachments:
+        if files:
             try:
-                upload_urls = result.get("uploadUrls") or result.get("upload_urls") or []
-                if not isinstance(upload_urls, list):
-                    raise CliError("[ERROR] Card creation response included invalid uploadUrls.")
-                attachment_result = upload_report_files(attachments, upload_urls)
+                attachment_result = attach_files_to_card(card_id, files, user_id=_get_user_id())  # type: ignore[assignment]
             except CliError as e:
                 raise CliError(
                     f"[ERROR] Card {card_id} was created, but attachment upload failed: {e}\n"

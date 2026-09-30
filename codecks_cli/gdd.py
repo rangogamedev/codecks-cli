@@ -612,7 +612,7 @@ def sync_gdd(sections, project_name, target_section=None, apply=False, quiet=Fal
 
             if apply:
                 try:
-                    result = create_card(task["title"], task.get("content"))
+                    result = create_card(task["title"], task.get("content"), deck_id=deck_id)
                     card_id = result.get("cardId", "")
                     if not card_id:
                         raise CliError(

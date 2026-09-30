@@ -3,7 +3,6 @@ Mocks at cards.*/api.* boundary. Asserts on returned dicts, not stdout.
 """
 
 from datetime import UTC
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -346,15 +345,17 @@ class TestCreateCard:
         assert result["card_id"] == "new-id"
         assert result["title"] == "Test Card"
 
-    @patch("codecks_cli.client.upload_report_files")
+    @patch("codecks_cli.client._get_user_id", return_value="me")
+    @patch("codecks_cli.client.attach_files_to_card")
     @patch("codecks_cli.client.prepare_attachment_files")
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")
-    def test_create_card_uploads_files(self, mock_create, mock_list, mock_prepare, mock_upload):
+    def test_create_card_uploads_files(
+        self, mock_create, mock_list, mock_prepare, mock_attach, _mock_uid
+    ):
         mock_list.return_value = {"card": {}}
-        mock_prepare.return_value = [SimpleNamespace(file_name="mockup.png")]
-        mock_create.return_value = {"cardId": "new-id", "uploadUrls": [{"signedUrl": "s3"}]}
-        mock_upload.return_value = {"ok": True, "attached": 1, "failed": 0, "files": []}
+        mock_create.return_value = {"cardId": "new-id"}
+        mock_attach.return_value = {"ok": True, "attached": 1, "failed": 0, "files": []}
         client = _client()
 
         result = client.create_card("Test Card", files=["mockup.png"])
@@ -362,21 +363,19 @@ class TestCreateCard:
         assert result["ok"] is True
         assert result["attachments"]["attached"] == 1
         mock_prepare.assert_called_once_with(["mockup.png"])
-        mock_create.assert_called_once()
-        assert mock_create.call_args.kwargs["file_names"] == ["mockup.png"]
-        mock_upload.assert_called_once_with(mock_prepare.return_value, [{"signedUrl": "s3"}])
+        mock_attach.assert_called_once_with("new-id", ["mockup.png"], user_id="me")
 
-    @patch("codecks_cli.client.upload_report_files")
+    @patch("codecks_cli.client._get_user_id", return_value="me")
+    @patch("codecks_cli.client.attach_files_to_card")
     @patch("codecks_cli.client.prepare_attachment_files")
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")
     def test_create_card_upload_failure_mentions_retry(
-        self, mock_create, mock_list, mock_prepare, mock_upload
+        self, mock_create, mock_list, mock_prepare, mock_attach, _mock_uid
     ):
         mock_list.return_value = {"card": {}}
-        mock_prepare.return_value = [SimpleNamespace(file_name="mockup.png")]
-        mock_create.return_value = {"cardId": "new-id", "uploadUrls": [{"signedUrl": "s3"}]}
-        mock_upload.side_effect = CliError("[ERROR] upload failed")
+        mock_create.return_value = {"cardId": "new-id"}
+        mock_attach.side_effect = CliError("[ERROR] upload failed")
         client = _client()
 
         with pytest.raises(CliError) as exc_info:
@@ -384,6 +383,14 @@ class TestCreateCard:
 
         assert "new-id" in str(exc_info.value)
         assert "attach" in str(exc_info.value)
+
+    @patch("codecks_cli.scaffolding.list_cards")
+    @patch("codecks_cli.client.create_card")
+    def test_severity_is_rejected_before_creating(self, mock_create, mock_list):
+        mock_list.return_value = {"card": {}}
+        with pytest.raises(CliError, match="priority"):
+            _client().create_card("Test Card", severity="high")
+        mock_create.assert_not_called()
 
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")
@@ -407,7 +414,8 @@ class TestCreateCard:
         client = _client()
         result = client.create_card("Test Card", deck="Features")
         assert result["deck"] == "Features"
-        mock_update.assert_called_once()
+        assert mock_create.call_args.kwargs["deck_id"] == "deck-uuid"
+        mock_update.assert_not_called()
 
     @patch("codecks_cli.scaffolding.list_cards")
     def test_blocks_duplicate_title(self, mock_list):
@@ -470,7 +478,7 @@ class TestCreateCard:
         mock_update.assert_called_once()
         call_kwargs = mock_update.call_args[1]
         assert call_kwargs["parentCardId"] == "parent-uuid"
-        assert call_kwargs["deckId"] == "deck-uuid"
+        assert mock_create.call_args.kwargs["deck_id"] == "deck-uuid"
 
     @patch("codecks_cli.scaffolding.list_cards")
     @patch("codecks_cli.client.create_card")

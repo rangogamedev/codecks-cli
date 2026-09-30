@@ -9,7 +9,6 @@ from codecks_cli.api import (
     AUTH_PROBE_QUERY,
     _mask_token,
     _try_call,
-    generate_report_token,
     is_authenticated,
     looks_like_api_token,
     query,
@@ -200,6 +199,42 @@ def _setup_gdd_optional():
     print()
 
 
+def _setup_default_deck():
+    """Ask once which deck new cards go to; saved as CODECKS_DEFAULT_DECK."""
+    print("Default deck")
+    print("-" * 40)
+    print("New cards go to this deck unless you pick another with --deck.")
+    print("You can change it later with: codecks-cli default-deck <deck name>")
+    print()
+    decks_result = _try_call(list_decks) or {}
+    titles = sorted(
+        {d.get("title", "") for d in (decks_result.get("deck") or {}).values() if d.get("title")}
+    )
+    if not titles:
+        print("  Could not load your decks. Set it later with: codecks-cli default-deck <name>")
+        print()
+        return
+    for i, title in enumerate(titles, 1):
+        print(f"  {i}. {title}")
+    suggested = next((t for t in titles if t.lower() == "inbox"), titles[0])
+    print()
+    while True:
+        answer = input(f"Deck number or name [{suggested}]: ").strip()
+        if not answer:
+            choice = suggested
+        elif answer.isdigit() and 1 <= int(answer) <= len(titles):
+            choice = titles[int(answer) - 1]
+        else:
+            choice = next((t for t in titles if t.lower() == answer.lower()), "")
+        if choice:
+            break
+        print("  Not one of your decks. Try again.")
+    config.save_env_value("CODECKS_DEFAULT_DECK", choice)
+    config.DEFAULT_DECK = choice
+    print(f"  Saved: new cards go to '{choice}'")
+    print()
+
+
 def _setup_done():
     """Print setup completion summary."""
     final_env = config.load_env()
@@ -211,10 +246,7 @@ def _setup_done():
     print(f"  Account:       {final_env.get('CODECKS_ACCOUNT', '(not set)')}")
     tok = final_env.get("CODECKS_TOKEN", "")
     print(f"  API token:     {_mask_token(tok) if tok else '(not set)'}")
-    ak = final_env.get("CODECKS_ACCESS_KEY", "")
-    print(f"  Access key:    {'configured' if ak else '(not set)'}")
-    rt = final_env.get("CODECKS_REPORT_TOKEN", "")
-    print(f"  Report token:  {'configured' if rt else '(not set)'}")
+    print(f"  Default deck:  {final_env.get('CODECKS_DEFAULT_DECK') or '(not set)'}")
     proj = final_env.get("CODECKS_PROJECTS", "")
     proj_count = len([p for p in proj.split(",") if "=" in p]) if proj else 0
     print(f"  Projects:      {proj_count} mapped")
@@ -274,10 +306,13 @@ def cmd_setup():
                 "  1. Refresh projects and milestones\n"
                 "  2. Update API token\n"
                 "  3. Run full setup from scratch\n"
+                "  4. Change default deck (where new cards go)\n"
                 "  Choice [1]: "
             ).strip()
             if choice == "" or choice == "1":
                 print()
+                if not config.DEFAULT_DECK:
+                    _setup_default_deck()
                 _setup_discover_projects()
                 _setup_discover_milestones()
                 _setup_discover_user()
@@ -288,6 +323,11 @@ def cmd_setup():
                 full_setup = False
                 print()
                 # Fall through to token prompt
+            elif choice == "4":
+                print()
+                _setup_default_deck()
+                _setup_done()
+                return
             elif choice == "3":
                 full_setup = True
                 has_config = False
@@ -332,7 +372,7 @@ def cmd_setup():
     print(f"{step}: API token")
     print("-" * 40)
     print("This token lets the tool read and change your Codecks data.")
-    print("It does not expire until you revoke it.")
+    print("It lasts until you revoke it, or until its expiry date if you set one.")
     print()
     print("How to get it:")
     acct = config.ACCOUNT or "your-account"
@@ -377,40 +417,9 @@ def cmd_setup():
                 print("  Saving it anyway — you can update later with: py codecks_api.py setup")
     print()
 
-    # --- Step 3: Access Key (full setup only) ---
-    if full_setup and not has_config:
-        print("STEP 3: Access Key (for creating cards)")
-        print("-" * 40)
-        print("The Access Key lets the tool create new cards.")
-        print("If you skip this, you can still read data but not create cards.")
-        print()
-        print("How to get it:")
-        print(f"  1. Go to {acct}.codecks.io")
-        print("  2. Click the gear icon (Settings)")
-        print("  3. Go to Integrations > User Reporting")
-        print("  4. Copy the Access Key value")
-        print()
-
-        access_input = input("Paste your Access Key (or press Enter to skip): ").strip()
-        if access_input:
-            access_input = access_input.strip('"').strip("'").strip()
-            config.save_env_value("CODECKS_ACCESS_KEY", access_input)
-            config.ACCESS_KEY = access_input
-            print("  Saved: CODECKS_ACCESS_KEY")
-
-            print("  Generating a Report Token...")
-            result = _try_call(generate_report_token, "codecks-cli")
-            if result and result.get("token"):
-                config.REPORT_TOKEN = result["token"]
-                print(f"  Report Token created: {_mask_token(result['token'])}")
-                print("  Saved to .env")
-            else:
-                print("  Could not generate Report Token. Try later:")
-                print("    py codecks_api.py generate-token")
-        else:
-            print("  Skipped. Card creation won't work until you add this.")
-            print("  Re-run setup later to add it.")
-        print()
+    # --- Step 3: Default deck (full setup, or when none is set yet) ---
+    if (full_setup and not has_config) or not config.DEFAULT_DECK:
+        _setup_default_deck()
 
     # --- Auto-discover projects, milestones, user ---
     _setup_discover_projects()

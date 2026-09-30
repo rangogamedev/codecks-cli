@@ -26,6 +26,7 @@ from codecks_cli.commands import (
     cmd_create,
     cmd_deck_full,
     cmd_decks,
+    cmd_default_deck,
     cmd_delete,
     cmd_dispatch,
     cmd_done,
@@ -35,7 +36,6 @@ from codecks_cli.commands import (
     cmd_gdd_auth,
     cmd_gdd_revoke,
     cmd_gdd_sync,
-    cmd_generate_token,
     cmd_hand,
     cmd_lanes,
     cmd_milestones,
@@ -121,11 +121,11 @@ Commands:
     --days <n>              Lookback for recent completions (default: 2)
     --project <name>        Filter by project
     --owner <name>          Filter by owner
-  create <title>          - Create a card via Report Token (stable, no expiry)
+  create <title>          - Create a card (goes to your default deck unless --deck)
     -d, --deck <name>       Place card in a specific deck
     --project <name>        Place card in first deck of a project
     -c, --content <text>    Card description/content
-    --severity <level>      critical, high, low, or null
+    -p, --priority <level>  a, b, c, or null
     --doc                   Create as a doc card (no workflow states)
     --allow-duplicate       Bypass exact duplicate-title protection
     --parent <id>           Nest as sub-card under parent card ID
@@ -214,8 +214,7 @@ Commands:
     --context <text>        Brief session context
   gdd-auth                - Authorize Google Drive access (opens browser, one-time)
   gdd-revoke              - Revoke Google Drive authorization and delete tokens
-  generate-token          - Generate a new Report Token using the Access Key
-    --label <text>          Label for the token (default: claude-code)
+  default-deck [name]     - Show or set the deck new cards go to by default
   dispatch <path> <json>  - Raw dispatch call (uses API token)
 """
 
@@ -433,6 +432,7 @@ def build_parser():
     p.add_argument("--project")
     p.add_argument("--content", "-c")
     p.add_argument("--severity", choices=sorted(config.VALID_SEVERITIES))
+    p.add_argument("--priority", "-p", choices=sorted(config.VALID_PRIORITIES))
     p.add_argument("--doc", action="store_true")
     p.add_argument("--allow-duplicate", action="store_true", dest="allow_duplicate")
     p.add_argument("--parent")
@@ -628,10 +628,10 @@ def build_parser():
     sub.add_parser("gdd-auth").set_defaults(func=cmd_gdd_auth)
     sub.add_parser("gdd-revoke").set_defaults(func=cmd_gdd_revoke)
 
-    # --- generate-token ---
-    p = sub.add_parser("generate-token")
-    p.add_argument("--label", default="claude-code")
-    p.set_defaults(func=cmd_generate_token)
+    # --- default-deck ---
+    p = sub.add_parser("default-deck")
+    p.add_argument("name", nargs="?")
+    p.set_defaults(func=cmd_default_deck)
 
     # --- dispatch ---
     p = sub.add_parser("dispatch")
@@ -716,7 +716,6 @@ NO_TOKEN_COMMANDS = {
     "setup",
     "gdd-auth",
     "gdd-revoke",
-    "generate-token",
     "version",
     "completion",
     "team-status",

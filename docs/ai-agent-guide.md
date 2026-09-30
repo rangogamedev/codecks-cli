@@ -75,9 +75,8 @@ codecks-cli cards --deck Backlog --limit 10 --agent && codecks-cli done @last --
 
 | Token | Purpose | Where to get it | Expires? |
 |-------|---------|-----------------|----------|
-| `CODECKS_TOKEN` | Read + write | Codecks > Your Profile > API Tokens (`cdxut_...`) | When revoked |
-| `CODECKS_REPORT_TOKEN` | Create cards | `codecks-cli generate-token` | Never (until disabled) |
-| `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations | Never |
+| `CODECKS_TOKEN` | Read + write | Codecks > Your Profile > API Tokens (`cdxut_...`) | When revoked or at its optional expiry date |
+| `CODECKS_DEFAULT_DECK` | Deck for new cards | `codecks-cli default-deck <name>` | — |
 
 Tokens go in `.env` (gitignored). Never paste tokens in agent chat — use
 `codecks-cli setup` or edit `.env` directly.

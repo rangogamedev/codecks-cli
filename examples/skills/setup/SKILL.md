@@ -44,9 +44,8 @@ Copy `.env.example` to `.env` if it does not exist, then print this guide:
 | Token | What it does | Where to get it | Expires? |
 |-------|-------------|-----------------|----------|
 | `CODECKS_ACCOUNT` | Team subdomain | The `myteam` part of `myteam.codecks.io` | Never |
-| `CODECKS_TOKEN` | Read + write access | Codecks > Your Profile > API Tokens (`cdxut_...`, shown once) | When revoked |
-| `CODECKS_ACCESS_KEY` | Generate report tokens | Codecks > Settings > Integrations > User Reporting | Never |
-| `CODECKS_REPORT_TOKEN` | Create cards | Run `codecks-cli generate-token` after setting access key | Never (until disabled) |
+| `CODECKS_TOKEN` | Read + write access | Codecks > Your Profile > API Tokens (`cdxut_...`, shown once) | When revoked or at its optional expiry date |
+| `CODECKS_DEFAULT_DECK` | Deck for new cards | Run `codecks-cli default-deck <name>` | — |
 
 Tell the user: "Open `.env` in your editor, fill in the values, and let me
 know when you're done."
@@ -70,7 +69,7 @@ Then run security checks silently:
 
 ```bash
 grep -q ".env" .gitignore          # .env is gitignored?
-grep -rn "CODECKS_TOKEN\|CODECKS_ACCESS_KEY" --include="*.py" --include="*.md"  # leaked?
+grep -rn "CODECKS_TOKEN" --include="*.py" --include="*.md"  # leaked?
 ```
 
 Warn immediately if any check fails.

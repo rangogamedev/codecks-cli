@@ -41,9 +41,9 @@ def create_card(
         content: Card body/description (max 10000 chars). Use ``- []`` for checkboxes.
             May be raw body text, OR the full content string (starting with a
             title-echo line) — the title is deduplicated either way.
-        deck: Destination deck name.
+        deck: Destination deck name (defaults to CODECKS_DEFAULT_DECK).
         project: Project name.
-        severity: Card severity level, or 'null' to clear.
+        severity: Deprecated, not supported by Codecks (cards have no severity); use priority.
         doc: True to create a doc card instead of a normal card.
         allow_duplicate: True to skip duplicate-title check.
         parent: Parent card UUID to nest this as a sub-card.

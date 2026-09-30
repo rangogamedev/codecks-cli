@@ -224,21 +224,6 @@ def test_prepare_files_rejects_symlink_to_sensitive_file():
         prepare_attachment_files([str(link)])
 
 
-@patch("codecks_cli.attachments.raw_http_request")
-def test_upload_report_files_uses_upload_urls(mock_raw):
-    from codecks_cli.attachments import prepare_attachment_files, upload_report_files
-
-    source = _scratch_dir() / "report.txt"
-    source.write_text("hello", encoding="utf-8")
-    attachment = prepare_attachment_files([str(source)])[0]
-
-    result = upload_report_files([attachment], [{"url": "https://s3.example", "fields": {}}])
-
-    assert result["ok"] is True
-    assert result["attached"] == 1
-    mock_raw.assert_called_once()
-
-
 # ---------------------------------------------------------------------------
 # Path policy: allowlisted roots + credential denylist
 # ---------------------------------------------------------------------------

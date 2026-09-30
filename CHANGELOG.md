@@ -7,10 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Authentication uses the official Codecks API (v2.96, "The Magic Key"): requests send `Authorization: Bearer <token>` with a personal (`cdxut_…`) or organization (`cdxat_…`) API token instead of the deprecated `X-Auth-Token` browser-session header, which the server now treats as anonymous and which stops working on 2026-12-31. Existing browser `at` cookies must be replaced: run `setup` or put a new API token in `CODECKS_TOKEN`.
-- Token validation (`_check_token`, `setup`) now requires the account's projects to be visible, so an anonymous or rejected token no longer reports "Token works!".
-- HTTP 403 is reported as a permission error with the server's message (for example, a read-only token trying to write) instead of `[TOKEN_EXPIRED]`.
+## [0.6.0] - 2026-09-30
+
+### Codecks v2.96 migration (breaking — read this first)
+
+**Why this is changing.** Codecks v2.96 ("The Magic Key: API & 2FA", 2026-09-24) replaced its unofficial, browser-based API access with official API tokens. Until now codecks-cli worked by borrowing your browser login (the `at` cookie), which expired whenever your session ended, so card creation had to go through a separate User Reports "report token" that didn't expire. Codecks now treats the borrowed browser login as anonymous — the CLI saw empty decks and reported `[TOKEN_EXPIRED]` — and the old `X-Auth-Token` header stops working completely on 2026-12-31. The official token lasts until you revoke it (or until an expiry date you choose), can read and write everything the CLI needs, and shows you as the author of the cards you create. So one token now replaces three.
+
+**What you need to do.**
+1. In Codecks, open **Your Profile → API Tokens** and create a token with read & write access. Copy it right away — it is only shown once. It starts with `cdxut_` (organization tokens from Organization Settings → Integrations → API Tokens start with `cdxat_` and work too).
+2. Run `codecks-cli setup`, paste the token, and choose your default deck.
+3. Delete `CODECKS_REPORT_TOKEN` and `CODECKS_ACCESS_KEY` from `.env`. They are ignored now.
+
+**Changed**
+- All requests authenticate with `Authorization: Bearer <API token>` instead of the deprecated `X-Auth-Token` browser-session header. `CODECKS_TOKEN` keeps its name; only its value changes.
+- `create` (and MCP `create_card` / `batch_create_cards`, `feature`, `split-features`, `gdd-sync`) creates cards through the official `dispatch/cards/create` endpoint instead of the User Reports endpoint. Cards now show you as their creator, and the deck is set in the same request.
+- New `CODECKS_DEFAULT_DECK`: where `create` puts a card when you don't pass `--deck`. `setup` asks for it once; change it any time with the new `codecks-cli default-deck <deck name>` (run it without a name to see the current one) or via setup's "Change default deck" option. Without a default deck and without `--deck`, `create` stops with a hint instead of making a private, deck-less card (what the API does when given no deck).
+- Attachments on `create --file` upload through the official `s3/sign` + `cards/addFile` flow (the same one `attach` already used).
+- Your own user is found through the API's `loggedInUser` query (personal tokens), falling back to the first account owner for organization tokens.
+- Token checks (`setup` and every command) require the account's projects to be visible, so a token the server treats as anonymous no longer reports "Token works!".
+- Error messages follow the documented refusal reasons: expired, revoked or mistyped tokens, personal tokens disabled by an admin, a removed member, `CODECKS_ACCOUNT` not matching the token's organization, and a missing permission (403 now names the scope the token lacks, e.g. `card:write`, instead of saying the token expired).
+
+**Removed**
+- `CODECKS_REPORT_TOKEN`, `CODECKS_ACCESS_KEY`, and the `generate-token` command. Codecks' User Reports feature itself is unchanged and still meant for in-game player feedback; codecks-cli just no longer needs it.
+- `--severity` on `create` (and the MCP `severity` argument) now returns an error: severity only existed on user reports, and Codecks cards have no severity field. Use `--priority a|b|c`.
+
+**Official documentation**
+- Release notes: [Codecks v2.96 — The Magic Key: API & 2FA](https://www.codecks.io/changelog/release/2.96-the-magic-key-api-2fa/)
+- [Quick Guide to the Codecks API](https://manual.codecks.io/api/) — tokens, permissions, card creation, file uploads, error codes, rate limits
+- [Codecks API Reference](https://manual.codecks.io/api-reference/) — the read/query language
+- [User Reports & Unity Integration](https://manual.codecks.io/user-reports/) — the report-token feature codecks-cli no longer uses
 
 ### Security
 - MCP HTTP runner (`scripts/run_mcp_http.py`) binds `127.0.0.1` by default instead of `0.0.0.0`, and the `mcp-http` Compose service publishes its port on loopback only (`127.0.0.1:${MCP_HTTP_PORT:-8808}:8808`) while setting `MCP_HTTP_HOST=0.0.0.0` inside the container. The MCP SDK only auto-enables DNS-rebinding (Host/Origin) protection for loopback binds, so a non-loopback `MCP_HTTP_HOST` now gets explicit `TransportSecuritySettings` built from `MCP_HTTP_ALLOWED_HOSTS` / `MCP_HTTP_ALLOWED_ORIGINS` (defaults `localhost:*,127.0.0.1:*,[::1]:*` and `http://localhost:*,http://127.0.0.1:*,http://[::1]:*`, mirroring the SDK's own loopback allowlists — IPv6 loopback included).

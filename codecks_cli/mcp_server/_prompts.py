@@ -40,8 +40,7 @@ coordination. Add to your editor's MCP config:
 |-------|-----------------|
 | CODECKS_ACCOUNT | Your team subdomain (myteam.codecks.io) |
 | CODECKS_TOKEN | Codecks > Your Profile > API Tokens (`cdxut_...`) |
-| CODECKS_ACCESS_KEY | Codecks > Settings > Integrations |
-| CODECKS_REPORT_TOKEN | `codecks-cli generate-token` |
+| CODECKS_DEFAULT_DECK | Deck new cards go to (`codecks-cli default-deck <name>`) |
 
 Tokens go in `.env` (gitignored). Never paste tokens in chat.
 """

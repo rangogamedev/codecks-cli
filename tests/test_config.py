@@ -9,8 +9,7 @@ from codecks_cli import config
 # Keys that load_env() checks in os.environ as fallback (Docker support).
 _KNOWN_ENV_KEYS = [
     "CODECKS_TOKEN",
-    "CODECKS_ACCESS_KEY",
-    "CODECKS_REPORT_TOKEN",
+    "CODECKS_DEFAULT_DECK",
     "CODECKS_ACCOUNT",
     "CODECKS_USER_ID",
     "CODECKS_HTTP_TIMEOUT_SECONDS",

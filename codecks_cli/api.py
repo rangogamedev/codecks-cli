@@ -375,6 +375,26 @@ def is_authenticated(result):
     return bool(result.get("account")) and bool(result.get("project"))
 
 
+# 401 error codes from https://manual.codecks.io/api/ ("Token refusal reasons").
+_TOKEN_ERRORS = {
+    "invalid_token": "Codecks does not recognise the API token (typo, revoked, or cut off).",
+    "token_expired": "The API token has passed its expiry date.",
+    "not_a_member": "The owner of this personal API token is no longer in the organization.",
+    "user_api_tokens_disabled": "An admin has turned off personal API tokens for this organization.",
+}
+
+
+def _server_error(body):
+    """Return (error code, parsed JSON dict) from a Codecks error body, or ("", {})."""
+    try:
+        info = json.loads(body) if body else {}
+    except (TypeError, ValueError):
+        return "", {}
+    if not isinstance(info, dict):
+        return "", {}
+    return str(info.get("error") or ""), info
+
+
 def looks_like_api_token(token):
     return token.startswith(API_TOKEN_PREFIXES)
 
@@ -393,12 +413,21 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
     try:
         return _http_request(url, data, headers, method, idempotent=idempotent)
     except HTTPError as e:
+        code, info = _server_error(e.body)
         if e.code == 401:
-            raise SetupError(f"[TOKEN_EXPIRED] Codecks rejected the API token. {TOKEN_HELP}") from e
+            reason = _TOKEN_ERRORS.get(code, "Codecks rejected the API token.")
+            raise SetupError(f"[TOKEN_EXPIRED] {reason} {TOKEN_HELP}") from e
+        if e.code == 400 and code == "token_account_mismatch":
+            raise SetupError(
+                "[SETUP_NEEDED] CODECKS_ACCOUNT does not match the organization "
+                "this API token belongs to. Fix CODECKS_ACCOUNT or use a token from that org."
+            ) from e
         if e.code == 403:
+            scope = info.get("requiredScope")
+            need = f" This token needs the '{scope}' permission." if scope else ""
             raise CliError(
                 "[ERROR] Codecks denied this request (HTTP 403). The API token may be "
-                "read-only or lack access to this project. "
+                f"read-only or lack access to this project.{need} "
                 f"Server said: {_sanitize_error(e.body)}"
             ) from e
         if e.code == 429:
@@ -416,79 +445,6 @@ def session_request(path="/", data=None, method="POST", idempotent=False):
                 detail=_sanitize_error(e.body),
             )
         ) from e
-
-
-def report_request(content, severity=None, email=None, file_names=None):
-    """Create a card via the Report Token endpoint (stable, no expiry)."""
-    if not config.REPORT_TOKEN:
-        raise CliError(
-            "[ERROR] CODECKS_REPORT_TOKEN not set in .env. Run: py codecks_api.py generate-token"
-        )
-    payload = {"content": content}
-    if severity:
-        payload["severity"] = severity
-    if email:
-        payload["userEmail"] = email
-    if file_names:
-        payload["fileNames"] = file_names
-    # NOTE: Token in URL query param is required by Codecks API design.
-    # Mitigate by treating report tokens as rotatable credentials.
-    url = f"{config.BASE_URL}/user-report/v1/create-report?token={config.REPORT_TOKEN}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-Request-Id": str(uuid.uuid4()),
-    }
-    try:
-        return _http_request(url, payload, headers)
-    except HTTPError as e:
-        if e.code == 401:
-            raise CliError(
-                "[ERROR] Report token is invalid or disabled. "
-                "Generate a new one: py codecks_api.py generate-token"
-            ) from e
-        server_req_id = e.headers.get("X-Request-Id") if e.headers else None
-        raise CliError(
-            _error_envelope(
-                f"HTTP {e.code}: {e.reason}",
-                status=e.code,
-                request_id=server_req_id,
-                retryable=e.code in _RETRYABLE_HTTP_CODES,
-                detail=_sanitize_error(e.body),
-            )
-        ) from e
-
-
-def generate_report_token(label="claude-code"):
-    """Use the Access Key to create a new Report Token and save it to .env."""
-    if not config.ACCESS_KEY:
-        raise CliError("[ERROR] CODECKS_ACCESS_KEY not set in .env.")
-    # NOTE: Access key in URL query param is required by Codecks API design.
-    url = f"{config.BASE_URL}/user-report/v1/create-report-token?accessKey={config.ACCESS_KEY}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-Request-Id": str(uuid.uuid4()),
-    }
-    try:
-        result = _http_request(url, {"label": label}, headers)
-    except HTTPError as e:
-        server_req_id = e.headers.get("X-Request-Id") if e.headers else None
-        raise CliError(
-            _error_envelope(
-                f"HTTP {e.code}: {e.reason}",
-                status=e.code,
-                request_id=server_req_id,
-                retryable=e.code in _RETRYABLE_HTTP_CODES,
-                detail=_sanitize_error(e.body),
-            )
-        ) from e
-    if result.get("ok") and result.get("token"):
-        config.save_env_value("CODECKS_REPORT_TOKEN", result["token"])
-        return result
-    raise CliError(
-        f"[ERROR] Unexpected response from generate-token (keys: {sorted(result.keys())})"
-    )
 
 
 # ---------------------------------------------------------------------------

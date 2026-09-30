@@ -23,13 +23,12 @@ See [DEVELOPMENT.md](DEVELOPMENT.md#architecture) for the full file tree, import
 
 | Token | Used for | Auth method | Expiry |
 |-------|----------|-------------|--------|
-| `CODECKS_TOKEN` | Reading data, mutations | `Authorization: Bearer` header | Until revoked (API token, `cdxut_`/`cdxat_`) |
-| `CODECKS_REPORT_TOKEN` | Creating cards | URL query parameter | Never (until disabled) |
-| `CODECKS_ACCESS_KEY` | Generating report tokens | URL query parameter | Never |
+| `CODECKS_TOKEN` | Reading data, mutations | `Authorization: Bearer` header | Until revoked or its optional expiry date (API token, `cdxut_`/`cdxat_`) |
+| `CODECKS_DEFAULT_DECK` | Where `create` puts cards without `--deck` | — (deck name, not a secret) | — |
 | `CODECKS_USER_ID` | Hand operations | Auto-discovered if unset | N/A |
 
 - API token validated on every command (account projects must be visible). Anonymous requests return empty data, not 401; revoked tokens return 401.
-- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `generate-token`, `--version`
+- No-token commands: `setup`, `gdd-auth`, `gdd-revoke`, `default-deck`, `--version`
 
 ## Error Patterns
 

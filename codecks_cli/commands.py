@@ -13,7 +13,7 @@ import sys
 from datetime import UTC, datetime
 
 from codecks_cli import config
-from codecks_cli.api import _mask_token, _safe_json_parse, dispatch, generate_report_token, query
+from codecks_cli.api import _safe_json_parse, dispatch, query
 from codecks_cli.client import CodecksClient, _normalize_dispatch_path
 from codecks_cli.exceptions import CliError
 from codecks_cli.formatters import (
@@ -215,7 +215,8 @@ def cmd_create(ns):
         content=ns.content,
         deck=ns.deck,
         project=ns.project,
-        severity=ns.severity,
+        severity=getattr(ns, "severity", None),
+        priority=getattr(ns, "priority", None),
         doc=ns.doc,
         allow_duplicate=getattr(ns, "allow_duplicate", False),
         parent=getattr(ns, "parent", None),
@@ -614,10 +615,18 @@ def cmd_gdd_revoke(ns):
 # ---------------------------------------------------------------------------
 
 
-def cmd_generate_token(ns):
-    result = generate_report_token(ns.label)
-    print(f"Report Token created: {_mask_token(result['token'])}")
-    print("Full token saved to .env as CODECKS_REPORT_TOKEN")
+def cmd_default_deck(ns):
+    if not ns.name:
+        current = config.DEFAULT_DECK
+        print(f"Default deck: {current}" if current else "No default deck set.")
+        print("Change it with: codecks-cli default-deck <deck name>")
+        return
+    from codecks_cli.cards import resolve_deck_id
+
+    resolve_deck_id(ns.name)  # fails with suggestions if the deck does not exist
+    config.save_env_value("CODECKS_DEFAULT_DECK", ns.name)
+    config.DEFAULT_DECK = ns.name
+    print(f"Default deck set to: {ns.name}")
 
 
 def cmd_completion(ns):

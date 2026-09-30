@@ -18,8 +18,7 @@ def _isolate_config(monkeypatch):
 
     monkeypatch.setattr(config, "env", {})
     monkeypatch.setattr(config, "SESSION_TOKEN", "fake-token")
-    monkeypatch.setattr(config, "ACCESS_KEY", "fake-key")
-    monkeypatch.setattr(config, "REPORT_TOKEN", "fake-report")
+    monkeypatch.setattr(config, "DEFAULT_DECK", "")
     monkeypatch.setattr(config, "ACCOUNT", "fake-account")
     monkeypatch.setattr(config, "USER_ID", "fake-user-id")
     monkeypatch.setattr(config, "_cache", {})
