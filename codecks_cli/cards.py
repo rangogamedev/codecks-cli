@@ -130,12 +130,14 @@ _FIELDS_LIST = _FIELDS_MINIMAL + [
     "masterTags",
     "lastUpdatedAt",
     "isDoc",
+    # childCardInfo comes back as "{}" for hero cards; the aggregate is exact (v2.96).
+    # In the list set so cached cards (MCP) can tell hero cards apart too.
+    "count:childCards",
 ]
 
 _FIELDS_FULL = _FIELDS_LIST + [
     "createdAt",
     "milestoneId",
-    "childCardInfo",
     "content",
 ]
 
@@ -542,16 +544,9 @@ def enrich_cards(cards_dict, user_data=None):
             card["owner_name"] = user_names.get(assignee, assignee)
         # Normalize tags field
         card["tags"] = get_card_tags(card)
-        # Sub-card info
-        child_info = _get_field(card, "child_card_info", "childCardInfo")
-        if child_info:
-            if isinstance(child_info, str):
-                try:
-                    child_info = json.loads(child_info)
-                except (json.JSONDecodeError, TypeError):
-                    child_info = {}
-            if isinstance(child_info, dict):
-                card["sub_card_count"] = child_info.get("count", 0)
+        # Sub-card count (only present when the query asked for it)
+        if "count:childCards" in card:
+            card["sub_card_count"] = card.pop("count:childCards") or 0
 
     return cards_dict
 

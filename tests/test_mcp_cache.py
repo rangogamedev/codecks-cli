@@ -414,6 +414,20 @@ class TestCachedReads:
         assert result["total_count"] == 1
         assert "Card B" in result["cards"][0]["title"]
 
+    def test_list_cards_hero_filter_from_cache(self):
+        import copy
+
+        from codecks_cli.mcp_server._tools_read import list_cards
+
+        snap = _make_snapshot()
+        cards = copy.deepcopy(SAMPLE_CARDS)
+        cards[2]["sub_card_count"] = 4
+        snap["cards_result"] = {"cards": cards, "stats": None}
+        _inject_cache(snap)
+        result = list_cards(card_type="hero")
+        assert result["cached"] is True
+        assert [c["id"] for c in result["cards"]] == [cards[2]["id"]]
+
     def test_list_cards_with_deck_filter_from_cache(self):
         from codecks_cli.mcp_server._tools_read import list_cards
 

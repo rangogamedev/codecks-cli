@@ -603,8 +603,6 @@ class TestSlimCard:
             "owner_name": "Alice",
             "projectId": "p1",
             "project_id": "p1",
-            "childCardInfo": {"count": 2},
-            "child_card_info": {"count": 2},
             "masterTags": ["bug"],
             "tags": ["bug"],
             "sub_card_count": 2,
@@ -624,8 +622,6 @@ class TestSlimCard:
             "assignee",
             "projectId",
             "project_id",
-            "childCardInfo",
-            "child_card_info",
             "masterTags",
         ):
             assert dropped not in slim
