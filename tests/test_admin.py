@@ -121,3 +121,16 @@ class TestCreateDeckCacheSeeding:
 
         assert result["ok"] is True
         assert "decks" not in config._cache
+
+
+class TestMilestoneCreator:
+    @patch("codecks_cli.admin.api.dispatch", return_value={"payload": {"id": "m1"}})
+    @patch("codecks_cli.admin._resolve_project_id", return_value="p1")
+    @patch("codecks_cli.admin._get_account_id", return_value="acc")
+    def test_milestone_creator_is_token_user(self, _acc, _proj, mock_dispatch, monkeypatch):
+        # admin used to take the first user of account.roles, which may be someone else.
+        from codecks_cli.admin import create_milestone
+
+        monkeypatch.setattr("codecks_cli.cards.config.USER_ID", "me-id")
+        create_milestone("M1")
+        assert mock_dispatch.call_args.args[1]["userId"] == "me-id"

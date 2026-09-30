@@ -743,8 +743,12 @@ def _get_user_id():
 
 
 def list_hand():
-    """Query the current user's hand (queueEntries)."""
-    q = {"_root": [{"account": [{"queueEntries": ["card", "sortIndex", "user"]}]}]}
+    """Query the current user's hand (queueEntries).
+
+    account.queueEntries holds every member's hand, so filter to our own user.
+    """
+    entries = f"queueEntries({json.dumps({'userId': _get_user_id()})})"
+    q = {"_root": [{"account": [{entries: ["card", "sortIndex", "user"]}]}]}
     return query(q)
 
 
