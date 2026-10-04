@@ -27,6 +27,8 @@ MYPY_TARGETS = [
     "codecks_cli/api.py",
     "codecks_cli/attachments.py",
     "codecks_cli/cards.py",
+    "codecks_cli/card_refs.py",
+    "codecks_cli/journeys.py",
     "codecks_cli/client.py",
     "codecks_cli/commands.py",
     "codecks_cli/formatters/",
