@@ -5,54 +5,30 @@ import os
 import warnings
 from pathlib import Path
 from unittest.mock import patch
-from uuid import uuid4
 
 import pytest
 
 from codecks_cli.exceptions import CliError
 
 
-def _scratch_dir() -> Path:
-    candidates = [Path(".sandbox_tmp")] if os.name == "nt" else [Path("/tmp"), Path(".sandbox_tmp")]
-    for candidate in candidates:
-        try:
-            candidate.mkdir(parents=True, exist_ok=True)
-            path = candidate / f"codecks-attachments-{uuid4().hex}"
-            path.mkdir(parents=True, exist_ok=False)
-            probe = path / ".write-probe"
-            probe.write_text("ok", encoding="utf-8")
-            probe.unlink()
-            return path
-        except OSError:
-            continue
-    raise RuntimeError("No writable scratch directory available for attachment tests.")
-
-
 @pytest.fixture(autouse=True)
-def _allow_scratch_roots(monkeypatch):
-    """Scratch dirs live outside the project root — allowlist them for these tests.
+def _allow_scratch_roots(monkeypatch, tmp_path):
+    """Allow pytest's temporary directory for attachment tests on every platform.
 
     Tests that exercise the allowlist itself override this with their own
     ``monkeypatch.setenv`` / ``delenv`` call.
     """
-    from codecks_cli import attachments
+    from codecks_cli import attachments, config
 
-    roots = []
-    for candidate in (Path("/tmp"), Path(".sandbox_tmp")):
-        try:
-            resolved = candidate.resolve()
-        except OSError:
-            continue
-        # Non-existent entries are skipped (with a warning) by the allowlist.
-        if resolved.is_dir():
-            roots.append(str(resolved))
-    monkeypatch.setenv(attachments.ALLOW_DIRS_ENV, os.pathsep.join(roots))
+    # Select this root first, including when --basetemp is beneath a hidden CI directory.
+    monkeypatch.setattr(config, "_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setenv(attachments.ALLOW_DIRS_ENV, str(tmp_path))
 
 
-def test_prepare_files_rejects_duplicate_basenames():
+def test_prepare_files_rejects_duplicate_basenames(tmp_path):
     from codecks_cli.attachments import prepare_attachment_files
 
-    scratch = _scratch_dir()
+    scratch = tmp_path
     first = scratch / "a" / "same.txt"
     second = scratch / "b" / "same.txt"
     first.parent.mkdir()
@@ -64,21 +40,21 @@ def test_prepare_files_rejects_duplicate_basenames():
         prepare_attachment_files([str(first), str(second)])
 
 
-def test_prepare_files_rejects_secret_cache_files():
+def test_prepare_files_rejects_secret_cache_files(tmp_path):
     from codecks_cli.attachments import prepare_attachment_files
 
-    secret = _scratch_dir() / ".env"
+    secret = tmp_path / ".env"
     secret.write_text("CODECKS_TOKEN=secret", encoding="utf-8")
 
     with pytest.raises(CliError, match="Refusing to attach sensitive local file"):
         prepare_attachment_files([str(secret)])
 
 
-def test_prepare_files_rejects_missing_directory_and_unreadable():
+def test_prepare_files_rejects_missing_directory_and_unreadable(tmp_path):
     from codecks_cli import attachments
     from codecks_cli.attachments import prepare_attachment_files
 
-    scratch = _scratch_dir()
+    scratch = tmp_path
     missing = scratch / "missing.txt"
     directory = scratch / "folder"
     unreadable = scratch / "locked.txt"
@@ -94,10 +70,10 @@ def test_prepare_files_rejects_missing_directory_and_unreadable():
             prepare_attachment_files([str(unreadable)])
 
 
-def test_prepare_files_infers_mime_and_falls_back():
+def test_prepare_files_infers_mime_and_falls_back(tmp_path):
     from codecks_cli.attachments import prepare_attachment_files
 
-    scratch = _scratch_dir()
+    scratch = tmp_path
     text_file = scratch / "note.txt"
     unknown_file = scratch / "blob.unknownextension"
     text_file.write_text("hello", encoding="utf-8")
@@ -111,10 +87,10 @@ def test_prepare_files_infers_mime_and_falls_back():
     assert files[1].content_type == "application/octet-stream"
 
 
-def test_build_multipart_body_includes_fields_content_type_and_binary():
+def test_build_multipart_body_includes_fields_content_type_and_binary(tmp_path):
     from codecks_cli.attachments import build_multipart_body, prepare_attachment_files
 
-    image = _scratch_dir() / "pixel.png"
+    image = tmp_path / "pixel.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\nbinary")
     attachment = prepare_attachment_files([str(image)])[0]
 
@@ -135,10 +111,10 @@ def test_build_multipart_body_includes_fields_content_type_and_binary():
 
 @patch("codecks_cli.attachments.session_request")
 @patch("codecks_cli.attachments.raw_http_request")
-def test_attach_files_signs_uploads_and_dispatches_add_file(mock_raw, mock_session):
+def test_attach_files_signs_uploads_and_dispatches_add_file(mock_raw, mock_session, tmp_path):
     from codecks_cli.attachments import attach_files_to_card
 
-    source = _scratch_dir() / "concept.txt"
+    source = tmp_path / "concept.txt"
     source.write_text("ship it", encoding="utf-8")
     mock_session.side_effect = [
         {
@@ -175,10 +151,10 @@ def test_attach_files_signs_uploads_and_dispatches_add_file(mock_raw, mock_sessi
 
 @patch("codecks_cli.attachments.session_request")
 @patch("codecks_cli.attachments.raw_http_request")
-def test_attach_files_reports_partial_failure_with_context(mock_raw, mock_session):
+def test_attach_files_reports_partial_failure_with_context(mock_raw, mock_session, tmp_path):
     from codecks_cli.attachments import attach_files_to_card
 
-    scratch = _scratch_dir()
+    scratch = tmp_path
     first = scratch / "good.txt"
     second = scratch / "bad.txt"
     first.write_text("ok", encoding="utf-8")
@@ -207,11 +183,11 @@ def test_attach_files_reports_partial_failure_with_context(mock_raw, mock_sessio
     assert "upload denied" in result["failures"][0]["error"]
 
 
-def test_prepare_files_rejects_symlink_to_sensitive_file():
+def test_prepare_files_rejects_symlink_to_sensitive_file(tmp_path):
     """Sensitive-file denylist must follow symlinks so a renamed link cannot bypass."""
     from codecks_cli.attachments import prepare_attachment_files
 
-    scratch = _scratch_dir()
+    scratch = tmp_path
     target = scratch / ".env"
     target.write_text("CODECKS_TOKEN=secret", encoding="utf-8")
     link = scratch / "innocent.txt"
