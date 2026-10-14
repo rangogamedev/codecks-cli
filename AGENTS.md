@@ -83,14 +83,14 @@ client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```
 
-34 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
+35 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
 
 ## MCP Server
 
 - **Install**: `py -m pip install .[mcp]`
 - **Run**: `py -m codecks_cli.mcp_server` (stdio transport)
 - **Startup**: Call `session_start()` first in every session.
-- 53 tools across 6 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
+- 54 tools across 6 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
 
 ## Testing
 
