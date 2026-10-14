@@ -1,6 +1,6 @@
 # MCP Server Reference
 
-The MCP (Model Context Protocol) server exposes 53 tools for AI agents, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 54 tools for AI agents, enabling full Codecks management from within an AI conversation.
 
 ## Setup
 
@@ -40,6 +40,20 @@ Use the same command (`codecks-mcp`) with your IDE's MCP configuration. The serv
 
 > **New to codecks-cli?** See [docs/ai-agent-guide.md](ai-agent-guide.md) for the full setup walkthrough and CLI-first patterns. The CLI is the recommended default for AI agents — MCP is an optional enhancement.
 
+## Card Reference Resolution
+
+`resolve_card_ids(references)` accepts 1-100 full UUIDs, organization card numbers
+such as `#627`, or native Codecks references such as `$1uc`. These two examples
+identify the same card. It queries the current token's organization once, matches
+exactly, and returns `cards[].id`, `account_seq`, `short_code`, `title`, and
+`visibility` in input order. Use the UUIDs with existing card tools. Archived and
+trashed cards remain resolvable. Unknown, inaccessible or ambiguous references
+fail the whole request. UUID prefixes and title guesses are not supported.
+
+The encoding follows the `pronounceSafeSeq` algorithm linked from Codecks'
+[`accountSeq` documentation](https://manual.codecks.io/api-reference/), including
+its offset and implicit-zero alphabet. It is not ordinary base36.
+
 ## Prompt Surface
 
 The MCP server exposes two prompts that connected clients can discover via `prompts/list`:
@@ -61,11 +75,11 @@ Use prompts when your MCP client supports them. Use the CLI directly when you wa
 
 This also warms the snapshot cache, making subsequent reads near-instant (<50ms).
 
-## Tool Inventory (53 tools)
+## Tool Inventory (54 tools)
 
 | Category | Count | Tools |
 |----------|-------|-------|
-| **Read** | 11 | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
+| **Read** | 12 | `resolve_card_ids`, `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
 | **Write** | 13 | `create_card`, `attach_files`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
 | **Batch** | 5 | `batch_create_cards`, `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards`, `batch_update_bodies` |
 | **Hand** | 3 | `list_hand`, `add_to_hand`, `remove_from_hand` |

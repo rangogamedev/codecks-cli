@@ -24,6 +24,7 @@ from codecks_cli.attachments import (
     attach_files_to_card,
     prepare_attachment_files,
 )
+from codecks_cli.card_refs import resolve_card_ids
 from codecks_cli.cards import (
     _get_user_id,
     add_to_hand,
@@ -316,6 +317,10 @@ class CodecksClient:
             return {"cards": _flatten_cards(result.get("card", {})), "stats": stats}
 
         return {"cards": _flatten_cards(result.get("card", {})), "stats": None}
+
+    def resolve_card_ids(self, references: list[str]) -> dict[str, Any]:
+        """Resolve UUIDs, #card numbers, and $Codecks references before card operations."""
+        return resolve_card_ids(references)
 
     def get_card(
         self,

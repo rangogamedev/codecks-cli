@@ -91,7 +91,7 @@ Dot-prefixed path components, credential-looking names (`*.pem`, `*.key`, `id_rs
 ```
 CLI (codecks-cli)  ─┐
 Python API         ─┤── CodecksClient ── Codecks HTTP API
-MCP Server         ─┘   (34 methods)
+MCP Server         ─┘   (35 methods)
 ```
 
 All three interfaces wrap the same `CodecksClient` library. The CLI formats output for terminals, the API returns dicts, and the MCP server adds caching, guardrails, and team coordination.

@@ -397,11 +397,11 @@ client.attach_files(card_id="abc-123", files=["mockup.png"])
 report = client.standup(days=3, project="My Project")
 ```
 
-### 34 Methods
+### 35 Methods
 
 | Category | Methods |
 |----------|---------|
-| **Read** | `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `prefetch_snapshot` |
+| **Read** | `get_account`, `resolve_card_ids`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `prefetch_snapshot` |
 | **Hand** | `list_hand`, `add_to_hand`, `remove_from_hand` |
 | **Mutations** | `create_card`, `attach_files`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |

@@ -77,10 +77,11 @@ codecks_api.py          <- entry point (thin wrapper)
 codecks_cli/
   cli.py                <- argparse parser, dispatch
   commands.py           <- cmd_*() CLI handlers
-  client.py             <- CodecksClient: 34 public methods
+  client.py             <- CodecksClient: 35 public methods
   attachments.py        <- File validation and S3 multipart upload helpers
   scaffolding.py        <- scaffold_feature(), split_features()
   cards.py              <- Card CRUD, hand, conversations
+  card_refs.py          <- Exact #number / $reference to UUID lookup
   api.py                <- HTTP layer (retries, timeouts, tokens)
   config.py             <- .env loading, constants, VERSION
   exceptions.py         <- CliError, SetupError, HTTPError
@@ -106,13 +107,13 @@ codecks_cli/
     _activity.py         format_activity_table, format_activity_diff
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
-  mcp_server/           <- 53 MCP tools (package, 6 tool modules)
+  mcp_server/           <- 54 MCP tools (package, 6 tool modules)
     __init__.py          MCPServer init, registration, re-exports
     __main__.py          py -m codecks_cli.mcp_server entry
     _core.py             Client cache, dispatcher, snapshot cache
     _security.py         Injection detection, sanitization
     _repository.py       CardRepository (O(1) indexed lookups)
-    _tools_read.py       11 query/dashboard tools
+    _tools_read.py       12 query/dashboard tools
     _tools_write.py      22 mutation/hand/scaffolding/batch tools
     _tools_comments.py   5 comment CRUD tools
     _tools_local.py      4 session/preference tools
@@ -170,6 +171,7 @@ py -m pytest --tb=short                # shorter tracebacks
 | `test_cli.py` | CLI argument parsing and dispatch |
 | `test_commands.py` | Command handlers (cmd_*) |
 | `test_client.py` | CodecksClient methods |
+| `test_card_refs.py` | Exact card references and native short-code encoding |
 | `test_cards.py` | Card CRUD operations |
 | `test_api.py` | HTTP layer, retries, tokens |
 | `test_config.py` | Configuration loading |

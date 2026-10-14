@@ -901,6 +901,7 @@ def _finalize_tool_result(result: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 _ALLOWED_METHODS = {
+    "resolve_card_ids",
     "get_account",
     "list_cards",
     "get_card",
