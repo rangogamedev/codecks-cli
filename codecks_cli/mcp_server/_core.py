@@ -617,6 +617,10 @@ _CACHE_INVALIDATION_MAP: dict[str, list[str]] = {
     "delete_card": ["cards_result", "pm_focus", "standup"],
     "scaffold_feature": ["cards_result", "pm_focus", "standup"],
     "split_features": ["cards_result", "pm_focus", "standup"],
+    "create_journey_step": ["cards_result", "pm_focus", "standup", "decks"],
+    "update_journey_step": ["cards_result", "pm_focus", "standup", "decks"],
+    "order_journey_steps": ["cards_result", "pm_focus", "standup", "decks"],
+    "start_journey": ["cards_result", "pm_focus", "standup"],
     # Comment mutations don't affect card lists
     "create_comment": [],
     "reply_comment": [],
@@ -901,6 +905,12 @@ def _finalize_tool_result(result: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 _ALLOWED_METHODS = {
+    "get_journey",
+    "create_journey_step",
+    "update_journey_step",
+    "order_journey_steps",
+    "start_journey",
+    "resolve_card_ids",
     "get_account",
     "list_cards",
     "get_card",
@@ -932,6 +942,10 @@ _ALLOWED_METHODS = {
 }
 
 _MUTATION_METHODS = {
+    "create_journey_step",
+    "update_journey_step",
+    "order_journey_steps",
+    "start_journey",
     "create_card",
     "update_cards",
     "mark_done",

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `resolve_card_ids` MCP tool and Python method translate organization card numbers (`#627`), native references (`$1uc`), and UUIDs through an exact live lookup. Archived and trashed cards are included. Missing or inaccessible references fail the whole batch.
+- Experimental native Journey tools and Python methods: read, create/edit steps, reorder steps, and apply a Journey to a card. These use internal Codecks endpoints, have no browser-token fallback, and still need live verification with official API tokens. Dependency editing is excluded under the project's paid-feature policy.
+
 ## [0.6.0] - 2026-09-30
 
 ### Codecks v2.96 migration (breaking — read this first)

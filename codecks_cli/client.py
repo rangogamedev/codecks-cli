@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 # Method signatures use plain dict[str, Any] for mypy compatibility.
 from typing import Any
 
-from codecks_cli import config
+from codecks_cli import config, journeys
 from codecks_cli._utils import _get_field, _parse_iso_timestamp
 from codecks_cli.api import (
     _check_token,
@@ -24,6 +24,7 @@ from codecks_cli.attachments import (
     attach_files_to_card,
     prepare_attachment_files,
 )
+from codecks_cli.card_refs import resolve_card_ids
 from codecks_cli.cards import (
     _get_user_id,
     add_to_hand,
@@ -316,6 +317,34 @@ class CodecksClient:
             return {"cards": _flatten_cards(result.get("card", {})), "stats": stats}
 
         return {"cards": _flatten_cards(result.get("card", {})), "stats": None}
+
+    def resolve_card_ids(self, references: list[str]) -> dict[str, Any]:
+        """Resolve UUIDs, #card numbers, and $Codecks references before card operations."""
+        return resolve_card_ids(references)
+
+    def get_journey(self, deck_id: str) -> dict[str, Any]:
+        """Read native Journey steps and ordering; uses an internal API."""
+        return journeys.get_journey(deck_id)
+
+    def create_journey_step(
+        self, deck_id: str, content: str, *, fields: dict | None = None, user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Create a native Journey step without applying it to a card."""
+        return journeys.create_journey_step(deck_id, content, fields=fields, user_id=user_id)
+
+    def update_journey_step(self, item_id: str, fields: dict) -> dict[str, Any]:
+        """Edit or soft-delete a step. Omitted fields are preserved."""
+        return journeys.update_journey_step(item_id, fields)
+
+    def order_journey_steps(
+        self, deck_id: str, item_ids: list[str], target_id: str | None, label: str | None
+    ) -> dict[str, Any]:
+        """Move steps after a target or to the beginning (target_id=None)."""
+        return journeys.order_journey_steps(deck_id, item_ids, target_id, label)
+
+    def start_journey(self, card_id: str) -> dict[str, Any]:
+        """Apply a native Journey to a card UUID, #number, or $reference."""
+        return journeys.start_journey(card_id)
 
     def get_card(
         self,

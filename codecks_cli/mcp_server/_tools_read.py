@@ -434,6 +434,19 @@ def get_card(
     return _finalize_tool_result(result)
 
 
+def resolve_card_ids(references: list[str]) -> dict:
+    """Translate #627 / $1uc / full UUIDs into verified API UUIDs (1-100 per call).
+
+    Use returned cards[].id with existing card tools. Includes archived/trashed
+    cards and reports visibility. Fails if any reference is inaccessible or absent.
+    UUID prefixes and title guesses are rejected. Card numbers are organization-wide.
+    """
+    result = _call("resolve_card_ids", references=references)
+    if result.get("ok") is not False:
+        result["cards"] = [_sanitize_card(card) for card in result.get("cards", [])]
+    return _finalize_tool_result(result)
+
+
 def list_decks(include_card_counts: bool = False) -> dict:
     """List all decks. Set include_card_counts=True for per-deck counts (extra API call)."""
     cached = _try_cache("decks")
@@ -719,6 +732,7 @@ def register(mcp):
     mcp.tool()(get_account)
     mcp.tool()(list_cards)
     mcp.tool()(get_card)
+    mcp.tool()(resolve_card_ids)
     mcp.tool()(list_decks)
     mcp.tool()(list_projects)
     mcp.tool()(list_milestones)

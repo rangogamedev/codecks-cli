@@ -1,5 +1,10 @@
 # codecks-cli
 
+MCP card references can be resolved with `resolve_card_ids(["#627", "$1uc"])`,
+then used as UUIDs with the existing card tools. Native Journey tools are also
+available experimentally. See [the MCP reference](docs/mcp-reference.md) for
+their internal-API limitations and validation status.
+
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
 ![Tests: 1000+](https://img.shields.io/badge/Tests-1000%2B-brightgreen)
@@ -91,7 +96,7 @@ Dot-prefixed path components, credential-looking names (`*.pem`, `*.key`, `id_rs
 ```
 CLI (codecks-cli)  ─┐
 Python API         ─┤── CodecksClient ── Codecks HTTP API
-MCP Server         ─┘   (34 methods)
+MCP Server         ─┘   (40 methods)
 ```
 
 All three interfaces wrap the same `CodecksClient` library. The CLI formats output for terminals, the API returns dicts, and the MCP server adds caching, guardrails, and team coordination.
