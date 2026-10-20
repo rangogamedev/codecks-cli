@@ -16,6 +16,8 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       matrix:
         python-version: ["3.12", "3.14"]
@@ -46,10 +48,10 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
       - name: Dependency audit (pip-audit)
-        # Scans installed deps against the PyPI/OSV advisory DBs. The local
-        # codecks-cli package is skipped (not on PyPI) without failing. To
+        # Scans installed deps against the PyPI/OSV advisory DBs. Skip the
+        # editable local project because it is not published on PyPI. To
         # unblock on an advisory with no fix yet, append: --ignore-vuln <ID>
-        run: uv run pip-audit --progress-spinner off
+        run: uv run pip-audit --progress-spinner off --skip-editable
 
   docker-smoke:
     runs-on: ubuntu-latest
