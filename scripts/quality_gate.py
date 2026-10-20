@@ -28,6 +28,7 @@ MYPY_TARGETS = [
     "codecks_cli/attachments.py",
     "codecks_cli/cards.py",
     "codecks_cli/card_refs.py",
+    "codecks_cli/journeys.py",
     "codecks_cli/client.py",
     "codecks_cli/commands.py",
     "codecks_cli/formatters/",
@@ -250,8 +251,8 @@ def check_pip_audit() -> dict:
     """Audit installed dependencies against known-vulnerability databases.
 
     Opt-in (network access required) — run with --audit or in CI. Wraps
-    `pip-audit`, parsing its JSON report to count advisories. Non-PyPI
-    packages (the local codecks-cli) are skipped by pip-audit and do not fail.
+    `pip-audit`, parsing its JSON report to count advisories. The editable
+    local project is skipped because it is not published on PyPI.
     """
     t0 = time.monotonic()
     # `python -m pip_audit` does not raise FileNotFoundError when the module is
@@ -263,7 +264,16 @@ def check_pip_audit() -> dict:
             "reason": "pip-audit not installed (py -m pip install .[dev])",
             "duration_s": round(time.monotonic() - t0, 1),
         }
-    cmd = [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "-f", "json"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip_audit",
+        "--progress-spinner",
+        "off",
+        "--skip-editable",
+        "-f",
+        "json",
+    ]
     r = _run(cmd, timeout=300)
     duration = round(time.monotonic() - t0, 1)
 

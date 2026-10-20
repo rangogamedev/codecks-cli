@@ -83,14 +83,14 @@ client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```
 
-35 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
+40 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
 
 ## MCP Server
 
 - **Install**: `py -m pip install .[mcp]`
 - **Run**: `py -m codecks_cli.mcp_server` (stdio transport)
 - **Startup**: Call `session_start()` first in every session.
-- 54 tools across 6 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
+- 59 tools across 7 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
 
 ## Testing
 
@@ -114,6 +114,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 10 | Content update duplicates title | Auto-detect and skip via `_content.py` | Test title-in-content edge case |
 | 11 | Error responses lack structure | Added `retryable`, `error_code`, cache `stale_warning` | Test error shapes |
 | 12 | Hero cards show `sub_card_count` 0 (`childCardInfo` is `"{}"`), so `split-features` re-splits | Read `count:childCards` aggregate | Never read counts from `childCardInfo` |
+| 13 | Journey writes bypass response validation | Use shared `api.dispatch()` | Test non-object responses, strict acknowledgements, and uncertain starts |
 
 ## Docker
 
