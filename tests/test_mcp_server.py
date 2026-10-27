@@ -3786,3 +3786,38 @@ class TestTeamProjectFilters:
         result = mcp_mod.team_dashboard(project="Tea Shop")
         assert result["ok"] is True
         assert result["unclaimed_in_progress_count"] == 1
+
+
+@pytest.mark.parametrize("tool_name", ["list_cards", "quick_overview"])
+def test_project_filtered_reads_bypass_display_name_cache(tool_name):
+    from codecks_cli.mcp_server import _tools_read
+
+    error = {
+        "ok": False,
+        "error_code": "INVALID_INPUT",
+        "retryable": False,
+        "error": "Project is ambiguous: p1, p2",
+    }
+    with (
+        patch.object(_tools_read, "_try_cache") as cache,
+        patch.object(_tools_read, "_call", return_value=error) as call,
+    ):
+        result = getattr(_tools_read, tool_name)(project="Duplicate")
+    cache.assert_not_called()
+    assert call.call_args.kwargs["project"] == "Duplicate"
+    assert result["error_code"] == "INVALID_INPUT"
+    assert result["retryable"] is False
+
+
+def test_admin_project_ambiguity_preserves_error_and_does_not_invalidate():
+    from codecks_cli import CliError
+    from codecks_cli.mcp_server import _tools_admin
+
+    def fail():
+        raise CliError("Project is ambiguous: p1, p2", error_code="INVALID_INPUT", retryable=False)
+
+    with patch.object(_tools_admin, "_invalidate_cache") as invalidate:
+        result = _tools_admin._run_admin(fail)
+    invalidate.assert_not_called()
+    assert result["error_code"] == "INVALID_INPUT"
+    assert result["retryable"] is False

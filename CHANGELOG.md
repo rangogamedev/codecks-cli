@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Current API project names with optional local aliases editable and resettable in setup. Project filters, scoped deck lookup and admin operations accept exact IDs and reject ambiguous API names or aliases (#80).
+
 - `resolve_card_ids` MCP tool and Python method translate organization card numbers (`#627`), native references (`$1uc`), and UUIDs through an exact live lookup. Archived and trashed cards are included. Missing or inaccessible references fail the whole batch. Contributed by @NickReardon (#72).
 
 ## [0.6.0] - 2026-09-30

@@ -36,6 +36,7 @@ def load_env():
         "CODECKS_ACCOUNT",
         "CODECKS_USER_ID",
         "CODECKS_PROJECTS",
+        "CODECKS_PROJECT_ALIASES",
         "CODECKS_MILESTONES",
         "CODECKS_HTTP_TIMEOUT_SECONDS",
         "CODECKS_HTTP_MAX_RETRIES",

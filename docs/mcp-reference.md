@@ -2,6 +2,13 @@
 
 The MCP (Model Context Protocol) server exposes 54 tools for AI agents, enabling full Codecks management from within an AI conversation.
 
+Project filters accept exact project IDs, current API names and explicit local
+aliases. Name collisions return non-retryable `INVALID_INPUT` with candidate IDs.
+Project-filtered card lists and overviews use live lookup rather than matching
+cached display names. Unfiltered reads retain their existing snapshot cache.
+Set or clear aliases with `codecks-cli setup` (option 5), then restart a running
+MCP server to reload local configuration.
+
 ## Setup
 
 ### Install and Run

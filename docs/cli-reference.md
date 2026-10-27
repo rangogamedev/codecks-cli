@@ -45,6 +45,17 @@ Run commands with `codecks-cli <command>` (or `py codecks_api.py <command>` if n
 
 ## Reading Data
 
+Project inputs accept an exact project ID, the current Codecks name, or an
+explicit local alias (names are case-insensitive). A name matching multiple
+projects fails with `INVALID_INPUT` and candidate IDs. Use an exact ID to choose.
+Codecks renames appear on the next metadata read. Aliases remain attached to IDs.
+
+Run `codecks-cli setup` and choose **5. Change or reset local project aliases**
+to set or change aliases. Enter keeps the existing alias; `-` clears it and
+restores the current API name. This does not rename a project in Codecks.
+Aliases are stored as a JSON object in `CODECKS_PROJECT_ALIASES`. Old
+`CODECKS_PROJECTS` mappings are fallback names only when an API name is missing.
+
 ```bash
 # Account info
 codecks-cli account

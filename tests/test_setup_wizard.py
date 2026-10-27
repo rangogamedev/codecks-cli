@@ -7,11 +7,60 @@ from codecks_cli import config, setup_wizard
 
 class TestSetupDiscoverProjects:
     @patch("codecks_cli.setup_wizard.config.save_env_value")
-    @patch("codecks_cli.setup_wizard._try_call")
-    def test_no_projects_saves_empty_mapping(self, mock_try_call, mock_save):
-        mock_try_call.return_value = {"deck": {"d1": {"id": "d1", "title": "Inbox"}}}
+    @patch("codecks_cli.setup_wizard._try_call", return_value={})
+    def test_empty_discovery_preserves_configuration(self, _query, save):
         setup_wizard._setup_discover_projects()
-        mock_save.assert_called_once_with("CODECKS_PROJECTS", "")
+        save.assert_not_called()
+
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("builtins.input", return_value="")
+    @patch(
+        "codecks_cli.setup_wizard._try_call", return_value={"p1": {"id": "p1", "name": "Current"}}
+    )
+    def test_default_uses_api_name_without_saving_it(self, _query, _input, save, capsys):
+        setup_wizard._setup_discover_projects()
+        save.assert_not_called()
+        assert "Current [p1]" in capsys.readouterr().out
+
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("builtins.input", side_effect=["y", "My, Alias=Name"])
+    @patch(
+        "codecks_cli.setup_wizard._try_call", return_value={"p1": {"id": "p1", "name": "Current"}}
+    )
+    def test_explicit_alias_is_saved_as_json(self, _query, _input, save):
+        setup_wizard._setup_discover_projects()
+        save.assert_called_once_with("CODECKS_PROJECT_ALIASES", '{"p1": "My, Alias=Name"}')
+        assert setup_wizard._load_project_aliases() == {"p1": "My, Alias=Name"}
+
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("builtins.input", side_effect=["y", "-"])
+    @patch(
+        "codecks_cli.setup_wizard._try_call", return_value={"p1": {"id": "p1", "name": "Renamed"}}
+    )
+    def test_reset_preserves_other_aliases_and_legacy_mapping(
+        self, _query, _input, save, monkeypatch
+    ):
+        monkeypatch.setattr(
+            config,
+            "env",
+            {
+                "CODECKS_PROJECT_ALIASES": '{"p1": "Local", "p2": "Other"}',
+                "CODECKS_PROJECTS": "p1=Old",
+            },
+        )
+        setup_wizard._setup_discover_projects()
+        save.assert_called_once_with("CODECKS_PROJECT_ALIASES", '{"p2": "Other"}')
+        assert config.env["CODECKS_PROJECTS"] == "p1=Old"
+
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("builtins.input", side_effect=["y", ""])
+    @patch(
+        "codecks_cli.setup_wizard._try_call", return_value={"p1": {"id": "p1", "name": "Renamed"}}
+    )
+    def test_enter_keeps_alias(self, _query, _input, save, monkeypatch):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": '{"p1": "Local"}'})
+        setup_wizard._setup_discover_projects()
+        save.assert_not_called()
 
 
 class TestSetupDiscoverUser:
@@ -138,3 +187,17 @@ class TestSetupDefaultDeck:
         setup_wizard.cmd_setup()
         mock_deck.assert_called_once()
         mock_done.assert_called_once()
+
+
+@patch("codecks_cli.setup_wizard._setup_done")
+@patch("codecks_cli.setup_wizard._setup_discover_projects")
+@patch("builtins.input", return_value="5")
+@patch("codecks_cli.setup_wizard._try_call", return_value={"account": {"a1": {"name": "Account"}}})
+@patch(
+    "codecks_cli.setup_wizard.config.load_env",
+    return_value={"CODECKS_ACCOUNT": "acct", "CODECKS_TOKEN": "cdxut_a_b"},
+)
+def test_returning_user_can_edit_only_project_aliases(_load, _query, _input, projects, done):
+    setup_wizard.cmd_setup()
+    projects.assert_called_once()
+    done.assert_called_once()

@@ -62,6 +62,7 @@ class TestLoadEnvMapping:
                 "CODECKS_MILESTONES": "m1=MVP",
             },
         )
+        monkeypatch.setattr(cards_mod, "_load_project_records", lambda: {"p1": {"id": "p1"}})
         assert load_project_names() == {"p1": "Tea Shop"}
         assert load_milestone_names() == {"m1": "MVP"}
 
@@ -492,6 +493,12 @@ class TestEnrichCards:
 
 
 class TestBuildProjectMap:
+    @pytest.fixture(autouse=True)
+    def project_records(self, monkeypatch):
+        monkeypatch.setattr(
+            cards_mod, "_load_project_records", lambda: {"p1": {"id": "p1"}, "p2": {"id": "p2"}}
+        )
+
     def test_groups_by_project(self, monkeypatch):
         monkeypatch.setattr(config, "env", {"CODECKS_PROJECTS": "p1=Tea Shop"})
         decks = {
@@ -542,6 +549,12 @@ class TestBuildProjectMap:
 
 
 class TestResolvers:
+    @pytest.fixture(autouse=True)
+    def project_records(self, monkeypatch):
+        monkeypatch.setattr(
+            cards_mod, "_load_project_records", lambda: {"p1": {"id": "p1"}, "p2": {"id": "p2"}}
+        )
+
     def testresolve_deck_id_found(self):
         config._cache["decks"] = {
             "deck": {
@@ -843,6 +856,12 @@ class TestListActivityTrimming:
 class TestResolveDecIdFuzzy:
     """Fuzzy matching and error hints in resolve_deck_id."""
 
+    @pytest.fixture(autouse=True)
+    def project_records(self, monkeypatch):
+        monkeypatch.setattr(
+            cards_mod, "_load_project_records", lambda: {"p1": {"id": "p1"}, "p2": {"id": "p2"}}
+        )
+
     @patch("codecks_cli.cards.load_project_names")
     @patch("codecks_cli.cards.list_decks")
     def test_fuzzy_hint_on_typo(self, mock_decks, mock_projects):
@@ -1101,3 +1120,101 @@ class TestOfficialApiHelpers:
         monkeypatch.setattr("codecks_cli.cards.config.DEFAULT_DECK", deck)
         assert default_deck_id() == deck
         mock_resolve.assert_not_called()
+
+
+class TestProjectNames:
+    @pytest.mark.parametrize("aliases, expected", [("{}", "Current"), ('{"p1": "Local"}', "Local")])
+    def test_api_name_and_explicit_alias(self, monkeypatch, aliases, expected):
+        monkeypatch.setattr(
+            config,
+            "env",
+            {"CODECKS_PROJECTS": "p1=Stale,p2=Deleted", "CODECKS_PROJECT_ALIASES": aliases},
+        )
+        with patch(
+            "codecks_cli.cards.query",
+            return_value={"project": {"p1": {"id": "p1", "name": "Current"}}},
+        ):
+            assert load_project_names() == {"p1": expected}
+            assert cards_mod.resolve_project_id("Stale") is None
+            assert cards_mod.resolve_project_id("p2") is None
+
+    def test_renames_are_read_again_and_alias_reset_uses_latest_name(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": '{"p1": "Local"}'})
+        with patch("codecks_cli.cards.query") as query:
+            query.return_value = {"project": {"p1": {"id": "p1", "name": "Old"}}}
+            assert load_project_names() == {"p1": "Local"}
+            query.return_value = {"project": {"p1": {"id": "p1", "name": "New"}}}
+            assert load_project_names() == {"p1": "Local"}
+            assert cards_mod.resolve_project_id("New") == "p1"
+            assert cards_mod.resolve_project_id("Old") is None
+            config.env["CODECKS_PROJECT_ALIASES"] = "{}"
+            assert load_project_names() == {"p1": "New"}
+
+    @pytest.mark.parametrize(
+        "aliases", ["[]", "null", "invalid", '{"p1": 1}', '{"p1": ""}', '{"": "Name"}']
+    )
+    def test_invalid_alias_configuration(self, monkeypatch, aliases):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": aliases})
+        with pytest.raises(CliError) as exc:
+            cards_mod._load_project_aliases()
+        assert exc.value.error_code == "INVALID_INPUT"
+        assert exc.value.retryable is False
+
+    @pytest.mark.parametrize(
+        "names, aliases, search",
+        [
+            (("Same", "same"), {}, "SAME"),
+            (("First", "Second"), {"p1": "Local", "p2": "local"}, "LOCAL"),
+            (("First", "Local"), {"p1": "local"}, "Local"),
+        ],
+    )
+    def test_ambiguity_rejected_by_filter_deck_and_admin(self, monkeypatch, names, aliases, search):
+        import json
+
+        from codecks_cli import admin
+
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": json.dumps(aliases)})
+        records = {
+            pid: {"id": pid, "name": name} for pid, name in zip(("p1", "p2"), names, strict=True)
+        }
+        monkeypatch.setattr(cards_mod, "_load_project_records", lambda: records)
+        decks = {
+            "deck": {
+                "d1": {"id": "d1", "title": "Inbox", "projectId": "p1"},
+                "d2": {"id": "d2", "title": "Inbox", "projectId": "p2"},
+            }
+        }
+        monkeypatch.setattr(cards_mod, "list_decks", lambda: decks)
+        for resolve in [
+            lambda: get_project_deck_ids(decks, search),
+            lambda: resolve_deck_id("Inbox", project=search),
+            lambda: admin._resolve_project_id(search),
+        ]:
+            with pytest.raises(CliError, match="ambiguous") as exc:
+                resolve()
+            assert exc.value.error_code == "INVALID_INPUT"
+            assert exc.value.retryable is False
+            assert "p1" in str(exc.value) and "p2" in str(exc.value)
+        with patch("codecks_cli.admin.api.dispatch") as dispatch:
+            with pytest.raises(CliError, match="ambiguous"):
+                admin.create_deck("New deck", project=search)
+            dispatch.assert_not_called()
+        assert get_project_deck_ids(decks, "p2") == {"d2"}
+        assert resolve_deck_id("Inbox", project="p2") == "d2"
+        assert admin._resolve_project_id("p2") == "p2"
+
+    def test_alias_and_api_name_for_same_id_are_not_ambiguous(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": '{"p1": "same"}'})
+        monkeypatch.setattr(
+            cards_mod, "_load_project_records", lambda: {"p1": {"id": "p1", "name": "Same"}}
+        )
+        assert cards_mod.resolve_project_id("SAME") == "p1"
+        assert get_project_deck_ids({"deck": {}}, "Same") == set()
+
+    def test_query_includes_names_and_zero_deck_projects(self):
+        with patch(
+            "codecks_cli.cards.query",
+            return_value={"project": {"p1": {"id": "p1", "name": "Empty"}}},
+        ) as query:
+            assert _build_project_map({"deck": {}})["p1"]["name"] == "Empty"
+            assert '"name"' in str(query.call_args).replace("'", '"')

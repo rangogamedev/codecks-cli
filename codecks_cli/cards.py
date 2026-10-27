@@ -38,8 +38,63 @@ def _load_env_mapping(env_key):
     return mapping
 
 
+def _load_project_records():
+    """Read current active projects, including projects without decks."""
+    result = query({"_root": [{"account": [{"projects": ["id", "name"]}]}]})
+    return {p["id"]: p for p in result.get("project", {}).values() if p.get("id")}
+
+
+def _load_project_aliases():
+    """Keep explicit aliases separate from legacy setup-generated mappings."""
+    try:
+        aliases = json.loads(config.env.get("CODECKS_PROJECT_ALIASES", "{}"))
+    except (ValueError, TypeError) as exc:
+        raise CliError(
+            "CODECKS_PROJECT_ALIASES must be a JSON object", error_code="INVALID_INPUT"
+        ) from exc
+    if not isinstance(aliases, dict) or any(
+        not isinstance(pid, str) or not pid.strip() or not isinstance(name, str) or not name.strip()
+        for pid, name in aliases.items()
+    ):
+        raise CliError(
+            "Project aliases must map project IDs to nonempty names", error_code="INVALID_INPUT"
+        )
+    return aliases
+
+
 def load_project_names():
-    return _load_env_mapping("CODECKS_PROJECTS")
+    records = _load_project_records()
+    aliases = _load_project_aliases()
+    legacy = _load_env_mapping("CODECKS_PROJECTS")
+    return {
+        pid: aliases.get(pid) or p.get("name") or legacy.get(pid) or pid
+        for pid, p in records.items()
+    }
+
+
+def resolve_project_id(project_name):
+    """Resolve an exact ID, API name or alias without choosing between collisions."""
+    records = _load_project_records()
+    if project_name in records:
+        return project_name
+    aliases = _load_project_aliases()
+    legacy = _load_env_mapping("CODECKS_PROJECTS")
+    matches = [
+        pid
+        for pid, p in records.items()
+        if project_name.lower()
+        in {
+            (p.get("name") or legacy.get(pid) or pid).lower(),
+            aliases.get(pid, "").lower(),
+        }
+    ]
+    if len(matches) > 1:
+        raise CliError(
+            f"Project '{project_name}' is ambiguous. Use a project ID: {', '.join(sorted(matches))}",
+            error_code="INVALID_INPUT",
+            retryable=False,
+        )
+    return matches[0] if matches else None
 
 
 def load_milestone_names():
@@ -308,17 +363,20 @@ def list_cards(
 
 
 def get_project_deck_ids(decks_result, project_name):
-    """Return set of deck IDs belonging to a project, matched by name."""
-    projects = _build_project_map(decks_result)
-    for _pid, info in projects.items():
-        if info["name"].lower() == project_name.lower():
-            return info["deck_ids"]
-    return None
+    """Return deck IDs for one unambiguous project, or None if unknown."""
+    pid = resolve_project_id(project_name)
+    if pid is None:
+        return None
+    return {
+        deck.get("id")
+        for deck in decks_result.get("deck", {}).values()
+        if _get_field(deck, "project_id", "projectId") == pid
+    }
 
 
 def _build_project_map(decks_result):
     """Build a map of projectId -> {name, deck_ids} from deck data.
-    Project names come from CODECKS_PROJECTS in .env (API can't query them)."""
+    Project names come from current API records with optional local aliases."""
     project_names = load_project_names()
     project_decks: dict[str, dict] = {}
     for _key, deck in decks_result.get("deck", {}).items():
@@ -329,12 +387,12 @@ def _build_project_map(decks_result):
             project_decks[pid]["deck_ids"].add(deck.get("id"))
             project_decks[pid]["deck_titles"].append(deck.get("title", ""))
 
-    # Include zero-deck projects from CODECKS_PROJECTS that aren't in decks yet
+    # Include active projects without decks.
     for pid, pname in project_names.items():
         if pid not in project_decks:
             project_decks[pid] = {"deck_ids": set(), "deck_titles": [], "name": pname}
 
-    # Apply names from .env mapping, fallback to projectId
+    # Apply display names, falling back to the project ID.
     for pid, info in project_decks.items():
         if "name" not in info:
             info["name"] = project_names.get(pid, pid)
@@ -908,11 +966,7 @@ def resolve_deck_id(deck_name, project=None):
     # Resolve project name to ID if scoping is requested
     project_id = None
     if project is not None:
-        project_names = load_project_names()
-        for pid, pname in project_names.items():
-            if pname.lower() == project.lower():
-                project_id = pid
-                break
+        project_id = resolve_project_id(project)
         if project_id is None:
             raise CliError(f"[ERROR] Project '{project}' not found for deck resolution.")
 

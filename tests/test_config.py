@@ -227,3 +227,11 @@ class TestSaveEnvPermissions:
         with patch("codecks_cli.config.os.chmod", side_effect=OSError("not supported")):
             config.save_env_value("KEY", "val")
         assert env_file.read_text() == "KEY=val\n"
+
+
+def test_project_aliases_load_from_environment(monkeypatch, tmp_path):
+    from codecks_cli import config
+
+    monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / "missing.env"))
+    monkeypatch.setenv("CODECKS_PROJECT_ALIASES", '{"p1": "Local"}')
+    assert config.load_env()["CODECKS_PROJECT_ALIASES"] == '{"p1": "Local"}'
