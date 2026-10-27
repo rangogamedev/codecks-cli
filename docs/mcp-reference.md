@@ -1,6 +1,6 @@
 # MCP Server Reference
 
-The MCP (Model Context Protocol) server exposes 54 tools for AI agents, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 59 tools for AI agents, enabling full Codecks management from within an AI conversation.
 
 ## Setup
 
@@ -54,6 +54,42 @@ The encoding follows the `pronounceSafeSeq` algorithm linked from Codecks'
 [`accountSeq` documentation](https://manual.codecks.io/api-reference/), including
 its offset and implicit-zero alphabet. It is not ordinary base36.
 
+## Native Journeys (Experimental)
+
+| Tool | Purpose |
+|---|---|
+| `get_journey(deck_id)` | Read a deck's steps, zones, target decks, and ordering |
+| `create_journey_step(deck_id, content, fields?, user_id?)` | Create a template step without generating tasks |
+| `update_journey_step(item_id, fields)` | Edit selected fields, or soft-delete with `visibility: "deleted"` |
+| `order_journey_steps(deck_id, item_ids, target_id?, label?)` | Move steps after a target, or to the beginning with `target_id=None` |
+| `start_journey(card_id)` | Apply the native Journey and generate its tasks |
+
+Deck/step/user/tag IDs are full UUIDs. `start_journey` additionally accepts card
+numbers and `$` references. Step `fields` use Codecks camelCase: `content`,
+`targetDeckId`, `assigneeId`, `effort`, `priority`, `masterTags`. Update additionally
+accepts `visibility`. Omitted fields stay unchanged; nullable values clear them.
+Ordering requires steps and target in the same deck. Dependency editing is
+excluded under the project's paid-feature policy.
+
+Journey actions use internal `workflows/createItem`, `updateItem`, `addItemsAfter`,
+`addItemsBefore` and `apply` endpoints. These actions are outside
+Codecks' documented API stability contract. Scoped API tokens may reject them
+even with Producer permission. Such denials propagate through the normal error
+contract; there is no legacy browser-auth fallback. Reads return only active
+steps. Beginning-of-zone moves anchor before the first unmoved active step.
+Writes use the shared dispatch helper, including object-response validation
+and strict-mode acknowledgement checks (`actionId`, `ok`, or `payload`).
+Starting a Journey sends explicit active step IDs and skips steps already
+represented by child cards. Starts on the same parent are serialized within one
+process and the resulting children are verified after creation. An uncertain
+write returns non-retryable `JOURNEY_OUTCOME_UNKNOWN`; further starts on that
+parent only submit after all previously submitted steps are visible. Reconcile
+the parent's children before retrying. This protection is process-local and is
+lost on restart. Concurrent processes or stale child reads after restart can
+create duplicate tasks. No supported server-side idempotency contract has been
+confirmed for this action. Do not assume that supplying a request ID or a guessed
+idempotency key prevents duplicates.
+
 ## Prompt Surface
 
 The MCP server exposes two prompts that connected clients can discover via `prompts/list`:
@@ -75,11 +111,12 @@ Use prompts when your MCP client supports them. Use the CLI directly when you wa
 
 This also warms the snapshot cache, making subsequent reads near-instant (<50ms).
 
-## Tool Inventory (54 tools)
+## Tool Inventory (59 tools)
 
 | Category | Count | Tools |
 |----------|-------|-------|
 | **Read** | 12 | `resolve_card_ids`, `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
+| **Journeys** | 5 | `get_journey`, `create_journey_step`, `update_journey_step`, `order_journey_steps`, `start_journey` |
 | **Write** | 13 | `create_card`, `attach_files`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
 | **Batch** | 5 | `batch_create_cards`, `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards`, `batch_update_bodies` |
 | **Hand** | 3 | `list_hand`, `add_to_hand`, `remove_from_hand` |

@@ -376,6 +376,13 @@ codecks-cli dispatch cards/update '{"id": "card-uuid", "status": "done"}'
 
 ## Python API
 
+`client.resolve_card_ids(["#627", "$1uc"])` translates native references into
+verified UUIDs. Use each returned `cards[].id` with existing card operations.
+The client also provides experimental `get_journey`, `create_journey_step`,
+`update_journey_step`, `order_journey_steps`, and `start_journey` methods. Their
+arguments mirror the MCP tools documented in [the MCP reference](mcp-reference.md).
+These additions do not introduce new CLI commands.
+
 ```python
 from codecks_cli import CodecksClient
 
@@ -397,7 +404,7 @@ client.attach_files(card_id="abc-123", files=["mockup.png"])
 report = client.standup(days=3, project="My Project")
 ```
 
-### 35 Methods
+### 40 Methods
 
 | Category | Methods |
 |----------|---------|
@@ -406,6 +413,7 @@ report = client.standup(days=3, project="My Project")
 | **Mutations** | `create_card`, `attach_files`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **Admin** | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck_admin` |
+| **Journeys** | `get_journey`, `create_journey_step`, `update_journey_step`, `order_journey_steps`, `start_journey` |
 | **Raw API** | `raw_query`, `raw_dispatch` |
 
 All methods use keyword-only arguments and return `dict[str, Any]`.

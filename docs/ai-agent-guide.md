@@ -10,9 +10,9 @@ Agent (Claude, Cursor, Windsurf, etc.)
   │
   ├── CLI: codecks-cli <command> --agent     (Bash, lean JSON, no deps)
   │
-  └── MCP: codecks-mcp (54 tools)           (optional, adds caching + teams)
+  └── MCP: codecks-mcp (59 tools)           (optional, adds caching + teams)
         │
-        └── CodecksClient (35 methods)
+        └── CodecksClient (40 methods)
               │
               └── Codecks HTTP API
 ```

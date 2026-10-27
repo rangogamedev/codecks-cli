@@ -77,11 +77,12 @@ codecks_api.py          <- entry point (thin wrapper)
 codecks_cli/
   cli.py                <- argparse parser, dispatch
   commands.py           <- cmd_*() CLI handlers
-  client.py             <- CodecksClient: 35 public methods
+  client.py             <- CodecksClient: 40 public methods
   attachments.py        <- File validation and S3 multipart upload helpers
   scaffolding.py        <- scaffold_feature(), split_features()
   cards.py              <- Card CRUD, hand, conversations
   card_refs.py          <- Exact #number / $reference to UUID lookup
+  journeys.py           <- Experimental native Journey operations via shared API dispatch
   api.py                <- HTTP layer (retries, timeouts, tokens)
   config.py             <- .env loading, constants, VERSION
   exceptions.py         <- CliError, SetupError, HTTPError
@@ -107,7 +108,7 @@ codecks_cli/
     _activity.py         format_activity_table, format_activity_diff
     _dashboards.py       format_pm_focus_table, format_standup_table
     _gdd.py              format_gdd_table, format_sync_report
-  mcp_server/           <- 54 MCP tools (package, 6 tool modules)
+  mcp_server/           <- 59 MCP tools (package, 7 tool modules)
     __init__.py          MCPServer init, registration, re-exports
     __main__.py          py -m codecks_cli.mcp_server entry
     _core.py             Client cache, dispatcher, snapshot cache
@@ -119,6 +120,7 @@ codecks_cli/
     _tools_local.py      4 session/preference tools
     _tools_team.py       6 team coordination tools
     _tools_admin.py      5 admin tools (dispatch API)
+    _tools_journeys.py   5 experimental native Journey tools
   pm_playbook.md        <- Agent-agnostic PM methodology
   py.typed              <- PEP 561 type marker
 tests/                  <- 1000+ pytest tests across 24 files (no live API calls)
@@ -172,6 +174,7 @@ py -m pytest --tb=short                # shorter tracebacks
 | `test_commands.py` | Command handlers (cmd_*) |
 | `test_client.py` | CodecksClient methods |
 | `test_card_refs.py` | Exact card references and native short-code encoding |
+| `test_journeys.py` | Native Journey payloads, strict dispatch validation, errors, and MCP safety |
 | `test_cards.py` | Card CRUD operations |
 | `test_api.py` | HTTP layer, retries, tokens |
 | `test_config.py` | Configuration loading |

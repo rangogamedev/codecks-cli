@@ -26,6 +26,7 @@ from codecks_cli.mcp_server import (
     _prompts,
     _tools_admin,
     _tools_comments,
+    _tools_journeys,
     _tools_local,
     _tools_read,
     _tools_team,
@@ -35,7 +36,7 @@ from codecks_cli.mcp_server import (
 mcp = MCPServer(
     "codecks",
     instructions=(
-        "Codecks project management tools (54 tools). "
+        "Codecks project management tools (59 tools). "
         "All card IDs must be full 36-char UUIDs. "
         "Use resolve_card_ids() to translate #card numbers and $Codecks references first. "
         "Doc cards: no status/priority/effort. "
@@ -62,7 +63,15 @@ mcp = MCPServer(
     ),
 )
 
-for _mod in [_tools_read, _tools_write, _tools_comments, _tools_local, _tools_team, _tools_admin]:
+for _mod in [
+    _tools_read,
+    _tools_write,
+    _tools_comments,
+    _tools_local,
+    _tools_team,
+    _tools_admin,
+    _tools_journeys,
+]:
     _mod.register(mcp)
 _prompts.register(mcp)
 
@@ -140,6 +149,15 @@ from codecks_cli.mcp_server._tools_comments import (
     list_conversations,
     reopen_comment,
     reply_comment,
+)
+
+# _tools_journeys
+from codecks_cli.mcp_server._tools_journeys import (
+    create_journey_step,
+    get_journey,
+    order_journey_steps,
+    start_journey,
+    update_journey_step,
 )
 
 # _tools_local
