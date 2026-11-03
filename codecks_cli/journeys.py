@@ -15,11 +15,19 @@ from codecks_cli._utils import _get_field
 from codecks_cli.api import query
 from codecks_cli.card_refs import resolve_card_ids
 from codecks_cli.cards import _get_user_id, get_account
-from codecks_cli.exceptions import CliError
+from codecks_cli.exceptions import CliError, HTTPError
 
 _start_locks: WeakValueDictionary[str, LockType] = WeakValueDictionary()
 _start_locks_guard = threading.Lock()
 _pending_starts: dict[str, set[str]] = {}
+_DEFINITE_ERRORS = {
+    "TOKEN_EXPIRED",
+    "SETUP_NEEDED",
+    "PERMISSION_DENIED",
+    "RATE_LIMITED",
+    "INVALID_INPUT",
+    "INVALID_QUERY",
+}
 
 
 def _uuid(value: str, field: str) -> str:
@@ -250,14 +258,25 @@ def _uncertain_start(card_id: str) -> CliError:
     )
 
 
+def _definite_rejection(error: CliError) -> bool:
+    """True when the server provably did not apply the start (auth/validation/4xx)."""
+    if error.error_code in _DEFINITE_ERRORS:
+        return True
+    cause = error.__cause__
+    # 408 is a timeout: the request may still have been applied.
+    return isinstance(cause, HTTPError) and 400 <= cause.code < 500 and cause.code != 408
+
+
 def _start_journey_locked(card_id: str) -> dict:
     deck_id, applied = _read_journey_parent(card_id)
+    steps = get_journey(deck_id)["steps"]
     pending = _pending_starts.get(card_id)
     if pending is not None:
-        if not pending <= applied:
+        # Steps soft-deleted since the uncertain start can never appear as children.
+        if not pending & {step["id"] for step in steps} <= applied:
             raise _uncertain_start(card_id)
         del _pending_starts[card_id]
-    item_ids = [step["id"] for step in get_journey(deck_id)["steps"] if step["id"] not in applied]
+    item_ids = [step["id"] for step in steps if step["id"] not in applied]
     if not item_ids:
         return {
             "ok": True,
@@ -277,12 +296,7 @@ def _start_journey_locked(card_id: str) -> dict:
             {"cardId": card_id, "itemIds": item_ids, "userId": user_id, "accountId": account_id},
         )
     except CliError as error:
-        if error.error_code in {
-            "TOKEN_EXPIRED",
-            "PERMISSION_DENIED",
-            "RATE_LIMITED",
-            "INVALID_INPUT",
-        }:
+        if _definite_rejection(error):
             del _pending_starts[card_id]
             raise
         raise _uncertain_start(card_id) from error

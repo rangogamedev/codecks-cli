@@ -32,7 +32,7 @@ That's it. Use `codecks-cli <command> --agent` for any PM operation.
 
 ## Optional: MCP server
 
-`pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"` adds 53 MCP tools with caching and team
+`pip install "codecks-cli[mcp] @ git+https://github.com/rangogamedev/codecks-cli.git"` adds 59 MCP tools with caching and team
 coordination. Add to your editor's MCP config:
 
 ```json

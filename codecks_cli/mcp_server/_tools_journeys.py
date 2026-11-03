@@ -1,7 +1,29 @@
 """Experimental native Journey tools. Workflow actions use internal APIs."""
 
-from codecks_cli.mcp_server._core import _call, _finalize_tool_result
-from codecks_cli.mcp_server._security import _sanitize_card, _tag_user_text
+from codecks_cli.exceptions import CliError
+from codecks_cli.mcp_server._core import _call, _contract_error, _finalize_tool_result
+from codecks_cli.mcp_server._security import (
+    _check_injection,
+    _sanitize_card,
+    _tag_user_text,
+    _validate_input,
+)
+
+
+def _untag(text):
+    """Accept a label copied verbatim from get_journey output."""
+    if isinstance(text, str) and text.startswith("[USER_DATA]") and text.endswith("[/USER_DATA]"):
+        return text[len("[USER_DATA]") : -len("[/USER_DATA]")]
+    return text
+
+
+_RAW_ZONE_KEYS = {"workflowItemOrderLabels", "workflow_item_order_labels"}
+
+
+def _tag_label(text, warnings: list[str]):
+    if isinstance(text, str):
+        warnings.extend(f"label: {desc}" for desc in _check_injection(text))
+    return _tag_user_text(text)
 
 
 def _tag_response(value):
@@ -32,13 +54,18 @@ def get_journey(deck_id: str) -> dict:
     result = _call("get_journey", deck_id=deck_id)
     if result.get("ok") is not False:
         result = _sanitize_card(result)
-        result["zones"] = [_tag_user_text(zone) for zone in result.get("zones", [])]
+        warnings: list[str] = result.pop("_safety_warnings", [])
+        result["zones"] = [_tag_label(zone, warnings) for zone in result.get("zones", [])]
         result["steps"] = [_sanitize_card(step) for step in result.get("steps", [])]
         for step in result["steps"]:
-            step["label"] = _tag_user_text(step.get("label"))
+            step["label"] = _tag_label(step.get("label"), warnings)
+        # Zone labels are already exposed (tagged) as "zones"; drop the raw copies.
         result["target_decks"] = {
-            key: _sanitize_card(value) for key, value in result.get("target_decks", {}).items()
+            key: _sanitize_card({k: v for k, v in value.items() if k not in _RAW_ZONE_KEYS})
+            for key, value in result.get("target_decks", {}).items()
         }
+        if warnings:
+            result["_safety_warnings"] = warnings
         result["assignees"] = {
             key: {**value, "name": _tag_user_text(value.get("name"))}
             for key, value in result.get("assignees", {}).items()
@@ -55,6 +82,10 @@ def create_journey_step(
     masterTags. Use UUIDs for deck/user/tag IDs. user_id defaults to the token's
     user (organization tokens use CODECKS_USER_ID or the existing owner fallback).
     """
+    try:
+        content = _validate_input(content, "content")
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finish_write(
         _call(
             "create_journey_step", deck_id=deck_id, content=content, fields=fields, user_id=user_id
@@ -68,6 +99,11 @@ def update_journey_step(item_id: str, fields: dict) -> dict:
     Fields: content, targetDeckId, assigneeId, effort, priority, masterTags,
     visibility. Nullable values clear fields. Experimental internal API.
     """
+    if isinstance(fields, dict) and isinstance(fields.get("content"), str):
+        try:
+            fields = {**fields, "content": _validate_input(fields["content"], "content")}
+        except CliError as e:
+            return _finalize_tool_result(_contract_error(str(e), "error"))
     return _finish_write(_call("update_journey_step", item_id=item_id, fields=fields))
 
 
@@ -85,7 +121,7 @@ def order_journey_steps(
             deck_id=deck_id,
             item_ids=item_ids,
             target_id=target_id,
-            label=label,
+            label=_untag(label),
         )
     )
 
