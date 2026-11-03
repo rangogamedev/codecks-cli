@@ -16,12 +16,14 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       matrix:
         python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -46,10 +48,10 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
       - name: Dependency audit (pip-audit)
-        # Scans installed deps against the PyPI/OSV advisory DBs. The local
-        # codecks-cli package is skipped (not on PyPI) without failing. To
+        # Scans installed deps against the PyPI/OSV advisory DBs. Skip the
+        # editable local project because it is not published on PyPI. To
         # unblock on an advisory with no fix yet, append: --ignore-vuln <ID>
-        run: uv run pip-audit --progress-spinner off
+        run: uv run pip-audit --progress-spinner off --skip-editable
 
   docker-smoke:
     runs-on: ubuntu-latest
