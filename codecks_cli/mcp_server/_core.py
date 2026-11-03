@@ -617,6 +617,10 @@ _CACHE_INVALIDATION_MAP: dict[str, list[str]] = {
     "delete_card": ["cards_result", "pm_focus", "standup"],
     "scaffold_feature": ["cards_result", "pm_focus", "standup"],
     "split_features": ["cards_result", "pm_focus", "standup"],
+    "create_journey_step": ["cards_result", "pm_focus", "standup", "decks"],
+    "update_journey_step": ["cards_result", "pm_focus", "standup", "decks"],
+    "order_journey_steps": ["cards_result", "pm_focus", "standup", "decks"],
+    "start_journey": ["cards_result", "pm_focus", "standup"],
     # Comment mutations don't affect card lists
     "create_comment": [],
     "reply_comment": [],
@@ -901,6 +905,11 @@ def _finalize_tool_result(result: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 _ALLOWED_METHODS = {
+    "get_journey",
+    "create_journey_step",
+    "update_journey_step",
+    "order_journey_steps",
+    "start_journey",
     "resolve_card_ids",
     "get_account",
     "list_cards",
@@ -933,6 +942,10 @@ _ALLOWED_METHODS = {
 }
 
 _MUTATION_METHODS = {
+    "create_journey_step",
+    "update_journey_step",
+    "order_journey_steps",
+    "start_journey",
     "create_card",
     "update_cards",
     "mark_done",
@@ -1024,6 +1037,8 @@ def _call(method_name: str, **kwargs: Any) -> dict[str, Any]:
             str(e), "setup", retryable=False, error_code=e.error_code or "SETUP_ERROR"
         )
     except CliError as e:
+        if method_name == "start_journey" and e.error_code == "JOURNEY_OUTCOME_UNKNOWN":
+            _write_through_cache(method_name, None, **kwargs)
         error_msg = str(e)
         # Enhance deck/milestone resolution errors with available values
         context = _suggest_valid_values(error_msg)

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `resolve_card_ids` MCP tool and Python method translate organization card numbers (`#627`), native references (`$1uc`), and UUIDs through an exact live lookup. Archived and trashed cards are included. Missing or inaccessible references fail the whole batch. Contributed by @NickReardon (#72).
+- Experimental native Journey tools and Python methods: read, create/edit steps, reorder steps, and apply a Journey to a card. Writes use shared dispatch validation. The create/edit/delete/apply lifecycle was verified in strict mode with an official personal token and a Producer organization token restricted to one project. Start safeguards are process-local and lost on restart. Concurrent processes or stale reads after restart can create duplicate tasks. These internal endpoints have no browser-token fallback. Dependency editing is excluded under the project's paid-feature policy.
 
 ## [0.6.0] - 2026-09-30
 
