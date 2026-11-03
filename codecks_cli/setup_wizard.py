@@ -24,6 +24,7 @@ from codecks_cli.cards import (
     load_milestone_names,
     load_project_names,
 )
+from codecks_cli.exceptions import CliError
 
 # ---------------------------------------------------------------------------
 # Setup discovery helpers
@@ -37,7 +38,12 @@ def _setup_discover_projects():
     if not projects:
         print("  No projects found. Existing local names were preserved.")
         return
-    aliases = _load_project_aliases()
+    try:
+        aliases = _load_project_aliases()
+    except CliError as e:
+        # This screen is how a broken value gets fixed, so don't block on it.
+        print(f"  Warning: {e}. Saving aliases here will replace the stored value.")
+        aliases = {}
     legacy = _load_env_mapping("CODECKS_PROJECTS")
     for pid, project in projects.items():
         name = project.get("name") or legacy.get(pid) or pid

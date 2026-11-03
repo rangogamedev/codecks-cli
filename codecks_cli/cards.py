@@ -74,6 +74,8 @@ def load_project_names():
 
 def resolve_project_id(project_name):
     """Resolve an exact ID, API name or alias without choosing between collisions."""
+    if not isinstance(project_name, str) or not project_name.strip():
+        return None
     records = _load_project_records()
     if project_name in records:
         return project_name
@@ -95,6 +97,24 @@ def resolve_project_id(project_name):
             retryable=False,
         )
     return matches[0] if matches else None
+
+
+def canonical_project_name(project):
+    """Map an ID, API name or alias to the display name cards carry.
+
+    Raises INVALID_INPUT when ambiguous. Unknown names, or project lookups that
+    fail for other reasons, fall back to the input so name filters still work.
+    """
+    if not project:
+        return project
+    try:
+        pid = resolve_project_id(project)
+        return load_project_names().get(pid, project) if pid else project
+    except CliError as e:
+        if e.error_code == "INVALID_INPUT":
+            raise
+        # ponytail: cards carry names, not IDs; unaliased duplicate names still merge.
+        return project
 
 
 def load_milestone_names():

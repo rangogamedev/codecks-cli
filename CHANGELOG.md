@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `resolve_card_ids` MCP tool and Python method translate organization card numbers (`#627`), native references (`$1uc`), and UUIDs through an exact live lookup. Archived and trashed cards are included. Missing or inaccessible references fail the whole batch. Contributed by @NickReardon (#72).
 
+### Changed
+
+- Project names saved by the old setup wizard in `CODECKS_PROJECTS` are now only a fallback when Codecks returns no name. If you used a local name that differs from the Codecks name, re-run setup and set it as an alias (#80).
+
 ## [0.6.0] - 2026-09-30
 
 ### Codecks v2.96 migration (breaking — read this first)

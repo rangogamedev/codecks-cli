@@ -1138,6 +1138,25 @@ class TestProjectNames:
             assert cards_mod.resolve_project_id("Stale") is None
             assert cards_mod.resolve_project_id("p2") is None
 
+    def test_blank_name_matches_no_project(self):
+        records = {"p1": {"id": "p1", "name": "Only"}}
+        with patch("codecks_cli.cards._load_project_records", return_value=records):
+            assert cards_mod.resolve_project_id("") is None
+            assert cards_mod.resolve_project_id("  ") is None
+
+    def test_canonical_name_maps_id_and_api_name_to_alias(self, monkeypatch):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": '{"p1": "Local"}'})
+        records = {"p1": {"id": "p1", "name": "Api"}}
+        with patch("codecks_cli.cards._load_project_records", return_value=records):
+            assert cards_mod.canonical_project_name("p1") == "Local"
+            assert cards_mod.canonical_project_name("api") == "Local"
+            assert cards_mod.canonical_project_name("Unknown") == "Unknown"
+
+    def test_canonical_name_falls_back_when_lookup_fails(self):
+        error = CliError("offline", error_code="NETWORK_ERROR")
+        with patch("codecks_cli.cards._load_project_records", side_effect=error):
+            assert cards_mod.canonical_project_name("Tea Shop") == "Tea Shop"
+
     def test_renames_are_read_again_and_alias_reset_uses_latest_name(self, monkeypatch):
         monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": '{"p1": "Local"}'})
         with patch("codecks_cli.cards.query") as query:

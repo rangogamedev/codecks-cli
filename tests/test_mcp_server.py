@@ -3757,7 +3757,46 @@ def _team_client():
     return client
 
 
+_TEAM_PROJECTS = {
+    "p-tea": {"id": "p-tea", "name": "Tea Shop"},
+    "p-biz": {"id": "p-biz", "name": "Business"},
+}
+
+
 class TestTeamProjectFilters:
+    @pytest.fixture(autouse=True)
+    def _project_records(self):
+        with patch("codecks_cli.cards._load_project_records", return_value=dict(_TEAM_PROJECTS)):
+            yield
+
+    def test_project_filter_accepts_project_id(self):
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        result = mcp_mod.partition_by_owner(project="p-biz")
+        assert set(result["owners"]) == {"Bob"}
+
+    def test_project_filter_accepts_alias(self):
+        from codecks_cli import config
+
+        config.env["CODECKS_PROJECT_ALIASES"] = '{"p-biz": "Office"}'
+        decks = [{**_TEAM_DECKS[0]}, {**_TEAM_DECKS[1], "project_name": "Office"}]
+        _core._client = _team_client()
+        _core._client.list_decks.return_value = decks
+        _core._invalidate_cache()
+        # The Codecks name resolves to the alias that cards are labeled with.
+        result = mcp_mod.partition_by_owner(project="Business")
+        assert set(result["owners"]) == {"Bob"}
+
+    def test_ambiguous_project_is_invalid_input(self):
+        records = {**_TEAM_PROJECTS, "p-dup": {"id": "p-dup", "name": "Tea Shop"}}
+        _core._client = _team_client()
+        _core._invalidate_cache()
+        with patch("codecks_cli.cards._load_project_records", return_value=records):
+            result = mcp_mod.partition_by_lane(project="Tea Shop")
+        assert result["ok"] is False
+        assert result["error_code"] == "INVALID_INPUT"
+        assert "p-dup" in result["error"]
+
     def test_partition_by_lane_project_filter(self):
         _core._client = _team_client()
         _core._invalidate_cache()

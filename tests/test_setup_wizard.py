@@ -62,6 +62,17 @@ class TestSetupDiscoverProjects:
         setup_wizard._setup_discover_projects()
         save.assert_not_called()
 
+    @patch("codecks_cli.setup_wizard.config.save_env_value")
+    @patch("builtins.input", side_effect=["y", "Fixed"])
+    @patch(
+        "codecks_cli.setup_wizard._try_call", return_value={"p1": {"id": "p1", "name": "Current"}}
+    )
+    def test_malformed_aliases_can_be_repaired(self, _query, _input, save, monkeypatch, capsys):
+        monkeypatch.setattr(config, "env", {"CODECKS_PROJECT_ALIASES": "{not json"})
+        setup_wizard._setup_discover_projects()
+        assert "Warning" in capsys.readouterr().out
+        save.assert_called_once_with("CODECKS_PROJECT_ALIASES", '{"p1": "Fixed"}')
+
 
 class TestSetupDiscoverUser:
     @patch("codecks_cli.setup_wizard.config.save_env_value")
