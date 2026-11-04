@@ -871,20 +871,26 @@ class TestFlattenedCardFilters:
         assert result["total_count"] == 1
         assert _titles(result) == ["Flat A"]
 
-    def test_project_filter_resolves_via_deck(self):
+    @patch("codecks_cli.mcp_server._tools_read._call")
+    def test_project_filter_resolves_via_deck(self, call):
         """Cards carry no 'project' key — it comes from the deck's project."""
         from codecks_cli.mcp_server._tools_read import list_cards
 
         _inject_flat_cache()
+        call.return_value = {"cards": [c for c in _flat_cards() if c["deckId"] == "d-1"]}
         result = list_cards(project="Tea Shop")
+        assert call.call_args.kwargs["project"] == "Tea Shop"
         assert result["total_count"] == 2
         assert set(_titles(result)) == {"Flat A", "Flat C"}
 
-    def test_project_filter_other_project(self):
+    @patch("codecks_cli.mcp_server._tools_read._call")
+    def test_project_filter_other_project(self, call):
         from codecks_cli.mcp_server._tools_read import list_cards
 
         _inject_flat_cache()
+        call.return_value = {"cards": [c for c in _flat_cards() if c["deckId"] == "d-2"]}
         result = list_cards(project="Business")
+        assert call.call_args.kwargs["project"] == "Business"
         assert result["total_count"] == 1
         assert _titles(result) == ["Flat B"]
 
@@ -952,11 +958,14 @@ class TestQuickOverviewFlattenedKeys:
         # Flat B (blocked, updated 2020) is the only stale card.
         assert result["stale_count"] == 1
 
-    def test_project_filter_resolves_via_deck(self):
+    @patch("codecks_cli.mcp_server._tools_read._call")
+    def test_project_filter_resolves_via_deck(self, call):
         from codecks_cli.mcp_server._tools_read import quick_overview
 
         _inject_flat_cache()
+        call.return_value = {"cards": [c for c in _flat_cards() if c["deckId"] == "d-1"]}
         result = quick_overview(project="Tea Shop")
+        assert call.call_args.kwargs["project"] == "Tea Shop"
         assert result["total_cards"] == 2
         assert [d["name"] for d in result["deck_summary"]] == ["Code"]
 

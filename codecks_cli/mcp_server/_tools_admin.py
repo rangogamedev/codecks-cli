@@ -17,7 +17,10 @@ from codecks_cli.mcp_server._security import _validate_input
 
 def _run_admin(func, *args, **kwargs):
     """Call a sync admin function (dispatch API) and return its result."""
-    result = func(*args, **kwargs)
+    try:
+        result = func(*args, **kwargs)
+    except CliError as exc:
+        return _finalize_tool_result(_contract_error(str(exc), "error", exc=exc))
     if result.get("ok"):
         _invalidate_cache()
     return _finalize_tool_result(result)

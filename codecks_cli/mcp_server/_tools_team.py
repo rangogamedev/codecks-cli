@@ -243,11 +243,19 @@ def _get_active_cards() -> list[dict]:
     return []
 
 
-def _deck_projects(project: str | None) -> dict[str, str]:
-    """Deck id / name -> project name map, or {} when no project filter is set."""
+def _project_filter(project: str | None) -> tuple[str | None, dict[str, str]]:
+    """Resolve *project* (ID, name or alias) and its deck map; raises if ambiguous."""
     if not project:
-        return {}
-    return _deck_project_map()
+        return project, {}
+    from codecks_cli.cards import canonical_project_name
+
+    return canonical_project_name(project), _deck_project_map()
+
+
+def _project_error(e: CliError) -> dict:
+    return _finalize_tool_result(
+        _contract_error(str(e), "error", error_code=e.error_code or "CLI_ERROR")
+    )
 
 
 def _annotate_claims(cards: list[dict]) -> list[dict]:
@@ -333,9 +341,12 @@ def partition_by_lane(project: str | None = None, cap: int | None = None) -> dic
     from codecks_cli.tags import LANE_TAGS
 
     lane_tag_names = set(LANE_TAGS.keys())
+    try:
+        project, deck_projects = _project_filter(project)
+    except CliError as e:
+        return _project_error(e)
     cards = _get_active_cards()
 
-    deck_projects = _deck_projects(project)
     cards = [
         c
         for c in cards
@@ -384,9 +395,12 @@ def partition_by_owner(project: str | None = None, cap: int | None = None) -> di
     Returns:
         {ok, owners: {name: {cards, claimed, unclaimed, total_in_group, truncated}, ...}}.
     """
+    try:
+        project, deck_projects = _project_filter(project)
+    except CliError as e:
+        return _project_error(e)
     cards = _get_active_cards()
 
-    deck_projects = _deck_projects(project)
     cards = [
         c
         for c in cards
@@ -491,7 +505,10 @@ def team_dashboard(
     # Find unclaimed in-progress cards
     cards = _get_active_cards()
     if project:
-        deck_projects = _deck_projects(project)
+        try:
+            project, deck_projects = _project_filter(project)
+        except CliError as e:
+            return _project_error(e)
         cards = [c for c in cards if _card_matches_project(c, project, deck_projects)]
     unclaimed_count = 0
     unclaimed_in_progress = []

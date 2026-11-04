@@ -115,6 +115,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 11 | Error responses lack structure | Added `retryable`, `error_code`, cache `stale_warning` | Test error shapes |
 | 12 | Hero cards show `sub_card_count` 0 (`childCardInfo` is `"{}"`), so `split-features` re-splits | Read `count:childCards` aggregate | Never read counts from `childCardInfo` |
 | 13 | Journey writes bypass response validation | Use shared `api.dispatch()` | Test non-object responses, strict acknowledgements, and uncertain starts |
+| 14 | Duplicate project names silently select the first match | Use `cards.resolve_project_id` for IDs, current API names and explicit aliases | Reject collisions with `INVALID_INPUT`; test renames and alias reset |
 
 ## Docker
 

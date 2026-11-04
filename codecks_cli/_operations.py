@@ -177,6 +177,9 @@ def _filter_by_project(client: CodecksClient, cards: list[dict], project: str | 
     """Keep only cards belonging to *project* (deck-resolved when needed)."""
     if not project:
         return cards
+    from codecks_cli.cards import canonical_project_name
+
+    project = canonical_project_name(project)
     deck_projects: dict[str, str] | None = None
     kept = []
     for card in cards:

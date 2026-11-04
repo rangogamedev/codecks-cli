@@ -5,7 +5,6 @@ from typing import Literal
 
 from codecks_cli import CliError
 from codecks_cli._utils import card_deck_name as _card_deck_name
-from codecks_cli._utils import card_matches_project as _card_matches_project
 from codecks_cli._utils import card_milestone_name as _card_milestone_name
 from codecks_cli._utils import card_owner_name as _card_owner_name
 from codecks_cli._utils import card_updated_at as _card_updated_at
@@ -93,7 +92,8 @@ def list_cards(
         Dict with cards (list), stats, total_count, has_more, limit, offset.
     """
     # Try serving from cache for non-archived, unfiltered queries
-    if not archived:
+    # Cached display names cannot disambiguate projects or track API renames.
+    if not archived and project is None:
         cached = _try_cache("cards_result")
         if cached is not None and isinstance(cached, dict) and "cards" in cached:
             all_cards = cached["cards"]
@@ -102,7 +102,6 @@ def list_cards(
                 all_cards,
                 deck=deck,
                 status=status,
-                project=project,
                 search=search,
                 milestone=milestone,
                 tag=tag,
@@ -183,7 +182,6 @@ def _filter_cached_cards(
     *,
     deck: str | None = None,
     status: str | None = None,
-    project: str | None = None,
     search: str | None = None,
     milestone: str | None = None,
     tag: str | None = None,
@@ -209,10 +207,6 @@ def _filter_cached_cards(
     if status:
         statuses = {s.strip() for s in status.split(",")}
         result = [c for c in result if c.get("status") in statuses]
-
-    if project:
-        deck_projects = _core._deck_project_map()
-        result = [c for c in result if _card_matches_project(c, project, deck_projects)]
 
     if search:
         search_lower = search.lower()
@@ -656,18 +650,16 @@ def quick_overview(project: str | None = None) -> dict:
         Dict with total_cards, by_status, by_priority, effort_stats,
         hand_size, stale_count, deck_summary.
     """
-    cached = _try_cache("cards_result")
+    cached = _try_cache("cards_result") if project is None else None
     if cached is not None and isinstance(cached, dict) and "cards" in cached:
         cards = cached["cards"]
     else:
-        api_result = _call("list_cards")
+        api_result = (
+            _call("list_cards", project=project) if project is not None else _call("list_cards")
+        )
         if isinstance(api_result, dict) and api_result.get("ok") is False:
             return _finalize_tool_result(api_result)
         cards = api_result.get("cards", []) if isinstance(api_result, dict) else []
-
-    if project:
-        deck_projects = _core._deck_project_map()
-        cards = [c for c in cards if _card_matches_project(c, project, deck_projects)]
 
     # Aggregate counts
     by_status: dict[str, int] = {}

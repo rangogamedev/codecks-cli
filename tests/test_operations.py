@@ -5,6 +5,8 @@ Covers: tick_checkboxes (items mode), quick_overview, claims coordination.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from codecks_cli._operations import (
     _load_claims,
     _save_claims,
@@ -15,6 +17,14 @@ from codecks_cli._operations import (
     tick_all_checkboxes,
     tick_checkboxes,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_project_lookup():
+    """Project filters resolve IDs/aliases via the API; keep these tests offline."""
+    with patch("codecks_cli.cards._load_project_records", return_value={}):
+        yield
+
 
 # ---------------------------------------------------------------------------
 # tick_checkboxes (items mode)
