@@ -157,6 +157,9 @@ def update_cards(
 
     Args:
         card_ids: Full 36-char UUIDs (short IDs cause 400 errors).
+        status: Only not_started/started/done can be written. 'blocked' and
+            'in_review' are read filters — Codecks derives them from open
+            conversations, so use block_card() instead.
         effort: Integer string, or 'null' to clear.
         title/content: Single card only. Content is full card text (title + body).
             If content already starts with the existing title, it is sent as-is;
@@ -309,6 +312,40 @@ def mark_started(card_ids: list[str], dry_run: bool = False) -> dict:
             }
         )
     return _finalize_tool_result(_call("mark_started", card_ids=card_ids))
+
+
+def block_card(card_id: str, reason: str, dry_run: bool = False) -> dict:
+    """Block a card by opening a blocker conversation with a reason.
+
+    Codecks derives the Blocked state from the open conversation — writing
+    status="blocked" through update_cards is rejected by the API. Unblock by
+    closing the conversation with close_comment.
+
+    Args:
+        card_id: Full 36-char UUID.
+        reason: Why the card is blocked.
+        dry_run: If True, validate and return what WOULD change without executing.
+
+    Returns:
+        Dict with ok, card_id, status="blocked".
+    """
+    try:
+        _validate_uuid(card_id)
+        reason = _validate_input(reason, "reason")
+    except CliError as e:
+        return _finalize_tool_result(_contract_error(str(e), "error"))
+    if dry_run:
+        return _finalize_tool_result(
+            {
+                "ok": True,
+                "dry_run": True,
+                "action": "block_card",
+                "card_id": card_id,
+                "reason": reason,
+                "message": "Would open a blocker conversation on the card",
+            }
+        )
+    return _finalize_tool_result(_call("block_card", card_id=card_id, reason=reason))
 
 
 def archive_card(card_id: str) -> dict:
@@ -1119,7 +1156,9 @@ def find_and_update(
         search_status: Narrow search to these statuses (comma-separated).
         max_results: Max matches in phase 1 (default 10).
         confirm_ids: Full 36-char UUIDs to update (from phase 1 results).
-        status/priority/effort/deck/milestone/owner: Fields to update.
+        status/priority/effort/deck/milestone/owner: Fields to update. Status
+            writes accept not_started/started/done only (use block_card() to
+            block a card).
         dry_run: If True, preview what would change without applying (Phase 2 only).
 
     Returns:
@@ -1258,6 +1297,7 @@ def register(mcp):
     mcp.tool()(update_cards)
     mcp.tool()(mark_done)
     mcp.tool()(mark_started)
+    mcp.tool()(block_card)
     mcp.tool()(archive_card)
     mcp.tool()(unarchive_card)
     mcp.tool()(delete_card)

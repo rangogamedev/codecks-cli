@@ -29,6 +29,7 @@ from codecks_cli.cards import (
     _get_user_id,
     add_to_hand,
     archive_card,
+    block_card,
     bulk_status,
     close_comment,
     compute_card_stats,
@@ -974,8 +975,9 @@ class CodecksClient:
 
         Args:
             card_ids: List of card UUIDs.
-            status: New status (not_started, started, done, blocked, in_review,
-                or 'null' to clear).
+            status: New status (not_started, started, done, or 'null' to
+                clear). 'blocked'/'in_review' are read filters only — use
+                block_card() to open a blocker conversation.
             priority: New priority (a, b, c, or 'null' to clear).
             effort: New effort (int, or 'null' to clear).
             deck: Move to this deck (by name).
@@ -1292,6 +1294,25 @@ class CodecksClient:
             raise CliError("[ERROR] Comment message is required.")
         create_comment(card_id, message)
         return {"ok": True, "card_id": card_id}
+
+    def block_card(self, card_id: str, reason: str) -> dict[str, Any]:
+        """Block a card by opening a blocker conversation.
+
+        Codecks derives the Blocked state from the open conversation —
+        ``update_cards(status="blocked")`` is rejected by the API. Close the
+        conversation with ``close_comment`` to unblock.
+
+        Args:
+            card_id: Card UUID.
+            reason: Why the card is blocked.
+
+        Returns:
+            dict with ok=True, card_id, and status="blocked".
+        """
+        if not reason:
+            raise CliError("[ERROR] Block reason is required.")
+        block_card(card_id, reason)
+        return {"ok": True, "card_id": card_id, "status": "blocked"}
 
     def reply_comment(self, thread_id: str, message: str) -> dict[str, Any]:
         """Reply to an existing comment thread.

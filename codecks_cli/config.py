@@ -135,7 +135,11 @@ def _env_float(key: str, default: float) -> float:
 VERSION = "0.6.0"
 CONTRACT_SCHEMA_VERSION = "1.0"
 
+# Read filters accept every state Codecks reports.
 VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
+# /dispatch/cards/update only accepts these. "blocked" and "in_review" are
+# derived by Codecks from open conversations, so writing them returns HTTP 400.
+WRITABLE_STATUSES = {"not_started", "started", "done"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
 VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title", "owner", "updated", "created"}

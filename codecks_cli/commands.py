@@ -557,6 +557,15 @@ def cmd_comment(ns):
         mutation_response("Created thread on", card_id, "", fmt=fmt)
 
 
+def cmd_block(ns):
+    if _dry_run_guard("block card", ns.card_id):
+        return
+    if not ns.reason:
+        raise CliError("[ERROR] Block reason is required.")
+    _get_client().block_card(ns.card_id, ns.reason)
+    mutation_response("Blocked", ns.card_id, ns.reason, fmt=ns.format)
+
+
 def cmd_conversations(ns):
     output(_get_client().list_conversations(ns.card_id), format_conversations_table, ns.format)
 

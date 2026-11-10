@@ -714,11 +714,35 @@ def default_deck_id():
     return value if _UUID_RE.match(value) else resolve_deck_id(value)
 
 
+def _check_writable_status(status):
+    """Reject statuses the card update endpoint cannot set (API returns 400).
+
+    ``blocked`` and ``in_review`` are derived by Codecks from open
+    conversations, so they are read filters only."""
+    if status is None or status in config.WRITABLE_STATUSES:
+        return
+    writable = ", ".join(sorted(config.WRITABLE_STATUSES))
+    if status in config.VALID_STATUSES:
+        raise CliError(
+            f"[ERROR] Status '{status}' cannot be written — Codecks derives it from an "
+            f"open conversation on the card. Use 'block <card_id> \"<reason>\"' to open a "
+            f"blocker conversation. Writable statuses: {writable}.",
+            error_code="INVALID_QUERY",
+        )
+    raise CliError(
+        f"[ERROR] Invalid status '{status}'. Writable statuses: {writable}.",
+        error_code="INVALID_QUERY",
+    )
+
+
 def update_card(card_id, **kwargs):
     """Update card properties via dispatch (uses API token).
     Supported fields: status, priority, effort, deckId, title, content,
     milestoneId, parentCardId, assigneeId, masterTags, isDoc.
-    None values are sent as JSON null to clear fields."""
+    None values are sent as JSON null to clear fields.
+    Status must be writable (see ``_check_writable_status``)."""
+    if "status" in kwargs:
+        _check_writable_status(kwargs["status"])
     payload = {"id": card_id}
     payload.update(kwargs)
     return session_request("/dispatch/cards/update", payload)
@@ -768,6 +792,7 @@ def delete_card(card_id):
 
 def bulk_status(card_ids, status):
     """Update status for multiple cards at once."""
+    _check_writable_status(status)
     return session_request(
         "/dispatch/cards/bulkUpdate",
         {
@@ -874,18 +899,31 @@ def remove_from_hand(card_ids):
 # ---------------------------------------------------------------------------
 
 
-def create_comment(card_id, content):
-    """Create a new comment thread on a card."""
-    user_id = _get_user_id()
+def _create_resolvable(card_id, content, context):
+    """Open a conversation on a card. ``context`` is "comment" or "block"."""
     return session_request(
         "/dispatch/resolvables/create",
         {
             "cardId": card_id,
-            "userId": user_id,
+            "userId": _get_user_id(),
             "content": content,
-            "context": "comment",
+            "context": context,
         },
     )
+
+
+def create_comment(card_id, content):
+    """Create a new comment thread on a card."""
+    return _create_resolvable(card_id, content, "comment")
+
+
+def block_card(card_id, reason):
+    """Block a card by opening a blocker conversation.
+
+    Codecks derives the card's Blocked state from the open conversation;
+    ``status="blocked"`` is rejected by the card update endpoint. Close the
+    conversation (``close_comment``) to unblock."""
+    return _create_resolvable(card_id, reason, "block")
 
 
 def reply_comment(resolvable_id, content):

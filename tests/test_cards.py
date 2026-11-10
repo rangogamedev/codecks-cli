@@ -994,6 +994,73 @@ class TestMutationHelpers:
 
 
 # ---------------------------------------------------------------------------
+# Blocked status (issue #86): writes rejected locally, block via conversation
+# ---------------------------------------------------------------------------
+
+
+class TestBlockedStatus:
+    @pytest.mark.parametrize("status", ["blocked", "in_review"])
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_rejects_derived_status(self, mock_request, status):
+        from codecks_cli.cards import update_card
+
+        with pytest.raises(CliError) as exc_info:
+            update_card("card-1", status=status)
+        assert "block" in str(exc_info.value)
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_rejects_unknown_status(self, mock_request):
+        from codecks_cli.cards import update_card
+
+        with pytest.raises(CliError, match="Invalid status"):
+            update_card("card-1", status="nope")
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_allows_null_status(self, mock_request):
+        from codecks_cli.cards import update_card
+
+        mock_request.return_value = {}
+        update_card("card-1", status=None)
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_bulk_status_rejects_derived_status(self, mock_request):
+        from codecks_cli.cards import bulk_status
+
+        with pytest.raises(CliError):
+            bulk_status(["card-1"], "blocked")
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards._get_user_id", return_value="user-1")
+    @patch("codecks_cli.cards.session_request")
+    def test_block_card_creates_blocker_conversation(self, mock_request, _mock_user):
+        from codecks_cli.cards import block_card
+
+        mock_request.return_value = {}
+        block_card("card-1", "Waiting on art")
+        mock_request.assert_called_once_with(
+            "/dispatch/resolvables/create",
+            {
+                "cardId": "card-1",
+                "userId": "user-1",
+                "content": "Waiting on art",
+                "context": "block",
+            },
+        )
+
+    @patch("codecks_cli.cards._get_user_id", return_value="user-1")
+    @patch("codecks_cli.cards.session_request")
+    def test_create_comment_keeps_comment_context(self, mock_request, _mock_user):
+        from codecks_cli.cards import create_comment
+
+        mock_request.return_value = {}
+        create_comment("card-1", "Hello")
+        assert mock_request.call_args[0][1]["context"] == "comment"
+
+
+# ---------------------------------------------------------------------------
 # Card query field sets
 # ---------------------------------------------------------------------------
 

@@ -180,7 +180,7 @@ Transaction safety: if scaffolding fails mid-way, created cards are rolled back 
 
 ```bash
 # Status, priority, effort
-codecks-cli update <id> --status started
+codecks-cli update <id> --status started      # not_started, started, done only
 codecks-cli update <id> --priority a          # a=high, b=medium, c=low, null=remove
 codecks-cli update <id> --effort 5
 
@@ -204,6 +204,19 @@ codecks-cli update <id> --hero none           # detach
 # Combine multiple updates
 codecks-cli update <id> --status started --priority a --effort 3
 ```
+
+`blocked` and `in_review` are read filters only. Codecks derives them from open
+conversations on the card, and the card update endpoint rejects them with HTTP 400,
+so the CLI refuses them before calling the API.
+
+## Blocking Cards
+
+```bash
+codecks-cli block <card-id> "Waiting on final art"   # opens a blocker conversation
+codecks-cli comment <card-id> --close <comment-id>   # unblock: close that conversation
+```
+
+The card shows as **Blocked** for as long as the blocker conversation stays open.
 
 ## Attachments
 
@@ -421,7 +434,7 @@ report = client.standup(days=3, project="My Project")
 |----------|---------|
 | **Read** | `get_account`, `resolve_card_ids`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `prefetch_snapshot` |
 | **Hand** | `list_hand`, `add_to_hand`, `remove_from_hand` |
-| **Mutations** | `create_card`, `attach_files`, `update_cards`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
+| **Mutations** | `create_card`, `attach_files`, `update_cards`, `mark_done`, `mark_started`, `block_card`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features` |
 | **Comments** | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
 | **Admin** | `create_project`, `create_deck`, `create_milestone`, `create_tag`, `archive_deck_admin` |
 | **Journeys** | `get_journey`, `create_journey_step`, `update_journey_step`, `order_journey_steps`, `start_journey` |

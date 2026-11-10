@@ -1,6 +1,6 @@
 # MCP Server Reference
 
-The MCP (Model Context Protocol) server exposes 59 tools for AI agents, enabling full Codecks management from within an AI conversation.
+The MCP (Model Context Protocol) server exposes 60 tools for AI agents, enabling full Codecks management from within an AI conversation.
 
 Project filters accept exact project IDs, current API names and explicit local
 aliases. Name collisions return non-retryable `INVALID_INPUT` with candidate IDs.
@@ -118,13 +118,13 @@ Use prompts when your MCP client supports them. Use the CLI directly when you wa
 
 This also warms the snapshot cache, making subsequent reads near-instant (<50ms).
 
-## Tool Inventory (59 tools)
+## Tool Inventory (60 tools)
 
 | Category | Count | Tools |
 |----------|-------|-------|
 | **Read** | 12 | `resolve_card_ids`, `get_account`, `list_cards`, `get_card`, `list_decks`, `list_projects`, `list_milestones`, `list_tags`, `list_activity`, `pm_focus`, `standup`, `quick_overview` |
 | **Journeys** | 5 | `get_journey`, `create_journey_step`, `update_journey_step`, `order_journey_steps`, `start_journey` |
-| **Write** | 13 | `create_card`, `attach_files`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
+| **Write** | 14 | `create_card`, `attach_files`, `update_cards`, `update_card_body`, `mark_done`, `mark_started`, `block_card`, `archive_card`, `unarchive_card`, `delete_card`, `scaffold_feature`, `split_features`, `find_and_update`, `tick_checkboxes` |
 | **Batch** | 5 | `batch_create_cards`, `batch_archive_cards`, `batch_delete_cards`, `batch_unarchive_cards`, `batch_update_bodies` |
 | **Hand** | 3 | `list_hand`, `add_to_hand`, `remove_from_hand` |
 | **Comments** | 5 | `create_comment`, `reply_comment`, `close_comment`, `reopen_comment`, `list_conversations` |
@@ -136,6 +136,7 @@ This also warms the snapshot cache, making subsequent reads near-instant (<50ms)
 Notes on individual tools:
 
 - `attach_files(card_id, files, dry_run=False)` — paths must resolve inside an allowed root: the project root and the current working directory, plus any directory in `CODECKS_ATTACH_ALLOW_DIRS` (`os.pathsep`-separated; non-absolute, non-existent and filesystem-root entries are ignored with a warning). Dot-prefixed components, credential-looking basenames (`*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*token*`, `*secret*`), `/etc`, `/proc`, `/sys`, and names containing `"`/CR/LF are always refused. `dry_run=True` returns `files: [{path, resolved, size, sha256}]` and uploads nothing. See [cli-reference.md](cli-reference.md#attachments).
+- `block_card(card_id, reason, dry_run=False)` — opens a blocker conversation (`resolvables/create` with `context: "block"`); Codecks derives the card's **Blocked** state from it. `update_cards(status="blocked")` and `status="in_review"` are rejected locally before any API call — both are read filters only. Unblock with `close_comment(thread_id, card_id)`.
 - `archive_deck(deck)` — despite the name, this dispatches `decks/delete`: the deck is **deleted and cannot be restored**. Its cards are preserved.
 - `create_tag(name, project?)` — takes no color; the `projects/addTag` endpoint has no color field.
 - `batch_delete_cards` / `batch_archive_cards` / `batch_unarchive_cards` — `ok` is `false` if any card failed, and `failed` lists `{card_id, error}` for each one.

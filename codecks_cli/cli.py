@@ -15,6 +15,7 @@ from codecks_cli.commands import (
     cmd_agent_init,
     cmd_archive,
     cmd_attach,
+    cmd_block,
     cmd_cache,
     cmd_card,
     cmd_cards,
@@ -156,7 +157,8 @@ Commands:
     --priority <level>      Override priority for sub-cards (a, b, c, null)
     --dry-run               Preview analysis without creating cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
-    -s, --status <state>    not_started, started, done, blocked, in_review
+    -s, --status <state>    not_started, started, done (blocked/in_review are
+                            read filters only — use the "block" command)
     -p, --priority <level>  a (high), b (medium), c (low), or null
     -e, --effort <n>        Effort estimation (positive integer or "null")
     -d, --deck <name>       Move card to a different deck
@@ -176,6 +178,8 @@ Commands:
   hand                    - List cards in your hand
   hand <id> [id...]       - Add cards to your hand
   unhand <id> [id...]     - Remove cards from your hand
+  block <card_id> "reason" - Block a card by opening a blocker conversation
+                            (unblock by closing it: comment --close <id>)
   comment <card_id> "msg" - Start a new comment thread on a card
     --thread <id> "msg"     Reply to an existing thread
     --close <id>            Close a thread
@@ -592,6 +596,12 @@ def build_parser():
     p.add_argument("--show", action="store_true", help="Show existing cache without fetching")
     p.add_argument("--clear", action="store_true", help="Delete the cache file")
     p.set_defaults(func=cmd_cache)
+
+    # --- block ---
+    p = sub.add_parser("block", help="Block a card by opening a blocker conversation")
+    p.add_argument("card_id")
+    p.add_argument("reason", nargs="?")
+    p.set_defaults(func=cmd_block)
 
     # --- comment ---
     p = sub.add_parser("comment")
