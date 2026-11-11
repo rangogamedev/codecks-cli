@@ -252,8 +252,10 @@ def list_cards(
             card_query["status"] = status_values[0]
             status_values = None  # no client-side filter needed
         elif len(status_values) > 1:
-            # Multi-value → use 'in' operator for server-side filter
-            card_query["status"] = {"in": list(status_values)}
+            # Multi-value → 'in' operator for server-side filter. The API
+            # needs {"op": ..., "value": ...}; a bare {"in": [...]} is
+            # rejected with invalid_query_shape.
+            card_query["status"] = {"op": "in", "value": list(status_values)}
             status_values = None  # server handled it
 
     # Resolve deck filter

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Multi-value status filters (`cards --status not_started,started`, `list_cards(status="a,b")`) failed with `invalid_query_shape`. The query built a bare `{"in": [...]}` where the API requires `{"op": "in", "value": [...]}`, the shape `card_refs.py` already used. The unit test only checked that `"in"` appeared somewhere in the serialized query, so it passed against the broken shape; it now asserts the whole filter dict. Verified against a live account.
+
 ### Added
 
 - Current API project names with optional local aliases editable and resettable in setup. Project filters, scoped deck lookup and admin operations accept exact IDs and reject ambiguous API names or aliases (#80).

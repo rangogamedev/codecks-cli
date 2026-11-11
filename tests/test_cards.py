@@ -1,5 +1,6 @@
 """Tests for cards.py — env mappings, filters, enrichment, stats, resolvers."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -126,18 +127,20 @@ class TestMultiValueFilter:
         mock_query.return_value = {
             "card": {
                 "b": {"status": "started"},
-                "c": {"status": "blocked"},
+                "c": {"status": "done"},
             },
             "user": {},
         }
         from codecks_cli.cards import list_cards
 
-        result = list_cards(status_filter="started,blocked")
+        result = list_cards(status_filter="started,done")
         assert set(result["card"].keys()) == {"b", "c"}
-        # Verify the 'in' operator was used in the query
+        # Assert the exact filter shape: a bare {"in": [...]} is accepted by
+        # json.dumps but rejected by the API with invalid_query_shape.
         call_q = mock_query.call_args.args[0]
         root_key = list(call_q["_root"][0]["account"][0].keys())[0]
-        assert '"in"' in root_key
+        card_query = json.loads(root_key[len("cards(") : -1])
+        assert card_query["status"] == {"op": "in", "value": ["started", "done"]}
 
     @patch("codecks_cli.cards.query")
     def test_single_status_still_server_side(self, mock_query):
