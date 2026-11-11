@@ -96,12 +96,12 @@ class TestParseMultiValue:
         assert result == ["started"]
 
     def test_multiple_values(self):
-        result = _parse_multi_value("started,blocked", config.VALID_STATUSES, "status")
-        assert result == ["started", "blocked"]
+        result = _parse_multi_value("started,done", config.VALID_STATUSES, "status")
+        assert result == ["started", "done"]
 
     def test_strips_whitespace(self):
-        result = _parse_multi_value(" started , blocked ", config.VALID_STATUSES, "status")
-        assert result == ["started", "blocked"]
+        result = _parse_multi_value(" started , done ", config.VALID_STATUSES, "status")
+        assert result == ["started", "done"]
 
     def test_invalid_value_raises(self):
         with pytest.raises(CliError) as exc_info:
@@ -126,13 +126,13 @@ class TestMultiValueFilter:
         mock_query.return_value = {
             "card": {
                 "b": {"status": "started"},
-                "c": {"status": "blocked"},
+                "c": {"status": "done"},
             },
             "user": {},
         }
         from codecks_cli.cards import list_cards
 
-        result = list_cards(status_filter="started,blocked")
+        result = list_cards(status_filter="started,done")
         assert set(result["card"].keys()) == {"b", "c"}
         # Verify the 'in' operator was used in the query
         call_q = mock_query.call_args.args[0]
@@ -991,6 +991,84 @@ class TestMutationHelpers:
         mock_request.return_value = {}
         delete_card("card-1")
         assert mock_request.call_count == 2  # archive then delete
+
+
+# ---------------------------------------------------------------------------
+# Blocked status (issue #86): writes rejected locally, block via conversation
+# ---------------------------------------------------------------------------
+
+
+class TestBlockedStatus:
+    @pytest.mark.parametrize("status", ["blocked", "in_review"])
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_rejects_derived_status(self, mock_request, status):
+        from codecks_cli.cards import update_card
+
+        with pytest.raises(CliError) as exc_info:
+            update_card("card-1", status=status)
+        assert "block" in str(exc_info.value)
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_rejects_unknown_status(self, mock_request):
+        from codecks_cli.cards import update_card
+
+        with pytest.raises(CliError, match="Invalid status"):
+            update_card("card-1", status="nope")
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_card_allows_null_status(self, mock_request):
+        from codecks_cli.cards import update_card
+
+        mock_request.return_value = {}
+        update_card("card-1", status=None)
+        mock_request.assert_called_once()
+
+    @patch("codecks_cli.cards.session_request")
+    def test_bulk_status_rejects_derived_status(self, mock_request):
+        from codecks_cli.cards import bulk_status
+
+        with pytest.raises(CliError):
+            bulk_status(["card-1"], "blocked")
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards._get_user_id", return_value="user-1")
+    @patch("codecks_cli.cards.session_request")
+    def test_block_card_creates_blocker_conversation(self, mock_request, _mock_user):
+        from codecks_cli.cards import block_card
+
+        mock_request.return_value = {}
+        block_card("card-1", "Waiting on art")
+        mock_request.assert_called_once_with(
+            "/dispatch/resolvables/create",
+            {
+                "cardId": "card-1",
+                "userId": "user-1",
+                "content": "Waiting on art",
+                "context": "block",
+            },
+        )
+
+    @pytest.mark.parametrize("status", ["blocked", "in_review"])
+    @patch("codecks_cli.cards.session_request")
+    def test_list_cards_rejects_derived_status_filter(self, mock_request, status):
+        """Codecks rejects these as enum values, so the filter must fail locally."""
+        from codecks_cli.cards import list_cards
+
+        with pytest.raises(CliError) as exc_info:
+            list_cards(status_filter=status)
+        assert "not a card status" in str(exc_info.value)
+        mock_request.assert_not_called()
+
+    @patch("codecks_cli.cards._get_user_id", return_value="user-1")
+    @patch("codecks_cli.cards.session_request")
+    def test_create_comment_keeps_comment_context(self, mock_request, _mock_user):
+        from codecks_cli.cards import create_comment
+
+        mock_request.return_value = {}
+        create_comment("card-1", "Hello")
+        assert mock_request.call_args[0][1]["context"] == "comment"
 
 
 # ---------------------------------------------------------------------------

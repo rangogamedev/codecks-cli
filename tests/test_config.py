@@ -195,8 +195,9 @@ class TestConstants:
         assert "not_started" in config.VALID_STATUSES
         assert "started" in config.VALID_STATUSES
         assert "done" in config.VALID_STATUSES
-        assert "blocked" in config.VALID_STATUSES
-        assert "in_review" in config.VALID_STATUSES
+        # Derived UI states, not cardstatus enum members (see cards._DERIVED_STATES)
+        assert "blocked" not in config.VALID_STATUSES
+        assert "in_review" not in config.VALID_STATUSES
         assert "invalid" not in config.VALID_STATUSES
 
     def test_valid_priorities(self):

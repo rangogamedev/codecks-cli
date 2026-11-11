@@ -7,14 +7,14 @@ Package structure (see .claude/maps/mcp-server.md for tool index):
   _core.py          — Client caching, _call dispatcher, response contract, UUID validation, snapshot cache
   _security.py      — Injection detection, sanitization, input validation
   _tools_read.py    — 11 query/dashboard tools (cache-aware)
-  _tools_write.py   — 19 mutation/hand/scaffolding/undo tools
+  _tools_write.py   — 20 mutation/hand/scaffolding/undo tools
   _tools_comments.py — 5 comment CRUD tools
   _tools_local.py   — 4 local tools (session_start, workflow preferences)
   _tools_team.py    — 6 team coordination tools (claim, delegate, partition, dashboard)
   _prompts.py       — 2 MCP prompts (pm-session, setup-guide)
   _tools_admin.py   — 5 admin tools (project/deck/milestone/tag creation, deck archival)
 
-59 tools total (5 experimental Journey tools added after v0.6.0).
+60 tools total (5 experimental Journey tools added after v0.6.0).
 
 Run: py -m codecks_cli.mcp_server
 Requires: py -m pip install .[mcp]
@@ -36,7 +36,7 @@ from codecks_cli.mcp_server import (
 mcp = MCPServer(
     "codecks",
     instructions=(
-        "Codecks project management tools (59 tools). "
+        "Codecks project management tools (60 tools). "
         "All card IDs must be full 36-char UUIDs. "
         "Use resolve_card_ids() to translate #card numbers and $Codecks references first. "
         "Doc cards: no status/priority/effort. "
@@ -225,6 +225,7 @@ from codecks_cli.mcp_server._tools_write import (
     batch_delete_cards,
     batch_unarchive_cards,
     batch_update_bodies,
+    block_card,
     create_card,
     delete_card,
     find_and_update,

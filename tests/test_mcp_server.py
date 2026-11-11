@@ -224,6 +224,25 @@ class TestMutationTools:
         assert result["count"] == 1
 
     @patch("codecks_cli.mcp_server._core.CodecksClient")
+    def test_block_card(self, MockClient):
+        client = _mock_client(
+            block_card={"ok": True, "card_id": _C1, "status": "blocked"},
+        )
+        MockClient.return_value = client
+        result = mcp_mod.block_card(_C1, "Waiting on art")
+        assert result["status"] == "blocked"
+        client.block_card.assert_called_once_with(card_id=_C1, reason="Waiting on art")
+
+    def test_block_card_rejects_short_id(self):
+        result = mcp_mod.block_card("short-id", "Waiting on art")
+        assert result["ok"] is False
+
+    def test_block_card_dry_run(self):
+        result = mcp_mod.block_card(_C1, "Waiting on art", dry_run=True)
+        assert result["dry_run"] is True
+        assert result["action"] == "block_card"
+
+    @patch("codecks_cli.mcp_server._core.CodecksClient")
     def test_archive_card(self, MockClient):
         MockClient.return_value = _mock_client(archive_card={"ok": True, "card_id": _C1})
         result = mcp_mod.archive_card(_C1)
