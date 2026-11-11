@@ -73,7 +73,7 @@ codecks-cli cards --owner none               # unassigned cards
 codecks-cli cards --milestone "Sprint 1"
 
 # Multi-value filters (comma-separated)
-codecks-cli cards --status started,blocked    # started OR blocked
+codecks-cli cards --status not_started,started  # not_started OR started
 codecks-cli cards --priority a,b              # high or medium priority
 codecks-cli cards --priority null             # cards with no priority set
 
@@ -205,9 +205,11 @@ codecks-cli update <id> --hero none           # detach
 codecks-cli update <id> --status started --priority a --effort 3
 ```
 
-`blocked` and `in_review` are read filters only. Codecks derives them from open
-conversations on the card, and the card update endpoint rejects them with HTTP 400,
-so the CLI refuses them before calling the API.
+`blocked` and `in_review` are not card statuses at all — not for writes and not for
+filters. Codecks derives them from open conversations on the card; its `cardstatus`
+enum holds only the three values above, so the API rejects them either way (a blocked
+card still reports `status: "not_started"`). The CLI refuses them before calling the
+API and points at the `block` command.
 
 ## Blocking Cards
 

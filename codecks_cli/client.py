@@ -976,7 +976,7 @@ class CodecksClient:
         Args:
             card_ids: List of card UUIDs.
             status: New status (not_started, started, done, or 'null' to
-                clear). 'blocked'/'in_review' are read filters only — use
+                clear). 'blocked'/'in_review' are not card statuses — use
                 block_card() to open a blocker conversation.
             priority: New priority (a, b, c, or 'null' to clear).
             effort: New effort (int, or 'null' to clear).

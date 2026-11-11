@@ -157,8 +157,8 @@ def update_cards(
 
     Args:
         card_ids: Full 36-char UUIDs (short IDs cause 400 errors).
-        status: Only not_started/started/done can be written. 'blocked' and
-            'in_review' are read filters — Codecks derives them from open
+        status: not_started/started/done only. 'blocked' and 'in_review' are
+            not card statuses at all — Codecks derives them from open
             conversations, so use block_card() instead.
         effort: Integer string, or 'null' to clear.
         title/content: Single card only. Content is full card text (title + body).
@@ -317,9 +317,9 @@ def mark_started(card_ids: list[str], dry_run: bool = False) -> dict:
 def block_card(card_id: str, reason: str, dry_run: bool = False) -> dict:
     """Block a card by opening a blocker conversation with a reason.
 
-    Codecks derives the Blocked state from the open conversation — writing
-    status="blocked" through update_cards is rejected by the API. Unblock by
-    closing the conversation with close_comment.
+    Codecks derives the Blocked state from the open conversation. "blocked" is
+    not a cardstatus value, so update_cards(status="blocked") is rejected.
+    Unblock by closing the conversation with close_comment.
 
     Args:
         card_id: Full 36-char UUID.
@@ -1157,8 +1157,8 @@ def find_and_update(
         max_results: Max matches in phase 1 (default 10).
         confirm_ids: Full 36-char UUIDs to update (from phase 1 results).
         status/priority/effort/deck/milestone/owner: Fields to update. Status
-            writes accept not_started/started/done only (use block_card() to
-            block a card).
+            accepts not_started/started/done only (use block_card() to block
+            a card).
         dry_run: If True, preview what would change without applying (Phase 2 only).
 
     Returns:

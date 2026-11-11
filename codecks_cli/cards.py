@@ -246,7 +246,9 @@ def list_cards(
     # Parse and validate status filter (supports comma-separated values)
     status_values = None
     if status_filter:
-        status_values = _parse_multi_value(status_filter, config.VALID_STATUSES, "status")
+        status_values = [v.strip() for v in status_filter.split(",") if v.strip()]
+        for value in status_values:
+            _check_status(value)
         if len(status_values) == 1:
             # Single value → server-side filter
             card_query["status"] = status_values[0]
@@ -714,23 +716,29 @@ def default_deck_id():
     return value if _UUID_RE.match(value) else resolve_deck_id(value)
 
 
-def _check_writable_status(status):
-    """Reject statuses the card update endpoint cannot set (API returns 400).
+# UI states Codecks derives from open conversations. Not cardstatus enum
+# members, so they fail as writes and as query filters alike.
+_DERIVED_STATES = ("blocked", "in_review")
 
-    ``blocked`` and ``in_review`` are derived by Codecks from open
-    conversations, so they are read filters only."""
-    if status is None or status in config.WRITABLE_STATUSES:
+
+def _check_status(status):
+    """Validate a status value, for a write or a query filter.
+
+    ``None`` is allowed — it clears the field. ``blocked`` and ``in_review``
+    get a message naming the conversation they are really derived from."""
+    if status is None or status in config.VALID_STATUSES:
         return
-    writable = ", ".join(sorted(config.WRITABLE_STATUSES))
-    if status in config.VALID_STATUSES:
+    valid = ", ".join(sorted(config.VALID_STATUSES))
+    if status in _DERIVED_STATES:
         raise CliError(
-            f"[ERROR] Status '{status}' cannot be written — Codecks derives it from an "
-            f"open conversation on the card. Use 'block <card_id> \"<reason>\"' to open a "
-            f"blocker conversation. Writable statuses: {writable}.",
+            f"[ERROR] '{status}' is not a card status - Codecks derives it from an open "
+            f"conversation on the card. Use 'block <card_id> \"<reason>\"' to open a blocker "
+            f"conversation, or 'conversations <card_id>' to inspect them. "
+            f"Valid statuses: {valid}.",
             error_code="INVALID_QUERY",
         )
     raise CliError(
-        f"[ERROR] Invalid status '{status}'. Writable statuses: {writable}.",
+        f"[ERROR] Invalid status '{status}'. Valid statuses: {valid}.",
         error_code="INVALID_QUERY",
     )
 
@@ -740,9 +748,9 @@ def update_card(card_id, **kwargs):
     Supported fields: status, priority, effort, deckId, title, content,
     milestoneId, parentCardId, assigneeId, masterTags, isDoc.
     None values are sent as JSON null to clear fields.
-    Status must be writable (see ``_check_writable_status``)."""
+    Status is validated (see ``_check_status``)."""
     if "status" in kwargs:
-        _check_writable_status(kwargs["status"])
+        _check_status(kwargs["status"])
     payload = {"id": card_id}
     payload.update(kwargs)
     return session_request("/dispatch/cards/update", payload)
@@ -792,7 +800,7 @@ def delete_card(card_id):
 
 def bulk_status(card_ids, status):
     """Update status for multiple cards at once."""
-    _check_writable_status(status)
+    _check_status(status)
     return session_request(
         "/dispatch/cards/bulkUpdate",
         {

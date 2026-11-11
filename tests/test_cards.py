@@ -96,12 +96,12 @@ class TestParseMultiValue:
         assert result == ["started"]
 
     def test_multiple_values(self):
-        result = _parse_multi_value("started,blocked", config.VALID_STATUSES, "status")
-        assert result == ["started", "blocked"]
+        result = _parse_multi_value("started,done", config.VALID_STATUSES, "status")
+        assert result == ["started", "done"]
 
     def test_strips_whitespace(self):
-        result = _parse_multi_value(" started , blocked ", config.VALID_STATUSES, "status")
-        assert result == ["started", "blocked"]
+        result = _parse_multi_value(" started , done ", config.VALID_STATUSES, "status")
+        assert result == ["started", "done"]
 
     def test_invalid_value_raises(self):
         with pytest.raises(CliError) as exc_info:
@@ -126,13 +126,13 @@ class TestMultiValueFilter:
         mock_query.return_value = {
             "card": {
                 "b": {"status": "started"},
-                "c": {"status": "blocked"},
+                "c": {"status": "done"},
             },
             "user": {},
         }
         from codecks_cli.cards import list_cards
 
-        result = list_cards(status_filter="started,blocked")
+        result = list_cards(status_filter="started,done")
         assert set(result["card"].keys()) == {"b", "c"}
         # Verify the 'in' operator was used in the query
         call_q = mock_query.call_args.args[0]
@@ -1049,6 +1049,17 @@ class TestBlockedStatus:
                 "context": "block",
             },
         )
+
+    @pytest.mark.parametrize("status", ["blocked", "in_review"])
+    @patch("codecks_cli.cards.session_request")
+    def test_list_cards_rejects_derived_status_filter(self, mock_request, status):
+        """Codecks rejects these as enum values, so the filter must fail locally."""
+        from codecks_cli.cards import list_cards
+
+        with pytest.raises(CliError) as exc_info:
+            list_cards(status_filter=status)
+        assert "not a card status" in str(exc_info.value)
+        mock_request.assert_not_called()
 
     @patch("codecks_cli.cards._get_user_id", return_value="user-1")
     @patch("codecks_cli.cards.session_request")

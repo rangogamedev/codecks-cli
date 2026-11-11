@@ -83,8 +83,8 @@ Commands:
   account                 - Show account info
   cards                   - List all cards
     -d, --deck <name>       Filter by deck name (e.g. -d Features)
-    -s, --status <s>        Filter: not_started, started, done, blocked, in_review
-                            (comma-separated: -s started,blocked)
+    -s, --status <s>        Filter: not_started, started, done
+                            (comma-separated: -s not_started,started)
     -p, --priority <p>      Filter: a, b, c, null
                             (comma-separated: -p a,b)
     --project <name>        Filter by project (e.g. --project "Tea Shop")
@@ -158,7 +158,7 @@ Commands:
     --dry-run               Preview analysis without creating cards
   update <id> [id...]     - Update card properties (supports multiple IDs)
     -s, --status <state>    not_started, started, done (blocked/in_review are
-                            read filters only — use the "block" command)
+                            not card statuses - use the "block" command)
     -p, --priority <level>  a (high), b (medium), c (low), or null
     -e, --effort <n>        Effort estimation (positive integer or "null")
     -d, --deck <name>       Move card to a different deck

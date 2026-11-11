@@ -64,7 +64,7 @@ MCP and CLI JSON error responses include `error_code` (e.g., `TOKEN_EXPIRED`, `P
 - Tags: set `masterTags` (syncs `tags`). Setting `tags` alone does NOT sync.
 - Owner: `assigneeId` in `cards/update`. Set `null` to unassign.
 - **Doc cards**: no priority/effort/status (API 400). Only owner/tags/milestone/deck/title/content/hero.
-- **Status writes**: `cards/update` accepts `not_started`, `started`, `done` only. `blocked` and `in_review` are derived from open conversations (API 400 if written). Block a card with `block_card`/`block` — `resolvables/create` with `context: "block"`. Both stay valid as read filters (`config.VALID_STATUSES` vs `config.WRITABLE_STATUSES`).
+- **`blocked`/`in_review` are not statuses**: the `cardstatus` enum holds `not_started`, `started`, `done` only. Codecks derives those two UI states from open conversations, so they fail as writes (API 400) *and* as query filters (`invalid input value for enum cardstatus`). A blocked card still reports `status: "not_started"`. `config.VALID_STATUSES` holds the three real values; `cards._check_status` rejects the rest for both writes and filters. Block a card with `block_card`/`block` — `resolvables/create` with `context: "block"`; unblock by closing it.
 - Content title/body: use `_content.py` helpers — single source of truth for parsing.
 
 ### Rate Limit
@@ -116,7 +116,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 11 | Error responses lack structure | Added `retryable`, `error_code`, cache `stale_warning` | Test error shapes |
 | 12 | Hero cards show `sub_card_count` 0 (`childCardInfo` is `"{}"`), so `split-features` re-splits | Read `count:childCards` aggregate | Never read counts from `childCardInfo` |
 | 13 | Journey writes bypass response validation | Use shared `api.dispatch()` | Test non-object responses, strict acknowledgements, and uncertain starts |
-| 14 | `status="blocked"` sent to `cards/update` returns API 400 | Reject non-writable statuses in `cards.update_card`/`bulk_status`; block via conversation | Never write `blocked`/`in_review` |
+| 14 | `blocked`/`in_review` rejected by the API as both writes (400) and filters (invalid enum) | Narrow `VALID_STATUSES` to the real enum; `cards._check_status` guards writes and filters alike | They are derived UI states, never card statuses |
 | 14 | Duplicate project names silently select the first match | Use `cards.resolve_project_id` for IDs, current API names and explicit aliases | Reject collisions with `INVALID_INPUT`; test renames and alias reset |
 
 ## Docker

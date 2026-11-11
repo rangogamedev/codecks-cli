@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `block` CLI command, `CodecksClient.block_card()` and `block_card` MCP tool block a card by opening a blocker conversation (`resolvables/create` with `context: "block"`), which is how Codecks derives the **Blocked** state. Close the conversation to unblock. Writing `status="blocked"` or `status="in_review"` now fails locally with that explanation instead of returning API 400 — both remain valid read filters (#86).
+- `block` CLI command, `CodecksClient.block_card()` and `block_card` MCP tool block a card by opening a blocker conversation (`resolvables/create` with `context: "block"`), which is how Codecks derives the **Blocked** state. Close the conversation to unblock (#86).
+
+### Fixed
+
+- `blocked` and `in_review` are no longer accepted as card statuses anywhere. Codecks derives both from open conversations and its `cardstatus` enum holds only `not_started`, `started` and `done`, so writing them returned API 400 and *filtering* by them returned `invalid input value for enum cardstatus`. Both now fail locally with an explanation pointing at the `block` command. Verified against a live account (#86).
 
 - Current API project names with optional local aliases editable and resettable in setup. Project filters, scoped deck lookup and admin operations accept exact IDs and reject ambiguous API names or aliases (#80).
 
