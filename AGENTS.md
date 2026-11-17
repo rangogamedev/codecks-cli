@@ -64,6 +64,7 @@ MCP and CLI JSON error responses include `error_code` (e.g., `TOKEN_EXPIRED`, `P
 - Tags: set `masterTags` (syncs `tags`). Setting `tags` alone does NOT sync.
 - Owner: `assigneeId` in `cards/update`. Set `null` to unassign.
 - **Doc cards**: no priority/effort/status (API 400). Only owner/tags/milestone/deck/title/content/hero.
+- **`blocked`/`in_review` are not statuses**: the `cardstatus` enum holds `not_started`, `started`, `done` only. Codecks derives those two UI states from open conversations, so they fail as writes (API 400) *and* as query filters (`invalid input value for enum cardstatus`). A blocked card still reports `status: "not_started"`. `config.VALID_STATUSES` holds the three real values; `cards._check_status` rejects the rest for both writes and filters. Block a card with `block_card`/`block` — `resolvables/create` with `context: "block"`; unblock by closing it.
 - Content title/body: use `_content.py` helpers — single source of truth for parsing.
 
 ### Rate Limit
@@ -83,14 +84,14 @@ client = CodecksClient()  # validates token
 cards = client.list_cards(status="started", sort="priority")
 ```
 
-40 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
+41 methods, keyword-only args, flat dict returns. See [docs/cli-reference.md](docs/cli-reference.md#python-api) for the full method table.
 
 ## MCP Server
 
 - **Install**: `py -m pip install .[mcp]`
 - **Run**: `py -m codecks_cli.mcp_server` (stdio transport)
 - **Startup**: Call `session_start()` first in every session.
-- 59 tools across 7 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
+- 60 tools across 7 modules. See [docs/mcp-reference.md](docs/mcp-reference.md) for the full tool inventory, cache behavior, error contract, and team coordination patterns.
 
 ## Testing
 
@@ -116,6 +117,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 12 | Hero cards show `sub_card_count` 0 (`childCardInfo` is `"{}"`), so `split-features` re-splits | Read `count:childCards` aggregate | Never read counts from `childCardInfo` |
 | 13 | Journey writes bypass response validation | Use shared `api.dispatch()` | Test non-object responses, strict acknowledgements, and uncertain starts |
 | 14 | Duplicate project names silently select the first match | Use `cards.resolve_project_id` for IDs, current API names and explicit aliases | Reject collisions with `INVALID_INPUT`; test renames and alias reset |
+| 15 | `blocked`/`in_review` rejected by the API as both writes (400) and filters (invalid enum) | Narrow `VALID_STATUSES` to the real enum; `cards._check_status` guards writes and filters alike | They are derived UI states, never card statuses |
 
 ## Docker
 

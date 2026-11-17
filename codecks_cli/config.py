@@ -135,7 +135,11 @@ def _env_float(key: str, default: float) -> float:
 VERSION = "0.6.0"
 CONTRACT_SCHEMA_VERSION = "1.0"
 
-VALID_STATUSES = {"not_started", "started", "done", "blocked", "in_review"}
+# The cardstatus enum. "blocked" and "in_review" are NOT members: Codecks
+# derives those UI states from open conversations, so they are rejected both
+# as writes (HTTP 400) and as query filters (invalid enum value cardstatus).
+# Verified against a live account 2026-11-10.
+VALID_STATUSES = {"not_started", "started", "done"}
 VALID_PRIORITIES = {"a", "b", "c", "null"}
 PRI_LABELS = {"a": "high", "b": "med", "c": "low"}
 VALID_SORT_FIELDS = {"status", "priority", "effort", "deck", "title", "owner", "updated", "created"}

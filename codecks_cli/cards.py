@@ -246,7 +246,9 @@ def list_cards(
     # Parse and validate status filter (supports comma-separated values)
     status_values = None
     if status_filter:
-        status_values = _parse_multi_value(status_filter, config.VALID_STATUSES, "status")
+        status_values = [v.strip() for v in status_filter.split(",") if v.strip()]
+        for value in status_values:
+            _check_status(value)
         if len(status_values) == 1:
             # Single value → server-side filter
             card_query["status"] = status_values[0]
@@ -714,11 +716,41 @@ def default_deck_id():
     return value if _UUID_RE.match(value) else resolve_deck_id(value)
 
 
+# UI states Codecks derives from open conversations. Not cardstatus enum
+# members, so they fail as writes and as query filters alike.
+_DERIVED_STATES = ("blocked", "in_review")
+
+
+def _check_status(status):
+    """Validate a status value, for a write or a query filter.
+
+    ``None`` is allowed — it clears the field. ``blocked`` and ``in_review``
+    get a message naming the conversation they are really derived from."""
+    if status is None or status in config.VALID_STATUSES:
+        return
+    valid = ", ".join(sorted(config.VALID_STATUSES))
+    if status in _DERIVED_STATES:
+        raise CliError(
+            f"[ERROR] '{status}' is not a card status - Codecks derives it from an open "
+            f"conversation on the card. Use 'block <card_id> \"<reason>\"' to open a blocker "
+            f"conversation, or 'conversations <card_id>' to inspect them. "
+            f"Valid statuses: {valid}.",
+            error_code="INVALID_QUERY",
+        )
+    raise CliError(
+        f"[ERROR] Invalid status '{status}'. Valid statuses: {valid}.",
+        error_code="INVALID_QUERY",
+    )
+
+
 def update_card(card_id, **kwargs):
     """Update card properties via dispatch (uses API token).
     Supported fields: status, priority, effort, deckId, title, content,
     milestoneId, parentCardId, assigneeId, masterTags, isDoc.
-    None values are sent as JSON null to clear fields."""
+    None values are sent as JSON null to clear fields.
+    Status is validated (see ``_check_status``)."""
+    if "status" in kwargs:
+        _check_status(kwargs["status"])
     payload = {"id": card_id}
     payload.update(kwargs)
     return session_request("/dispatch/cards/update", payload)
@@ -768,6 +800,7 @@ def delete_card(card_id):
 
 def bulk_status(card_ids, status):
     """Update status for multiple cards at once."""
+    _check_status(status)
     return session_request(
         "/dispatch/cards/bulkUpdate",
         {
@@ -874,18 +907,31 @@ def remove_from_hand(card_ids):
 # ---------------------------------------------------------------------------
 
 
-def create_comment(card_id, content):
-    """Create a new comment thread on a card."""
-    user_id = _get_user_id()
+def _create_resolvable(card_id, content, context):
+    """Open a conversation on a card. ``context`` is "comment" or "block"."""
     return session_request(
         "/dispatch/resolvables/create",
         {
             "cardId": card_id,
-            "userId": user_id,
+            "userId": _get_user_id(),
             "content": content,
-            "context": "comment",
+            "context": context,
         },
     )
+
+
+def create_comment(card_id, content):
+    """Create a new comment thread on a card."""
+    return _create_resolvable(card_id, content, "comment")
+
+
+def block_card(card_id, reason):
+    """Block a card by opening a blocker conversation.
+
+    Codecks derives the card's Blocked state from the open conversation;
+    ``status="blocked"`` is rejected by the card update endpoint. Close the
+    conversation (``close_comment``) to unblock."""
+    return _create_resolvable(card_id, reason, "block")
 
 
 def reply_comment(resolvable_id, content):

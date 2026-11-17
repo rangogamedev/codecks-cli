@@ -160,6 +160,7 @@ _INPUT_LIMITS = {
     "title": 500,
     "content": 50_000,
     "message": 10_000,
+    "reason": 10_000,  # blocker conversation body
     "observation": 500,
     "description": 50_000,
     "feedback_message": 1000,
