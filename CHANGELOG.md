@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Multi-value status filters (`cards --status not_started,started`, `list_cards(status="a,b")`) failed with `invalid_query_shape`. The query built a bare `{"in": [...]}` where the API requires `{"op": "in", "value": [...]}`, the shape `card_refs.py` already used. The unit test only checked that `"in"` appeared somewhere in the serialized query, so it passed against the broken shape; it now asserts the whole filter dict. Verified against a live account.
+
 ### Added
 
 - `block` CLI command, `CodecksClient.block_card()` and `block_card` MCP tool block a card by opening a blocker conversation (`resolvables/create` with `context: "block"`), which is how Codecks derives the **Blocked** state. Close the conversation to unblock (#86).

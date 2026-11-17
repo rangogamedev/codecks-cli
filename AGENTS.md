@@ -118,6 +118,7 @@ cards = client.list_cards(status="started", sort="priority")
 | 13 | Journey writes bypass response validation | Use shared `api.dispatch()` | Test non-object responses, strict acknowledgements, and uncertain starts |
 | 14 | Duplicate project names silently select the first match | Use `cards.resolve_project_id` for IDs, current API names and explicit aliases | Reject collisions with `INVALID_INPUT`; test renames and alias reset |
 | 15 | `blocked`/`in_review` rejected by the API as both writes (400) and filters (invalid enum) | Narrow `VALID_STATUSES` to the real enum; `cards._check_status` guards writes and filters alike | They are derived UI states, never card statuses |
+| 16 | Multi-value `status` filter sent as `{"in": [...]}` returns `invalid_query_shape` | Build `{"op": "in", "value": [...]}` as `card_refs.py` does | Assert the whole filter dict, never just that `"in"` appears |
 
 ## Docker
 
