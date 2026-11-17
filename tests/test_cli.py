@@ -413,6 +413,12 @@ class TestBuildParser:
         with pytest.raises(CliError):
             self.parser.parse_args(["activity", "--limit", "0"])
 
+    def test_block_command(self):
+        ns = self.parser.parse_args(["block", "card-1", "Waiting on art"])
+        assert ns.command == "block"
+        assert ns.card_id == "card-1"
+        assert ns.reason == "Waiting on art"
+
     def test_comment_command(self):
         ns = self.parser.parse_args(["comment", "card-1", "Hello"])
         assert ns.card_id == "card-1"

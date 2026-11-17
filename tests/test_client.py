@@ -1086,6 +1086,27 @@ class TestComments:
             client.create_comment("c1", "")
         assert "Comment message is required" in str(exc_info.value)
 
+    @patch("codecks_cli.client.block_card")
+    def test_block_card(self, mock_block):
+        mock_block.return_value = {}
+        client = _client()
+        result = client.block_card("c1", "Waiting on art")
+        assert result == {"ok": True, "card_id": "c1", "status": "blocked"}
+        mock_block.assert_called_once_with("c1", "Waiting on art")
+
+    def test_block_card_empty_reason_raises(self):
+        client = _client()
+        with pytest.raises(CliError, match="Block reason is required"):
+            client.block_card("c1", "")
+
+    @patch("codecks_cli.cards.session_request")
+    def test_update_cards_rejects_blocked_status(self, mock_request):
+        """Issue #86: blocked is derived from a conversation, not writable."""
+        client = _client()
+        with pytest.raises(CliError, match="block"):
+            client.update_cards(["c1"], status="blocked")
+        mock_request.assert_not_called()
+
     @patch("codecks_cli.client.reply_comment")
     def test_reply_comment(self, mock_reply):
         mock_reply.return_value = {}
